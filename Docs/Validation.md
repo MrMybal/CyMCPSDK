@@ -1,4 +1,4 @@
-# Validation 0.5.0
+# Validation 0.5.1
 
 Validation locale le **14 novembre 2026**, Windows x64, Visual Studio 2022 / MSVC 19.40,
 CMake 3.31 et Ninja, configuration Release. Il s'agit d'une première base native de développement.
@@ -9,13 +9,18 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
 - Compilation de tous les modules et des exemples natifs d'application et de conversation.
 - Suite CTest : validation des schémas, droits, annulation, workers, JSON borné et clés dupliquées.
   Dernière exécution : **26 contrôles du cœur, 50 d'intégration, 98 de fournisseurs, 67 d'extensions et 156 de conversations**,
-  plus **42 contrôles du module ChatUI**, soit **439 contrôles**, tous réussis.
+  plus **44 contrôles du module ChatUI et 59 contrôles bidirectionnels de l'application**, soit **500 contrôles**, tous réussis.
 - Application Windows Chat Lab : compilation et lancement Win32/DX11, génération déterministe de démonstration
-  avec streaming, capture PNG native et sortie réussie. **7 suites CTest réussies**, dont le smoke test graphique.
+  avec streaming, capture PNG native et sortie réussie. **8 suites CTest réussies**, dont le smoke test graphique.
   Le mode démo ne contacte aucun fournisseur IA.
 - ChatUI : worker non bloquant, résultat final sans doublons, annulation silencieuse, reprise et fermeture,
   catalogue, pièces jointes lues sur worker, sauvegarde/reprise privée sans clé API, erreur disque distincte,
   connexion annulée sans reprendre les métadonnées précédentes, files et affichage bornés.
+- Application réelle : dix scénarios Win32/DX11 vérifient les cinq formats API, les outils Codex natifs simulés,
+  les commandes de l'app par MCP et SDK JSON, les refus de droits, l'annulation, les erreurs et la reprise.
+  Régressions corrigées : petits flux HTTP Windows tamponnés jusqu'à la fin, budget d'affichage de la réflexion,
+  métriques des tours interrompus et dépendances de headers Ninja avec certains MSVC localisés.
+  Voir le [rapport détaillé des essais graphiques et des générations réelles](ChatAppValidation.md).
 - Rendu du panneau dans les **5 thèmes CyUI et 2 langues** ; captures natives françaises des 5 thèmes.
   Consommateur CMake installé avec `COMPONENTS ChatUI` compilé et exécuté ; consommateur ordinaire du SDK
   compilé et exécuté sans dépendance CyUI. Script PowerShell de compilation/distribution testé sans Python.
@@ -77,15 +82,18 @@ avec le CLI de tchat/benchmark C++. En 0.4.0, le SDK bloquait Claude sur `auth s
 ce diagnostic ne provenait pas d'une demande interactive du CLI. Ce blocage est supprimé en 0.4.1.
 Le nouvel essai atteint le tour natif, qui retourne la catégorie structurée `authentication_failed` dans
 le contexte du processus de test. Cela ne décrit pas la connexion d'un autre terminal ou lanceur utilisateur.
-Codex
-établit la connexion native et crée la session, puis son tour se termine en échec (`codexErrorInfo=other`).
-Aucune réponse cloud réussie ni mesure de latence réelle de modèle n'est donc revendiquée. Les détails de
-compte et les messages privés de diagnostic ne sont pas exportés. Aucun réglage d'authentification n'a été modifié.
-Antigravity **1.5.9** répond réellement à `--version` et expose les flags utilisés dans son aide ; sa commande
-`models` retourne un échec dans ce contexte. Le connecteur C++ remonte cet échec sans annoncer une authentification.
+Les essais 0.5.1 dans l'application avec le profil Windows ont ensuite réussi pour **Codex**, **Antigravity 1.5.9**
+et **Ollama 0.40.5 / qwen3:0.6b**. Codex a réellement appelé les commandes du compteur et repris la même session.
+Son ancien modèle par défaut `gpt-6.1-sol` était rejeté par le CLI ; sélectionner explicitement `gpt-6-luna`,
+annoncé par son catalogue, a permis de terminer le test. Aucun réglage global d'authentification n'a été modifié.
+Antigravity a conservé un code entre trois échanges, y compris après reconnexion ; son protocole n'a pas
+retourné l'ID du modèle utilisé. Les premiers sondages sous le contexte restreint ne prouvaient pas ces usages.
+Ollama a utilisé un modèle déjà installé avec un service temporaire possédé par le test, arrêté à la fin.
+Claude reste non validé pour une génération réussie dans ce contexte. Les détails de compte et les messages
+privés de diagnostic ne sont pas exportés. Les mesures ponctuelles sont dans le rapport de l'application.
 Le paquet local OpenCode porte la version **1.18.30**, mais son exécutable échoue sur son répertoire de configuration
 avant de pouvoir se connecter. Aucun contournement ni modification des configurations natives n'a été effectué.
-Les quatre nouveaux transports API sont validés sur serveurs HTTP simulés, sans requête de génération vers le cloud.
+Les transports API cloud sont validés sur serveurs HTTP simulés ; aucune clé API réelle n'était configurée pour ces tests.
 Command Code (`command-code`/`cmdc`), CodeBuddy (`codebuddy`/`cbc`) et Devin ne sont pas dans le PATH de
 cette session. Les échanges C++ correspondants sont testés avec des exécutables simulés ; aucune génération
 réelle ni compatibilité avec une version installée de ces trois CLI n'est revendiquée. Le protocole ACP v1
@@ -108,7 +116,8 @@ Sur cette machine, avant toute comparaison matérielle ou optimisation spécifiq
   Les tailles du paquet et des bibliothèques sont enregistrées dans `out/validation-windows-x64.json`.
 
 Mesurer séparément le premier token, les tours chauds, la mémoire du moteur et le SDK avant toute promesse
-de vitesse équivalente à un client fournisseur. Aucune performance d'inférence CPU/GPU n'est encore mesurée.
+de vitesse équivalente à un client fournisseur. Les premiers tokens mesurés sur les essais réels ne constituent
+pas un benchmark d'inférence CPU/GPU, de débit ni une comparaison entre fournisseurs.
 
 ## À valider avant une distribution de production
 

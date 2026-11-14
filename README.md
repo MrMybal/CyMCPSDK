@@ -1,7 +1,7 @@
 # CyMCPSDK
 
 Bibliothèque C++20 modulaire sous **MIT**, pour exposer les opérations d'une application aux IA,
-intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.5.0**.
+intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.5.1**.
 
 Le SDK est natif : aucune dépendance Python à l'exécution. Un module de tchat **CyUI optionnel**
 et une petite application Windows de test sont disponibles. Aucun modèle, moteur d'inférence,
@@ -39,6 +39,10 @@ L'exemple propose les 22 profils de fournisseurs, un catalogue de modèles réel
 streaming Markdown, pièces jointes, arrêt, reconnexion et historique facultatif.
 Le mode **Demo / Markdown (no AI)** vérifie l'interface sans compte ; il produit du texte déterministe.
 L'interface est en anglais par défaut, avec français et cinq thèmes CyUI disponibles.
+La section **App commands** permet d'exposer un compteur de démonstration à l'IA,
+à un client MCP local ou directement au SDK JSON. Les modifications s'autorisent explicitement.
+Les [tests de l'application dans les deux sens](Docs/ChatAppValidation.md) distinguent
+les échanges simulés des générations réellement exécutées avec Codex, Antigravity et Ollama.
 
 ## Compiler
 

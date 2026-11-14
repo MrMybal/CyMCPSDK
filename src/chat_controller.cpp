@@ -99,7 +99,10 @@ struct ChatController::Impl {
                 }
                 if (chat) {
                     result.session = chat->session();
-                    result.connected = chat->status().at("state") != "disconnected";
+                    auto status = chat->status();
+                    result.connected = status.at("state") != "disconnected";
+                    if (!result.error.empty())
+                        result.result.metrics = status.at("metrics");
                 }
                 return result;
             });
@@ -154,6 +157,7 @@ struct ChatController::Impl {
     }
     void restore_rows(const Json& messages) {
         view.messages.clear();
+        view.thinking.clear();
         displayed_bytes = 0;
         for (const auto& message : messages) {
             const auto role = message.at("role").get<std::string>();
@@ -228,6 +232,7 @@ void ChatController::send(std::string text, std::vector<std::filesystem::path> a
     s.displayed_bytes += s.view.messages.back().markdown.size();
     s.assistant_id = s.next_id++;
     s.view.messages.push_back({s.assistant_id, "assistant", ""});
+    s.displayed_bytes -= std::min(s.displayed_bytes, s.view.thinking.size());
     s.view.thinking.clear();
     ++s.view.revision;
     s.start("generating", [&s, text = std::move(text), attachments = std::move(attachments)](
@@ -311,6 +316,7 @@ void ChatController::poll() {
         s.view.model = result.session.model;
     s.view.storage_error = result.storage_error;
     if (!result.error.empty()) {
+        s.view.metrics = std::move(result.result.metrics);
         if (s.view.error_code.empty())
             s.view.error_code = result.error;
         s.view.phase = result.error == "Cancelled" ? "interrupted" : "failed";

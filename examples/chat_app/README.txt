@@ -1,4 +1,4 @@
-CyMCPSDK Chat Lab 0.5.0 - Windows x64
+CyMCPSDK Chat Lab 0.5.1 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
 Demo / Markdown uses deterministic local text and needs no AI account or model.
@@ -19,12 +19,27 @@ saved automatically; Restore saved chat loads that exact history/session.
 Native resume requires the selected CLI's support and the same model/provider.
 History contains private messages and attachments. API keys are not stored in it.
 
+App commands exposes get_counter and set_counter. Allow counter changes permits
+writes; AI may use app commands attaches them on the next Codex or API connection.
+Other CLIs use their own native MCP configuration; direct attachment is Unsupported.
+Expose local MCP starts an authenticated loopback endpoint. Copy MCP token copies
+its private Bearer token for another client. SDK JSON commands use /v1 on that port.
+The demonstration commands only access the counter, with no file or system access.
+All three app_commands configuration options are false by default.
+
 Optional arguments:
   --config PATH.json             Load an SDK chat configuration; connect manually.
   --language fr                  Start with French UI (default: en).
   --theme navy                   Select a CyUI theme.
   --smoke --capture PATH.png      Hidden local demo test, then quit.
-Captures always use Demo and cannot be combined with --config.
+  --exercise PLAN.json --report REPORT.json
+                                 Run a scenario in the real window, then quit.
+  --hidden                       Keep the test window hidden.
+  --capture PATH.png             Capture the final scenario frame.
+Smoke captures always use Demo. Configured captures require --exercise.
+An exercise may perform actual generations with the configured provider/account.
+Reports exclude message text, secrets and exact session IDs. Plans, captures and
+optional histories can contain private messages. See Docs/ChatUI.md in the source.
 Non-secret configuration examples are included in configs/.
 
 Prerequisites: Windows 10/11 x64, Microsoft Visual C++ 2015-2022 x64 runtime,

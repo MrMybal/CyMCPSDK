@@ -145,7 +145,8 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
             result.body.append(data, size);
     };
 #ifdef _WIN32
-    Internet session(WinHttpOpen(L"CyMCPSDK/0.3.0",
+    auto user_agent = wide_http(std::string("CyMCPSDK/") + version);
+    Internet session(WinHttpOpen(user_agent.c_str(),
                                  url.loopback ? WINHTTP_ACCESS_TYPE_NO_PROXY
                                               : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
@@ -223,9 +224,19 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     }
     std::array<char, 16384> buffer{};
     while (true) {
+        DWORD wanted = static_cast<DWORD>(buffer.size());
+        if (sink) {
+            // A synchronous ReadData tries to fill its buffer. For SSE/NDJSON,
+            // read only the bytes already available instead of waiting for EOF.
+            DWORD available = 0;
+            if (!WinHttpQueryDataAvailable(handle.get(), &available))
+                failed();
+            if (!available)
+                break;
+            wanted = std::min(wanted, available);
+        }
         DWORD bytes = 0;
-        if (!WinHttpReadData(handle.get(), buffer.data(), static_cast<DWORD>(buffer.size()),
-                             &bytes))
+        if (!WinHttpReadData(handle.get(), buffer.data(), wanted, &bytes))
             failed();
         if (!bytes)
             break;

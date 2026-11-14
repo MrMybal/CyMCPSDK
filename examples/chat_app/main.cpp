@@ -1,4 +1,6 @@
+#include "commands.hpp"
 #include "demo_provider.hpp"
+#include "exercise.hpp"
 
 // Include Windows definitions before the dependent SDK headers.
 #include <windows.h>
@@ -188,11 +190,18 @@ void translations() {
                   {"Native CLI accounts are reused. API keys remain in memory.",
                    "Les comptes CLI natifs sont réutilisés. Les clés API restent en mémoire."},
                   {"Windows test application", "Application de test Windows"},
+                  {"App commands", "Commandes de l’application"},
+                  {"Counter", "Compteur"},
+                  {"Allow counter changes", "Autoriser la modification du compteur"},
+                  {"AI may use app commands", "L’IA peut appeler les commandes de l’app"},
+                  {"Expose local MCP", "Activer le MCP local"},
+                  {"Copy MCP token", "Copier le jeton MCP"},
               });
 }
 struct App {
     HWND window;
     std::shared_ptr<ProviderRegistry> registry = chat_example::providers();
+    chat_example::Commands commands;
     ChatController chat{registry};
     ChatPanel panel;
     Json catalogue = registry->describe();
@@ -202,7 +211,8 @@ struct App {
     std::array<char, 4096> executable{}, cwd{}, history_folder{};
     std::array<char, 8192> arguments{}, settings{}, system{};
     cyui::TextFilter provider_filter;
-    bool allow_all = false, save_history = false;
+    std::map<std::string, std::string> process_environment;
+    bool allow_all = false, save_history = false, app_tools = false, testing = false;
     explicit App(HWND w) : window(w), panel(chat, {{}, [w] { return choose_files(w); }}) {
         assign(model, "demo-markdown");
         assign(arguments, "[]");
@@ -246,10 +256,16 @@ struct App {
         assign(executable, process.value("executable", std::string()));
         assign(cwd, process.value("cwd", std::string()));
         assign(arguments, process.value("arguments", Json::array()).dump());
+        process_environment = process.value("environment", std::map<std::string, std::string>());
         auto options = config.value("settings", Json::object());
         allow_all = options.value("allow_all_actions", false);
         options.erase("allow_all_actions");
         assign(settings, options.dump(2));
+        auto command_config = config.value("app_commands", Json::object());
+        app_tools = command_config.value("attach_to_ai", false);
+        commands.allow_changes(command_config.value("allow_changes", false));
+        if (command_config.value("mcp", false))
+            commands.start();
         if (config.contains("history")) {
             save_history = true;
             assign(history_folder, config.at("history").at("directory").get<std::string>());
@@ -271,6 +287,20 @@ struct App {
         connection.provider.process.cwd = std::filesystem::u8path(cwd.data());
         connection.provider.process.arguments =
             parse_json(arguments.data()).get<std::vector<std::string>>();
+        connection.provider.process.environment = process_environment;
+        if (app_tools) {
+            std::string transport;
+            for (const auto& entry : catalogue)
+                if (entry.at("id") == provider_id)
+                    transport = entry.at("transport").get<std::string>();
+            if (transport == "app-server-stdio" || transport == "responses-sse" ||
+                transport == "messages-sse" || transport == "chat-completions-sse" ||
+                transport == "chat-ndjson")
+                connection.provider.tools = commands.registry();
+            else
+                throw Error("Unsupported",
+                            "This CLI uses native MCP tools; attach its MCP configuration instead");
+        }
         connection.provider.api_key = key.data();
         if (connection.provider.api_key.empty() && key_env[0]) {
             std::string name = key_env.data();
@@ -316,6 +346,7 @@ struct App {
                             assign(settings, "{}");
                             assign(key, "");
                             assign(resume, "");
+                            process_environment.clear();
                             assign(key_env, id == "anthropic"    ? "ANTHROPIC_API_KEY"
                                             : id == "openrouter" ? "OPENROUTER_API_KEY"
                                             : id == "openai" || id == "openai-compatible"
@@ -406,6 +437,31 @@ struct App {
         if (provider_id == "demo")
             cyui::callout(cyui::Tone::info,
                           cyui::tr("Demo mode: deterministic local text, no AI request.").c_str());
+        if (cyui::beginSection(cyui::trLabel("App commands").c_str(), testing)) {
+            cyui::textMono("%s: %d", cyui::tr("Counter").c_str(),
+                           commands.snapshot().at("value").get<int>());
+            bool writable = commands.changes_allowed();
+            if (cyui::toggleSwitch(cyui::trLabel("Allow counter changes").c_str(), &writable))
+                commands.allow_changes(writable);
+            {
+                cyui::ScopedDisabled disabled(chat.state().busy);
+                cyui::toggleSwitch(cyui::trLabel("AI may use app commands").c_str(), &app_tools);
+            }
+            bool enabled = !commands.endpoint().empty();
+            if (cyui::toggleSwitch(cyui::trLabel("Expose local MCP").c_str(), &enabled))
+                action([&] {
+                    if (enabled)
+                        commands.start();
+                    else
+                        commands.stop();
+                });
+            if (!commands.endpoint().empty()) {
+                ImGui::TextUnformatted(commands.endpoint().c_str());
+                if (cyui::button(cyui::trLabel("Copy MCP token").c_str()))
+                    ImGui::SetClipboardText(commands.token().c_str());
+            }
+            cyui::endSection();
+        }
         ImGui::PushTextWrapPos();
         cyui::textFaint("%s",
                         cyui::tr("Connection settings apply to the next connection.").c_str());
@@ -468,8 +524,8 @@ struct App {
 };
 } // namespace
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
-    bool smoke = false;
-    std::filesystem::path capture, config;
+    bool smoke = false, hidden = false, test_ready = false;
+    std::filesystem::path capture, config, exercise_path, report_path;
     std::string theme = "mid-grey", language = "en";
     int count = 0;
     auto args = CommandLineToArgvW(GetCommandLineW(), &count);
@@ -479,6 +535,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         std::wstring argument = args[n];
         if (argument == L"--smoke")
             smoke = true;
+        else if (argument == L"--hidden")
+            hidden = true;
+        else if (argument == L"--test-ready-stdout")
+            test_ready = true;
+        else if (n + 1 < count && argument == L"--exercise")
+            exercise_path = args[++n];
+        else if (n + 1 < count && argument == L"--report")
+            report_path = args[++n];
         else if (n + 1 < count && argument == L"--capture")
             capture = args[++n];
         else if (n + 1 < count && argument == L"--config")
@@ -493,8 +557,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         }
     }
     LocalFree(args);
-    if ((smoke || !capture.empty()) && !config.empty())
-        return 2; // captures never submit real generations
+    if ((smoke || (!capture.empty() && exercise_path.empty())) && !config.empty())
+        return 2; // Demo captures never submit real generations.
+    if ((!exercise_path.empty() && (report_path.empty() || smoke)) ||
+        (test_ready && exercise_path.empty()))
+        return 2;
+    std::unique_ptr<chat_example::Exercise> exercise;
+    try {
+        if (!exercise_path.empty())
+            exercise = std::make_unique<chat_example::Exercise>(
+                chat_example::read_plan(exercise_path), report_path);
+    } catch (...) {
+        return 2;
+    }
     const auto com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     ImGui_ImplWin32_EnableDpiAwareness();
     WNDCLASSEXW window_class{sizeof(WNDCLASSEXW),
@@ -537,21 +612,39 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     cyui::setLocale(language.c_str());
     ImGui_ImplWin32_Init(window);
     ImGui_ImplDX11_Init(device.Get(), renderer.Get());
-    if (!smoke && capture.empty()) {
+    if (!smoke && capture.empty() && !hidden) {
         ShowWindow(window, show);
         UpdateWindow(window);
     }
     int result = 0;
     {
         App app(window);
+        app.testing = static_cast<bool>(exercise);
         if (!config.empty())
             app.action([&] { app.load(config); });
-        if (smoke || !capture.empty())
+        if (exercise && !app.error.empty()) {
+            exercise->passed = false;
+            exercise->done = true;
+        }
+        if (!exercise && (smoke || !capture.empty()))
             app.action([&] { app.connect(); });
+        if (test_ready) {
+            app.commands.start();
+            const auto ready =
+                Json({{"endpoint", app.commands.endpoint()}, {"token", app.commands.token()}})
+                    .dump() +
+                "\n";
+            DWORD written = 0;
+            if (!WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), ready.data(),
+                           static_cast<DWORD>(ready.size()), &written, nullptr) ||
+                written != ready.size())
+                result = 8;
+        }
         bool done = false, sent = false;
         int settled_frames = 0;
         auto started = Clock::now();
         while (!done) {
+            const auto frame_started = Clock::now();
             MSG message;
             while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&message);
@@ -580,7 +673,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
             app.draw();
-            if ((smoke || !capture.empty()) && !sent && app.chat.state().connected &&
+            if (exercise) {
+                exercise->tick(app);
+                if (exercise->done) {
+                    if (result == 0)
+                        result = exercise->passed ? 0 : 7;
+                    done = true;
+                }
+            }
+            if (!exercise && (smoke || !capture.empty()) && !sent && app.chat.state().connected &&
                 !app.chat.state().busy) {
                 app.action([&] { app.chat.send("Montre-moi le rendu Markdown natif de CyUI."); });
                 sent = true;
@@ -592,7 +693,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             renderer->OMSetRenderTargets(1, &render_target, nullptr);
             renderer->ClearRenderTargetView(render_target, clear);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-            if ((smoke || !capture.empty()) && sent && !app.chat.state().busy) {
+            if (exercise && done && !capture.empty() && !capture_png(capture))
+                result = 5;
+            if (!exercise && (smoke || !capture.empty()) && sent && !app.chat.state().busy) {
                 if (++settled_frames >= 12) {
                     const auto& state = app.chat.state();
                     if (!app.error.empty() || !state.error_code.empty() ||
@@ -604,19 +707,33 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
                     done = true;
                 }
             }
-            const auto presented = swap_chain->Present(smoke || !capture.empty() ? 0 : 1, 0);
+            if (exercise)
+                exercise->max_frame_ms =
+                    std::max(exercise->max_frame_ms,
+                             std::chrono::duration<double, std::milli>(Clock::now() - frame_started)
+                                 .count());
+            const auto presented =
+                swap_chain->Present(smoke || !capture.empty() || hidden ? 0 : 1, 0);
             if (FAILED(presented)) {
                 result = 3;
                 break;
             }
             if (presented == DXGI_STATUS_OCCLUDED && !smoke && capture.empty())
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            if ((smoke || !capture.empty()) && Clock::now() - started > std::chrono::seconds(25)) {
+            if (!exercise && (smoke || !capture.empty()) &&
+                Clock::now() - started > std::chrono::seconds(25)) {
                 result = 6;
                 break;
             }
-            if (smoke || !capture.empty())
+            if (smoke || !capture.empty() || hidden)
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        if (exercise) {
+            try {
+                exercise->write(app.chat.state());
+            } catch (...) {
+                result = 9;
+            }
         }
         app.chat.cancel();
     }

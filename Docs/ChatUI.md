@@ -39,6 +39,27 @@ leur exécutable natif dans **Executable**, ou `node.exe` avec le script dans le
 tableau d'arguments. Le SDK lance des arguments structurés, jamais un shell.
 `--config PATH.json` charge les exemples JSON du SDK ; la connexion reste manuelle.
 La clé API vient d'une variable d'environnement ou du champ masqué, en mémoire.
+Le tableau `process.arguments` et la map `process.environment` sont transmis au processus enfant.
+Ils permettent de reproduire un contexte de lancement sans modifier les réglages globaux du CLI.
+
+La section **App commands** expose deux opérations de démonstration : `get_counter` et `set_counter`.
+Le compteur apparaît dans l'interface. **Allow counter changes** autorise son écriture, et peut être
+modifié pendant une connexion. **AI may use app commands** attache le registre à la prochaine connexion
+Codex ou API compatible outils (Responses, Messages, Chat Completions/OpenRouter, Ollama).
+Les autres CLI conservent leurs propres mécanismes MCP : cette case retourne `Unsupported` pour eux.
+**Expose local MCP** démarre un serveur sur `127.0.0.1`, avec port et jeton aléatoires ; **Copy MCP token**
+permet de configurer un client externe. Le même serveur expose les commandes SDK JSON sur `/v1`.
+Ces opérations ne donnent accès à aucun fichier, terminal ou commande système.
+
+Configuration facultative :
+
+```json
+"app_commands": {"attach_to_ai": true, "allow_changes": true, "mcp": true}
+```
+
+Chaque option est désactivée par défaut. Le serveur local exige le Bearer token, même lorsque les
+écritures du compteur sont autorisées ; l'absence de blocage d'une opération reste une décision de l'hôte.
+Dans une autre application, l'hôte fournit son propre registre et sa propre politique.
 
 **Allow all actions** active explicitement le mode permissif du connecteur. Sans
 cette option, les politiques de refus existantes restent applicables. Le panneau
@@ -143,3 +164,32 @@ du texte final, l'annulation silencieuse, les erreurs, les pièces jointes, la
 persistance/reprise et le rendu du panneau dans les cinq thèmes et deux langues.
 `chat_app_smoke` lance une démonstration native cachée et capture un PNG. Aucun
 test démo ne valide une authentification ou une génération IA réelle.
+`chat_app_bidirectional` lance dix instances graphiques contre des transports simulés et des clients MCP/SDK réels.
+Les [essais supplémentaires avec de vraies générations](ChatAppValidation.md) sont documentés séparément.
+
+Pour piloter un essai réel reproductible :
+
+```powershell
+Start-Process ./out/ChatLab-windows-x64/cymcp_chat_app.exe -WindowStyle Hidden -Wait -ArgumentList @(
+  '--hidden', '--config', 'config.json', '--exercise', 'plan.json',
+  '--report', 'report.json', '--capture', 'screen.png')
+```
+
+Le plan contient `steps`, une liste d'actions `connect`, `send`, `models`, `reconnect`, `disconnect`,
+`save`, `rights` ou `wait`. Exemple minimal, à adapter au fournisseur configuré :
+
+```json
+{"steps":[
+  {"action":"connect"},
+  {"action":"send","text":"Reply exactly TEST_OK.","reply":"TEST_OK","trim_reply":true},
+  {"action":"reconnect","same_session":true}
+]}
+```
+
+Les assertions facultatives vérifient `reply`/`contains`, `error`, `counter`, `messages`,
+`streaming` et `same_session`. `cancel_after_ms` annule un tour et `timeout_ms` borne chaque action.
+Le test s'arrête au premier échec, sauf `continue_after_failure:true` dans le plan.
+Le code de sortie est nul uniquement si le scénario se termine avec succès.
+Les rapports contiennent l'état, les durées et les compteurs, sans texte des messages, secret ou ID natif.
+Les plans, captures et historiques peuvent en revanche contenir des messages : les garder privés si nécessaire.
+`--test-ready-stdout` est réservé au pilote de test : il transmet le jeton sur le pipe privé du processus parent.

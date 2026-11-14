@@ -528,6 +528,8 @@ int main(int argc, char** argv) {
                    {{"threadId", "fixture-thread"},
                     {"turnId", active},
                     {"delta", "Hello fixture"}}}});
+            if (has("--fixture-app-delay"))
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             send({{"method", "item/completed"},
                   {"params",
                    {{"threadId", "fixture-thread"},
@@ -589,8 +591,10 @@ int main(int argc, char** argv) {
                           {"params",
                            {{"threadId", "fixture-thread"},
                             {"turnId", active},
-                            {"tool", "sum"},
-                            {"arguments", {{"a", 2}, {"b", 3}}}}}});
+                            {"tool", has("--fixture-app-counter") ? "set_counter" : "sum"},
+                            {"arguments", has("--fixture-app-counter")
+                                              ? Json{{"value", 42}}
+                                              : Json{{"a", 2}, {"b", 3}}}}}});
                     continue;
                 }
                 complete();

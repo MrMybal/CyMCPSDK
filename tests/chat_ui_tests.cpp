@@ -6,7 +6,8 @@ using namespace cymcp;
 namespace {
 struct Probe {
     std::atomic_int sends{0}, connects{0}, stops{0}, attachments{0};
-    std::atomic_bool silent{false}, fail{false}, connecting{false}, flood{false}, oversized{false};
+    std::atomic_bool silent{false}, fail{false}, connecting{false}, flood{false}, oversized{false},
+        large_thinking{false};
 };
 class ProviderFixture final : public Provider {
     std::shared_ptr<Probe> probe_;
@@ -51,7 +52,9 @@ class ProviderFixture final : public Provider {
             context.cancellation.check();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
-        context.emit("ThinkingDelta", {{"text", "a thought"}});
+        context.emit("ThinkingDelta",
+                     {{"text", probe_->large_thinking ? std::string(2 * 1024 * 1024 - 1024, 't')
+                                                      : "a thought"}});
         context.emit("ToolStarted", {{"name", "read_demo"}, {"private", "MUST_NOT_APPEAR"}});
         context.emit("TextDelta", {{"text", "**partial"}});
         std::this_thread::sleep_for(std::chrono::milliseconds(35));
@@ -148,6 +151,8 @@ int main() {
               "Silent generation cancellation completes promptly");
         check(chat.state().phase == "interrupted" && chat.state().error_code == "Cancelled",
               "Cancelled turn never reported successful");
+        check(chat.state().metrics.contains("total_ms"),
+              "Failed turns retain their measured timings");
         check(chat.state().messages.back().interrupted, "Partial row marked interrupted");
         probe->silent = false;
         int sends = probe->sends;
@@ -222,6 +227,22 @@ int main() {
         check(chat.state().phase == "ready" && chat.state().error_code.empty() &&
                   !chat.state().storage_error.empty(),
               "Storage error remains distinct from successful generation");
+        {
+            ChatController bounded(registry);
+            auto ephemeral = connection;
+            ephemeral.history_directory.clear();
+            ephemeral.history_id.clear();
+            bounded.open(ephemeral);
+            wait(bounded);
+            probe->large_thinking = true;
+            for (int n = 0; n < 5; ++n) {
+                bounded.send("short turn");
+                wait(bounded);
+            }
+            check(bounded.state().error_code.empty() && bounded.state().messages.size() == 10,
+                  "Replaced thinking text releases its display budget across turns");
+            probe->large_thinking = false;
+        }
 
         // Render the actual panel without an OS renderer, including all CyUI themes.
         ImGui::CreateContext();

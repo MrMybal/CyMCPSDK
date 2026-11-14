@@ -27,6 +27,35 @@ function Invoke-Native([string]$Program, [string[]]$NativeArguments) {
 }
 Invoke-Native $cmake @('-S', $projectRoot, '-B', $buildRoot, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
     "-DCMAKE_MAKE_PROGRAM=$ninja", '-DCYMCP_BUILD_CHAT_APP=ON', "-DCYMCP_CYUI_SOURCE_DIR=$cyuiRoot")
+# Some localized MSVC installations emit UTF-8 while CMake decodes the include
+# prefix with the OEM code page. Ninja then misses header dependencies entirely.
+$compilerInfo = Get-ChildItem -Path (Join-Path $buildRoot 'CMakeFiles/*/CMakeCXXCompiler.cmake') |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($compilerInfo) {
+    $compilerText = [IO.File]::ReadAllText($compilerInfo.FullName)
+    $prefixMatch = [regex]::Match($compilerText, 'set\(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX "([^"]*)"\)')
+    if ($prefixMatch.Success) {
+        $prefix = $prefixMatch.Groups[1].Value
+        $correctedPrefix = $prefix
+        try {
+            $oem = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
+            $strictUtf8 = New-Object Text.UTF8Encoding($false, $true)
+            $correctedPrefix = $strictUtf8.GetString($oem.GetBytes($prefix))
+        } catch { $correctedPrefix = $prefix }
+        if ($correctedPrefix -ne $prefix) {
+            $rules = Join-Path $temporaryFolder 'utf8-msvc-includes.cmake'
+            $escapedPrefix = $correctedPrefix.Replace('\', '\\').Replace('"', '\"')
+            $rulesText = "set(CMAKE_CL_SHOWINCLUDES_PREFIX `"$escapedPrefix`")`nset(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX `"$escapedPrefix`")`n"
+            $changed = -not (Test-Path -LiteralPath $rules) -or [IO.File]::ReadAllText($rules) -cne $rulesText
+            if ($changed) {
+                [IO.File]::WriteAllText($rules, $rulesText, (New-Object Text.UTF8Encoding($false)))
+                Invoke-Native $cmake @('-S', $projectRoot, '-B', $buildRoot, "-DCMAKE_USER_MAKE_RULES_OVERRIDE=$rules")
+                # Existing objects may have been built without their header dependencies.
+                Invoke-Native $cmake @('--build', $buildRoot, '--target', 'clean')
+            }
+        }
+    }
+}
 Invoke-Native $cmake @('--build', $buildRoot, '--config', 'Release', '--parallel', '4')
 Invoke-Native $ctest @('--test-dir', $buildRoot, '-C', 'Release', '--output-on-failure')
 $installRoot = Join-Path $buildRoot 'install'
