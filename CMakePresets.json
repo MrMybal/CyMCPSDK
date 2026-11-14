@@ -1,0 +1,29 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "core-only",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/core-only",
+      "cacheVariables": {
+        "CYMCP_BUILD_HTTP": "OFF", "CYMCP_BUILD_PLATFORM": "OFF", "CYMCP_BUILD_MCP": "OFF",
+        "CYMCP_BUILD_AI": "OFF", "CYMCP_BUILD_LOCAL": "OFF",
+        "CYMCP_BUILD_EXAMPLES": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "release" },
+    { "name": "core-only", "configurePreset": "core-only" }
+  ],
+  "testPresets": [
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "core-only", "configurePreset": "core-only", "output": { "outputOnFailure": true } }
+  ]
+}

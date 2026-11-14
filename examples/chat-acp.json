@@ -1,0 +1,13 @@
+{
+  "provider": "acp",
+  "model": "",
+  "process": {
+    "executable": "REPLACE_WITH_NATIVE_AGENT_PATH",
+    "cwd": "REPLACE_WITH_PROJECT_DIRECTORY"
+  },
+  "settings": {
+    "acp_arguments": ["acp"],
+    "mcp_servers": [],
+    "allow_all_actions": false
+  }
+}

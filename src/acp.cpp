@@ -1,0 +1,433 @@
+#include <cymcp/ai.hpp>
+#include <set>
+namespace cymcp {
+namespace {
+void collect_models(const Json& options, Json& models) {
+    if (!options.is_array())
+        throw Error("ProtocolError", "Invalid ACP model options");
+    for (const auto& item : options) {
+        if (item.contains("options"))
+            collect_models(item.at("options"), models);
+        else {
+            auto id = item.at("value").get<std::string>();
+            if (id.empty())
+                throw Error("ProtocolError", "Empty ACP model ID");
+            models.push_back({{"id", id}, {"name", item.value("name", id)}});
+        }
+    }
+}
+Json model_rows(const Json& data) {
+    auto entries = data.is_array() ? data : data.value("models", data.value("data", Json()));
+    if (!entries.is_array())
+        throw Error("ProtocolError", "Expected JSON model catalogue");
+    Json result = Json::array();
+    for (const auto& item : entries) {
+        auto id = item.is_string()
+                      ? item.get<std::string>()
+                      : item.value("id", item.value("modelId", item.value("slug", std::string())));
+        if (id.empty())
+            throw Error("ProtocolError", "Missing model ID in catalogue");
+        result.push_back({{"id", id}, {"name", item.is_string() ? id : item.value("name", id)}});
+    }
+    return result;
+}
+} // namespace
+struct AcpProvider::Impl {
+    AcpOptions options;
+    std::unique_ptr<Process> process;
+    mutable std::mutex mutex;
+    std::mutex cancellation_mutex;
+    Cancellation active;
+    std::int64_t counter = 0;
+    bool initialized = false, load_session = false;
+    std::string session_id, system;
+    bool first_prompt = true;
+    Json config_options = Json::array(), models = Json::array(), legacy_models = Json::object();
+    Json modes = Json::object();
+    explicit Impl(AcpOptions config) : options(std::move(config)) {}
+    CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
+        auto context = input;
+        context.cancellation = input.cancellation.child();
+        context.cancellation.deadline =
+            std::min(context.cancellation.deadline, Clock::now() + timeout);
+        std::lock_guard lock(cancellation_mutex);
+        active = context.cancellation;
+        return context;
+    }
+    void reset() noexcept {
+        process.reset();
+        initialized = load_session = false;
+        session_id.clear();
+        models = Json::array();
+    }
+    Json read(const CallContext& context) {
+        ProcessLine line;
+        while (process->next(line, context.cancellation)) {
+            if (line.stderr_stream || line.text.empty())
+                continue;
+            auto message = parse_json(line.text);
+            if (!message.is_object() || message.value("jsonrpc", std::string()) != "2.0")
+                throw Error("ProtocolError", "Expected ACP JSON-RPC message");
+            return message;
+        }
+        throw Error("UnexpectedEOF", "ACP process closed before its response");
+    }
+    void permission(const Json& message, const CallContext& context) {
+        try {
+            const auto& params = message.at("params");
+            Json response = {{"jsonrpc", "2.0"}, {"id", message.at("id")}};
+            if (params.value("sessionId", std::string()) != session_id || session_id.empty()) {
+                response["error"] = {{"code", -32602}, {"message", "Unknown active session"}};
+            } else {
+                context.emit("ApprovalRequested", params);
+                bool allow = options.approvals.allows(context, "acp.permission", params);
+                auto choices = params.at("options");
+                if (!choices.is_array() || choices.size() > 32)
+                    throw Error("ProtocolError", "Invalid ACP permission choices");
+                std::string choice;
+                for (int i = 0; i < 2; ++i) {
+                    const char* kind = allow ? (i == 0 ? "allow_once" : "allow_always")
+                                             : (i == 0 ? "reject_once" : "reject_always");
+                    for (const auto& option : choices)
+                        if (option.value("kind", std::string()) == kind) {
+                            choice = option.at("optionId").get<std::string>();
+                            break;
+                        }
+                    if (!choice.empty())
+                        break;
+                }
+                response["result"] = {{"outcome", choice.empty() ? Json{{"outcome", "cancelled"}}
+                                                                 : Json{{"outcome", "selected"},
+                                                                        {"optionId", choice}}}};
+                context.emit("ApprovalResolved", {{"allowed", allow && !choice.empty()}});
+            }
+            process->write(response.dump() + "\n", context.cancellation);
+        } catch (...) {
+            if (context.cancellation.cancelled() || Clock::now() >= context.cancellation.deadline) {
+                Cancellation cleanup;
+                cleanup.deadline = Clock::now() + std::chrono::milliseconds(100);
+                try {
+                    process->write(Json({{"jsonrpc", "2.0"},
+                                         {"id", message.at("id")},
+                                         {"result", {{"outcome", {{"outcome", "cancelled"}}}}}})
+                                           .dump() +
+                                       "\n",
+                                   cleanup);
+                } catch (...) {
+                }
+            }
+            throw;
+        }
+    }
+    void metadata(const Json& state) {
+        config_options = state.value("configOptions", config_options);
+        legacy_models = state.value("models", legacy_models);
+        modes = state.value("modes", modes);
+        if (!config_options.is_array())
+            throw Error("ProtocolError", "Invalid ACP configuration");
+        models = Json::array();
+        for (const auto& option : config_options)
+            if (option.value("category", std::string()) == "model" &&
+                option.value("type", std::string()) == "select")
+                collect_models(option.at("options"), models);
+        if (models.empty() && legacy_models.contains("availableModels"))
+            models = model_rows(legacy_models.at("availableModels"));
+    }
+    void update(const Json& params, const CallContext& context, ChatResult* result) {
+        if (params.value("sessionId", std::string()) != session_id || session_id.empty())
+            return;
+        auto value = params.at("update");
+        auto kind = value.at("sessionUpdate").get<std::string>();
+        if (kind == "config_option_update")
+            metadata({{"configOptions", value.at("configOptions")}});
+        // session/load replays history; it must never become the new turn's answer.
+        if (!result)
+            return;
+        if (kind == "agent_message_chunk" || kind == "agent_thought_chunk") {
+            auto content = value.at("content");
+            if (content.value("type", std::string()) == "text") {
+                auto text = content.at("text").get<std::string>();
+                if (kind == "agent_message_chunk") {
+                    result->text += text;
+                    if (result->text.size() > 8 * 1024 * 1024)
+                        throw Error("ResponseTooLarge", "ACP answer exceeds limit");
+                }
+                context.emit(kind == "agent_message_chunk" ? "TextDelta" : "ThinkingDelta",
+                             {{"text", text}});
+            } else
+                context.emit("ProviderEvent", value);
+        } else if (kind == "tool_call" || kind == "tool_call_update") {
+            auto status = value.value("status", std::string());
+            context.emit(status == "completed" || status == "failed" ? "ToolCompleted"
+                                                                     : "ToolStarted",
+                         value);
+        } else if (kind == "usage_update") {
+            result->usage = value;
+            context.emit("UsageUpdated", value);
+        } else
+            context.emit("ProviderEvent", value);
+    }
+    Json rpc(const std::string& method, Json params, const CallContext& context,
+             ChatResult* result = nullptr) {
+        auto id = ++counter;
+        process->write(
+            Json(
+                {{"jsonrpc", "2.0"}, {"id", id}, {"method", method}, {"params", std::move(params)}})
+                    .dump() +
+                "\n",
+            context.cancellation);
+        for (;;) {
+            auto message = read(context);
+            if (message.contains("method")) {
+                auto name = message.at("method").get<std::string>();
+                if (message.contains("id")) {
+                    if (name == "session/request_permission")
+                        permission(message, context);
+                    else
+                        process->write(Json({{"jsonrpc", "2.0"},
+                                             {"id", message.at("id")},
+                                             {"error",
+                                              {{"code", -32601},
+                                               {"message", "Client capability not provided"}}}})
+                                               .dump() +
+                                           "\n",
+                                       context.cancellation);
+                } else if (name == "session/update")
+                    update(message.at("params"), context, result);
+                continue;
+            }
+            if (!message.contains("id") || message.at("id") != id)
+                throw Error("ProtocolError", "Unexpected ACP response ID");
+            if (message.contains("error")) {
+                auto code = message.at("error").value("code", 0);
+                throw Error(code == -32000   ? "AuthenticationRequired"
+                            : code == -32601 ? "Unsupported"
+                                             : "ProviderError",
+                            "ACP agent rejected the request");
+            }
+            if (!message.contains("result") || !message.at("result").is_object())
+                throw Error("ProtocolError", "Missing ACP response result");
+            return message.at("result");
+        }
+    }
+    std::string current_model() const {
+        for (const auto& option : config_options)
+            if (option.value("category", std::string()) == "model" &&
+                option.value("type", std::string()) == "select")
+                return option.value("currentValue", std::string());
+        return legacy_models.value("currentModelId", std::string());
+    }
+    void select(const std::string& category, const std::string& value, const CallContext& context) {
+        if (value.empty())
+            return;
+        for (const auto& option : config_options)
+            if (option.value("category", std::string()) == category &&
+                option.value("type", std::string()) == "select") {
+                if (option.value("currentValue", std::string()) == value)
+                    return;
+                auto id = option.at("id");
+                auto response =
+                    rpc("session/set_config_option",
+                        {{"sessionId", session_id}, {"configId", id}, {"value", value}}, context);
+                metadata(response);
+                bool confirmed = false;
+                for (const auto& updated : config_options)
+                    if (updated.at("id") == id &&
+                        updated.value("currentValue", std::string()) == value)
+                        confirmed = true;
+                if (!confirmed)
+                    throw Error("ProtocolError", "ACP selection was not confirmed");
+                return;
+            }
+        if (category == "model" && legacy_models.contains("currentModelId")) {
+            if (current_model() != value) {
+                rpc("session/set_model", {{"sessionId", session_id}, {"modelId", value}}, context);
+                legacy_models["currentModelId"] = value;
+            }
+        } else if (category == "mode" && modes.contains("currentModeId")) {
+            if (modes.at("currentModeId") != value) {
+                rpc("session/set_mode", {{"sessionId", session_id}, {"modeId", value}}, context);
+                modes["currentModeId"] = value;
+            }
+        } else
+            throw Error("Unsupported", "ACP agent does not expose the requested session selection");
+    }
+};
+AcpProvider::AcpProvider(AcpOptions options) : impl_(std::make_unique<Impl>(std::move(options))) {
+    const auto& opts = impl_->options;
+    if (!opts.mcp_servers.is_array() || opts.mcp_servers.dump().size() > 1024 * 1024 ||
+        opts.connect_timeout.count() <= 0 || opts.turn_timeout.count() <= 0 ||
+        opts.connect_timeout > std::chrono::hours(24) || opts.turn_timeout > std::chrono::hours(24))
+        throw Error("InvalidOptions", "Invalid ACP options");
+}
+AcpProvider::~AcpProvider() {
+    disconnect();
+}
+ProviderCapabilities AcpProvider::capabilities() const {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    return {true, p.load_session, true,
+            !p.models.empty() || !p.options.models_process.executable.empty(), false};
+}
+void AcpProvider::connect(const CallContext& input) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.connect_timeout);
+    context.cancellation.check();
+    if (p.initialized)
+        return;
+    try {
+        p.process = std::make_unique<Process>(p.options.process);
+        auto result = p.rpc(
+            "initialize",
+            {{"protocolVersion", 1},
+             {"clientCapabilities",
+              {{"fs", {{"readTextFile", false}, {"writeTextFile", false}}}, {"terminal", false}}},
+             {"clientInfo", {{"name", "cymcp"}, {"version", version}}}},
+            context);
+        if (result.at("protocolVersion") != 1)
+            throw Error("UnsupportedVersion", "Only ACP protocol version 1 is implemented");
+        p.load_session =
+            result.value("agentCapabilities", Json::object()).value("loadSession", false);
+        p.initialized = true;
+        context.emit("ProviderReady", {{"authentication", "unverified"}, {"protocol", "acp-v1"}});
+    } catch (...) {
+        p.reset();
+        throw;
+    }
+}
+Json AcpProvider::list_models(const CallContext& input) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.connect_timeout);
+    if (!p.models.empty())
+        return p.models;
+    if (p.options.models_process.executable.empty())
+        throw Error("Unsupported",
+                    "ACP model catalogue is available only if advertised by a session");
+    Process probe(p.options.models_process);
+    probe.close_input();
+    ProcessLine line;
+    std::string output;
+    while (probe.next(line, context.cancellation)) {
+        if (line.stderr_stream)
+            continue;
+        output += line.text + "\n";
+        if (output.size() > 1024 * 1024)
+            throw Error("ResponseTooLarge", "Model catalogue exceeds limit");
+    }
+    if (probe.wait(context.cancellation) != 0)
+        throw Error("ModelDiscoveryFailed", "Native model discovery failed");
+    return model_rows(parse_json(output));
+}
+Session AcpProvider::start_session(std::string model, std::string resume, const CallContext& input,
+                                   std::string system) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.connect_timeout);
+    if (!p.initialized)
+        throw Error("InvalidState", "Connect ACP first");
+    if (!resume.empty() && !p.load_session)
+        throw Error("Unsupported", "Agent does not advertise session loading");
+    auto cwd = p.options.process.cwd.empty() ? std::filesystem::current_path()
+                                             : std::filesystem::absolute(p.options.process.cwd);
+    Json params = {{"cwd", path_utf8(cwd)}, {"mcpServers", p.options.mcp_servers}};
+    p.session_id = resume;
+    p.models = p.config_options = Json::array();
+    p.modes = p.legacy_models = Json::object();
+    if (!resume.empty())
+        params["sessionId"] = resume;
+    try {
+        auto result = p.rpc(resume.empty() ? "session/new" : "session/load", params, context);
+        auto id = resume.empty() ? result.at("sessionId").get<std::string>() : resume;
+        if (id.empty() || (result.contains("sessionId") && result.at("sessionId") != id))
+            throw Error("SessionInvalid", "ACP returned a different session ID");
+        p.session_id = id;
+        p.metadata(result);
+        p.select("mode", p.options.mode, context);
+        p.select("model", model, context);
+        p.system = std::move(system);
+        p.first_prompt = true;
+        return {id, p.current_model()};
+    } catch (const Error& error) {
+        if (error.code == "Cancelled" || error.code == "Timeout" || error.code == "UnexpectedEOF" ||
+            error.code == "ProtocolError")
+            p.reset();
+        else
+            p.session_id.clear();
+        throw;
+    } catch (...) {
+        p.reset();
+        throw;
+    }
+}
+ChatResult AcpProvider::send(Session& session, Json& messages, const CallContext& input) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.turn_timeout);
+    if (!p.initialized)
+        throw Error("InvalidState", "Reconnect ACP after disconnect or interruption");
+    if (session.id.empty() || session.id != p.session_id)
+        throw Error("SessionInvalid", "ACP session is not active");
+    if (!messages.is_array() || messages.empty() || !messages.back().at("content").is_string())
+        throw Error("Unsupported", "ACP adapter currently accepts text input");
+    auto text = messages.back().at("content").get<std::string>();
+    // ACP v1 has no portable system role. It is first-turn application context.
+    if (p.first_prompt && !p.system.empty())
+        text = "Application instructions:\n" + p.system + "\nUser message:\n" + text;
+    p.first_prompt = false; // submitted turns must never be resent implicitly
+    ChatResult result;
+    try {
+        auto response = p.rpc("session/prompt",
+                              {{"sessionId", session.id},
+                               {"prompt", Json::array({{{"type", "text"}, {"text", text}}})}},
+                              context, &result);
+        auto reason = response.at("stopReason").get<std::string>();
+        if (reason == "cancelled")
+            throw Error("Cancelled", "ACP agent cancelled the turn");
+        if (reason == "max_turn_requests" || reason == "max_tokens")
+            throw Error("TurnLimitExceeded", "ACP agent stopped before completing its turn");
+        if (reason == "refusal")
+            throw Error("ProviderRefusal", "ACP agent refused the request");
+        if (reason != "end_turn")
+            throw Error("ProtocolError", "Unknown ACP stop reason");
+        if (response.contains("usage"))
+            result.usage = response.at("usage");
+        result.finish_reason = reason;
+        messages.push_back({{"role", "assistant"}, {"content", result.text}});
+        if (!p.current_model().empty())
+            session.model = p.current_model();
+        context.emit("TurnCompleted", {{"text", result.text}, {"finishReason", reason}});
+        return result;
+    } catch (const Error& error) {
+        if (error.code == "Cancelled" || error.code == "Timeout") {
+            CallContext cleanup;
+            cleanup.cancellation.deadline = Clock::now() + std::chrono::milliseconds(100);
+            try {
+                p.process->write(Json({{"jsonrpc", "2.0"},
+                                       {"method", "session/cancel"},
+                                       {"params", {{"sessionId", session.id}}}})
+                                         .dump() +
+                                     "\n",
+                                 cleanup.cancellation);
+            } catch (...) {
+            }
+            p.reset();
+        } else if (error.code == "ProtocolError" || error.code == "UnexpectedEOF")
+            p.reset();
+        throw;
+    } catch (...) {
+        p.reset();
+        throw;
+    }
+}
+void AcpProvider::disconnect() noexcept {
+    auto& p = *impl_;
+    {
+        std::lock_guard lock(p.cancellation_mutex);
+        p.active.cancel();
+    }
+    std::lock_guard lock(p.mutex);
+    p.reset();
+}
+} // namespace cymcp

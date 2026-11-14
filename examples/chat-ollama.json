@@ -1,0 +1,8 @@
+{
+  "provider": "ollama",
+  "model": "CHOOSE_AN_INSTALLED_MODEL_ID",
+  "settings": {
+    "base_url": "http://127.0.0.1:11434",
+    "timeout_ms": 120000
+  }
+}

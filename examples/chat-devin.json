@@ -1,0 +1,9 @@
+{
+  "provider": "devin",
+  "model": "",
+  "settings": {
+    "allow_all_actions": false,
+    "connect_timeout_ms": 15000,
+    "turn_timeout_ms": 600000
+  }
+}

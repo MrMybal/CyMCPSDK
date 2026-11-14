@@ -1,0 +1,33 @@
+name: Native SDK
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux development transport
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Compile
+        run: cmake --build build --config Release --parallel 4
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Install
+        run: cmake --install build --config Release --prefix build/install
+      - name: Configure installed consumer
+        run: cmake -S tests/consumer -B build/consumer -DCMAKE_PREFIX_PATH=${{ github.workspace }}/build/install
+      - name: Build installed consumer
+        run: cmake --build build/consumer --config Release
+  minimal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake --preset core-only
+      - run: cmake --build --preset core-only
+      - run: ctest --preset core-only

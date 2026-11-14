@@ -1,0 +1,8 @@
+/build*/
+/out/
+/.cache/
+*.user
+*.pdb
+__pycache__/
+/build-*.log
+/build-toolchain.py

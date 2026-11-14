@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.24)
+project(CyMCPSDKConsumer LANGUAGES CXX)
+find_package(CyMCPSDK 0.3 CONFIG REQUIRED)
+add_executable(consumer main.cpp)
+target_link_libraries(consumer PRIVATE CyMCP::SDK)
+if(TARGET CyMCP::AI)
+  target_compile_definitions(consumer PRIVATE CONSUMER_HAS_AI=1)
+endif()

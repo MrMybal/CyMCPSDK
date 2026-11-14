@@ -1,0 +1,198 @@
+# Intégration
+
+## Une opération, plusieurs accès
+
+```cpp
+#include <cymcp/mcp.hpp>
+using namespace cymcp;
+
+Registry operations(Policy::allow_all());
+Operation operation;
+operation.name = "document.export";
+operation.description = "Export the current document";
+operation.input_schema = {
+    {"type", "object"},
+    {"properties", {{"format", {{"type", "string"}, {"enum", {"png", "jpeg"}}}}}},
+    {"required", {"format"}},
+    {"additionalProperties", false}
+};
+operation.output_schema = {{"type", "object"}};
+operation.handler = [](const Json& arguments, const CallContext& context) {
+    context.cancellation.check();
+    // Appeler ici le vrai moteur de l'application et retourner ses résultats.
+    return Json{{"format", arguments.at("format")}};
+};
+operations.add(std::move(operation));
+
+auto result = operations.invoke("document.export", {{"format", "png"}});
+McpServer mcp(operations, "My application");
+```
+
+Le handler s'exécute sur le thread de l'appelant : les serveurs utilisent leurs workers.
+L'application doit transférer le travail sur son thread métier/UI lorsque son moteur l'impose,
+et conserver la validité des objets capturés. Les callbacks sont exécutés hors du verrou du registre.
+Les handlers longs vérifient régulièrement `context.cancellation`; aucun thread C++ métier n'est tué de force.
+
+`Policy{}` et `Policy::deny_all()` refusent les appels. `Policy::allow_all()` autorise les opérations exposées
+sans confirmation. Une politique hôte décide à partir de l'identité authentifiée, du nom et des paramètres :
+
+```cpp
+Policy policy([](const CallContext& context, const std::string& operation, const Json& arguments) {
+    return context.principal == "trusted-plugin" ? Decision::allow : Decision::deny;
+});
+```
+
+Le mode permissif conserve la validation et la protection des communications. Les droits du système et du
+fournisseur restent applicables. Le serveur HTTP fourni représente une connexion locale authentifiée avec un seul
+secret, pas un service multi-utilisateur avec délégation d'identité. Pour plusieurs identités, créer des endpoints
+isolés ou adapter l'authentification hôte ; ne jamais accepter un `principal` arbitraire depuis les arguments JSON.
+
+## Schémas
+
+Le profil de schéma est volontairement explicite : `type`, `properties`, `required`, `additionalProperties`,
+`items`, `enum`, `const`, bornes numériques et de taille, `uniqueItems`, `allOf`, `anyOf`, `oneOf`, `not`,
+`if/then/else`, et métadonnées documentaires. Les mots-clés de validation inconnus sont rejetés à l'enregistrement.
+Les références `$ref`, expressions `pattern` et `format` ne sont pas implémentées. Ce profil ne constitue pas
+une implémentation complète de JSON Schema 2020-12. `default` est une annotation, pas une transformation des valeurs.
+
+Les messages entrants sont bornés en taille et en profondeur ; les clés JSON dupliquées sont rejetées.
+La validation des sorties d'un handler est aussi appliquée.
+La racine des paramètres est de type `object`. Une sortie structurée déclarée utilise également `object` ;
+envelopper une liste ou une valeur dans un champ nommé pour préserver le contrat MCP.
+
+## MCP et autre application
+
+`McpServer::serve_stdio()` sert les outils et permet des appels concurrents bornés.
+Le serveur répond à `server/discover` et aux métadonnées par requête de la révision `2026-07-28`.
+Il accepte aussi l'initialisation `2025-11-25` et `2025-06-18` pour les clients existants.
+Le serveur n'annonce ni ressources, ni prompts, ni souscriptions : uniquement les outils implémentés.
+
+Le client utilise d'abord la découverte moderne, puis l'initialisation historique si le serveur la refuse.
+Il suit la pagination des outils et détecte les curseurs cycliques. Le transport HTTP accepte les réponses JSON
+et les résultats SSE finis ; les souscriptions persistantes et la reprise d'événements HTTP ne sont pas livrées.
+Un échec de découverte par timeout est actuellement remonté ; il ne déclenche pas de fallback implicite.
+
+```cpp
+auto remote = std::make_shared<McpClient>("http://127.0.0.1:8765/mcp", token);
+remote->connect();
+Json tools = remote->list_tools();
+auto result = remote->call_tool("document.export", {{"format", "png"}});
+```
+
+Pour `IA -> application A -> application B`, enregistrer dans A une opération qualifiée qui appelle
+`remote->call_tool()` sur B. Examiner `isError` et conserver le schéma de l'opération distante ; la réussite
+du transport n'est pas une réussite métier. L'application choisit explicitement les outils à déléguer.
+Le jeton d'A vers B est une autorisation de service ; les droits du demandeur d'origine doivent être appliqués dans A.
+
+## Conversations sans interface
+
+Le [guide des fournisseurs](Providers.md) couvre le registre extensible, les profils CLI et API, leurs
+permissions et l'ajout d'un protocole externe. Les classes typées ci-dessous restent utilisables directement.
+
+```cpp
+#include <cymcp/ai.hpp>
+HttpChatOptions options;
+options.base_url = "http://127.0.0.1:9931/v1";
+options.tools = shared_operation_registry;
+auto provider = std::make_shared<HttpChatProvider>(options);
+Conversation conversation(provider, exact_model_id, "You assist the user of this application.");
+conversation.connect(); // à exécuter sur un worker si le connecteur lance un processus
+
+EventQueue events;
+Executor workers(2);
+CallContext context;
+context.events = [&](const Event& event) { events.push(event); };
+auto result = conversation.send_async(workers, "Export the current document", context);
+// L'interface appelle events.drain() depuis son propre thread.
+// conversation.cancel() annule également un tour encore en attente dans le worker pool.
+```
+
+Une seule opération active ou planifiée par conversation. Chaque conversation native possède son connecteur.
+Conserver l'executor, la file et les objets capturés jusqu'à la fin du futur. `history()` retourne un snapshot
+de données ; le stockage durable et le chiffrement éventuel relèvent de l'application hôte.
+
+Événements : `TurnStarted`, `TextDelta`, `ThinkingDelta` lorsque disponible, `ToolStarted`, `ToolCompleted`,
+`UsageUpdated`, `TurnCompleted`, `TurnCancelled`, `TurnFailed`. Les deltas et le texte final sont des présentations
+du même contenu : ne pas concaténer le snapshot final aux deltas. Aucun raisonnement interne n'est inventé.
+
+Pour Codex, renseigner `CodexOptions.process.executable` avec le binaire natif. Le connecteur garde
+`app-server --listen stdio://` actif, initialise la connexion, vérifie l'état du compte et utilise les IDs natifs.
+`tools` expose le registre via les outils dynamiques expérimentaux ; les noms incompatibles sont traduits
+en identifiants stables. Les droits des handlers restent appliqués. Les demandes natives sont refusées par défaut
+ou routées par `approvals` et `request_handler`. `approval_policy` et `sandbox` contrôlent la politique du fournisseur.
+Un host qui choisit explicitement l'accès complet peut sélectionner `danger-full-access` et sa politique permissive.
+
+Pour Claude, renseigner `ClaudeOptions.process.executable`. L'adaptateur utilise `auth status`, puis
+`-p --output-format stream-json --verbose --include-partial-messages`. Il reprend l'ID exact avec `--resume`.
+Le processus est recréé à chaque message ; la conversation native est reprise. Le mode persistant bidirectionnel
+Claude n'est pas implémenté. `mcp_servers` permet de connecter le serveur de l'application ; `allowed_tools`
+sélectionne les outils natifs. `allow_all_actions=true` sélectionne explicitement le mode permissif du fournisseur.
+
+Les scripts `.cmd` et `.ps1` ne sont pas exécutés par un shell. Si nécessaire, fournir `node.exe` comme exécutable
+avec le script d'entrée comme premier argument. Les prompts Claude/Antigravity passent par stdin ; OpenCode
+les reçoit comme argument individuel après `--`. L'installation, la connexion au
+compte et la disponibilité du modèle sont trois états distincts. Le SDK ne crée pas de compte et n'effectue pas
+de génération facturée pendant ses tests hors ligne.
+
+Le connecteur HTTP utilise `/models` et `/chat/completions`, le streaming SSE, les appels de fonctions fragmentés
+et une limite de tours d'outils. Il préserve les résultats d'outils dans l'historique après une erreur afin que
+l'application puisse inspecter ce qui s'est déjà exécuté. Aucune relance automatique d'une action n'est effectuée.
+Le transport peut transmettre des blocs multimodaux ; leur prise en charge dépend de l'endpoint et du modèle.
+Les adaptateurs CLI livrés prennent actuellement du texte. Les clés sont fournies en mémoire par l'hôte,
+par exemple depuis son coffre système ; aucun fichier de secrets ni journal brut de protocole n'est créé.
+
+## Moteur local
+
+```cpp
+#include <cymcp/local.hpp>
+LocalEngineOptions options;
+options.process.executable = absolute_llama_server_path;
+options.model = absolute_gguf_path;
+options.private_work_directory = app_private_cache;
+options.context_tokens = 4096;
+options.gpu_layers = 0; // régler selon le moteur et le matériel réellement disponibles
+LocalEngine engine(options);
+engine.start(); // worker ; charge une seule fois et attend une disponibilité authentifiée
+
+HttpChatOptions chat;
+chat.base_url = engine.base_url();
+chat.api_key = engine.token();
+// Créer ensuite HttpChatProvider et Conversation.
+// Garder engine vivant pendant les échanges, puis engine.stop().
+```
+
+Le moteur écoute sur loopback avec un secret aléatoire dans un répertoire privé. Son fichier d'authentification
+est supprimé à l'arrêt ; les poids existants sont référencés sans copie. Le SDK termine uniquement ses processus
+possédés. Sous Windows, un Job Object possède l'arbre ; sous POSIX, un groupe de processus est utilisé.
+Un processus qui quitte volontairement son groupe POSIX n'est pas un enfant supervisé garanti.
+Le lancement est vérifié par des fixtures ; les mesures de génération GPU sur un vrai moteur restent à établir.
+
+## Installation depuis l'app
+
+`DependencyManager` reçoit un `Package` provenant d'un catalogue **de confiance fourni par l'application**.
+Chaque fichier déclare son chemin relatif, URL HTTPS, taille exacte et SHA-256. Le catalogue définit aussi les
+hôtes de redirection autorisés. Une empreinte fournie par une source non fiable ne prouve pas l'authenticité.
+
+`install()` télécharge dans un dossier temporaire privé, vérifie taille et empreinte, écrit un reçu et publie
+le dossier par renommage. Les chemins absolus, traversées, noms réservés Windows, ADS, liens et doublons sont refusés.
+Une installation valide est réutilisée ; une altération est signalée. Les versions sont isolées. Une installation
+concurrente utilise un verrou de dossier ; un verrou abandonné après crash nécessite une récupération explicite.
+
+`run_installer()` exécute uniquement un fichier vérifié du paquet avec des arguments structurés.
+Le callback `ElevationHandler` appartient à l'app, qui fournit son parcours UAC/polkit adapté.
+Les codes de redémarrage sont exposés. Le SDK ne choisit ni n'installe arbitrairement un pilote.
+`uninstall()` retire le cache géré correspondant au reçu ; il ne désinstalle pas un pilote du système.
+
+Cette première version installe des fichiers individuels ou un installeur natif. L'extraction ZIP/tar, la reprise
+HTTP Range, les catalogues NVIDIA/AMD maintenus et les procédures système par distribution sont à compléter.
+Il ne faut pas annoncer un bouton universel « installer CUDA » sur la seule présence du gestionnaire.
+Les droits `dependencies.install`, `dependencies.runInstaller` et `dependencies.uninstall` suivent la politique hôte.
+
+## Références de protocole
+
+- https://modelcontextprotocol.io/specification/2026-07-28/server/discover
+- https://modelcontextprotocol.io/specification/2026-07-28/server/tools
+- https://modelcontextprotocol.io/specification/2025-11-25
+- https://learn.chatgpt.com/docs/app-server
+- https://code.claude.com/docs/en/headless
+- https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md

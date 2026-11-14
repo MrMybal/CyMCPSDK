@@ -1,0 +1,18 @@
+# Third-party components
+
+CyMCPSDK source is MIT. These small, vendored components are MIT as well:
+
+| Component | Version | SHA-256 of header | Notice |
+|---|---|---|---|
+| nlohmann/json | 3.12.0 | aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63 | third_party/nlohmann/LICENSE.MIT |
+| cpp-httplib | 0.66.0 | 51ddd1482c67acb31f3064e48329aade14acc7dd0fab31ee5397193697ea1c35 | third_party/httplib/LICENSE |
+| PicoSHA2 | 161cb3fc4170fa7a3eca9e582cebd27cc4d1fe29 | b13c180161ffac8d0adc81e033e493c409457c4d1258ab9781ac80579ba3bdd8 | third_party/picosha2/LICENSE |
+
+Upstreams: https://github.com/nlohmann/json, https://github.com/yhirose/cpp-httplib,
+https://github.com/okdshin/PicoSHA2.
+
+Windows networking and cryptography use system APIs. Linux/macOS HTTPS uses the
+host's libcurl, under its own permissive curl license and TLS backend notices.
+No Python runtime, GUI, model weights, inference engine, GPU runtime or driver
+is shipped in the SDK. External providers, engines and downloaded packages retain
+their own terms; their licenses are not changed by this project.

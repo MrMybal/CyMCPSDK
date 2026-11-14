@@ -1,0 +1,9 @@
+{
+  "provider": "openai",
+  "model": "CHOOSE_AN_AVAILABLE_MODEL_ID",
+  "api_key_env": "OPENAI_API_KEY",
+  "system": "You assist the user of this application.",
+  "settings": {
+    "max_output_tokens": 4096
+  }
+}
