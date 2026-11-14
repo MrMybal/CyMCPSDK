@@ -65,6 +65,7 @@ Copy-Item -LiteralPath (Join-Path $installRoot 'bin/cymcp_chat_app.exe') -Destin
 Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE'), (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md'),
     (Join-Path $projectRoot 'examples/chat_app/README.txt') -Destination $portableRoot -Force
 Copy-Item -LiteralPath (Join-Path $installRoot 'share/CyMCPSDK/licenses') -Destination $portableRoot -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $installRoot 'bin/Documentation') -Destination $portableRoot -Recurse -Force
 $configFolder = Join-Path $portableRoot 'configs'
 New-Item -ItemType Directory -Path $configFolder -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $projectRoot 'examples') -Filter 'chat-*.json' |

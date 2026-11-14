@@ -1,6 +1,7 @@
 #include "commands.hpp"
 #include "demo_provider.hpp"
 #include "exercise.hpp"
+#include "help.hpp"
 
 // Include Windows definitions before the dependent SDK headers.
 #include <windows.h>
@@ -196,6 +197,7 @@ void translations() {
                   {"AI may use app commands", "L’IA peut appeler les commandes de l’app"},
                   {"Expose local MCP", "Activer le MCP local"},
                   {"Copy MCP token", "Copier le jeton MCP"},
+                  {"Help (F1)", "Aide (F1)"},
               });
 }
 struct App {
@@ -282,6 +284,8 @@ struct App {
         if (endpoint[0])
             connection.provider.settings["base_url"] = endpoint.data();
         connection.provider.settings["allow_all_actions"] = allow_all;
+        if (provider_id == "demo")
+            connection.provider.settings["demo_locale"] = cyui::locale();
         connection.provider.approvals = allow_all ? Policy::allow_all() : Policy::deny_all();
         connection.provider.process.executable = std::filesystem::u8path(executable.data());
         connection.provider.process.cwd = std::filesystem::u8path(cwd.data());
@@ -321,6 +325,9 @@ struct App {
     }
     void connection_panel() {
         cyui::heading(cyui::tr("Connection").c_str(), 2);
+        ImGui::SameLine();
+        if (cyui::button(cyui::trLabel("Help (F1)").c_str()))
+            action([&] { open_help(); });
         {
             cyui::ScopedDisabled disabled(chat.state().busy);
             if (cyui::beginProperties("##provider-properties", 110)) {
@@ -494,8 +501,21 @@ struct App {
             cyui::endSection();
         }
     }
+    void open_help() {
+        std::wstring path(32768, L'\0');
+        auto size = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (!size || size >= path.size())
+            throw Error("FileError", "Cannot locate application");
+        path.resize(size);
+        auto url = chat_example::help_url(path, cyui::locale() == "fr");
+        if (reinterpret_cast<INT_PTR>(
+                ShellExecuteW(window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
+            throw Error("FileError", "Cannot open documentation");
+    }
     void draw() {
         chat.poll();
+        if (ImGui::IsKeyPressed(ImGuiKey_F1))
+            action([&] { open_help(); });
         auto viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -683,7 +703,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             }
             if (!exercise && (smoke || !capture.empty()) && !sent && app.chat.state().connected &&
                 !app.chat.state().busy) {
-                app.action([&] { app.chat.send("Montre-moi le rendu Markdown natif de CyUI."); });
+                app.action([&] {
+                    app.chat.send(language == "fr" ? "Montre-moi le rendu Markdown natif de CyUI."
+                                                   : "Show me CyUI's native Markdown rendering.");
+                });
                 sent = true;
             }
             ImGui::Render();
@@ -700,7 +723,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
                     const auto& state = app.chat.state();
                     if (!app.error.empty() || !state.error_code.empty() ||
                         state.messages.size() != 2 ||
-                        state.messages.back().markdown.find("## Le tchat natif") != 0)
+                        state.messages.back().markdown.find(
+                            language == "fr" ? "## Le tchat natif" : "## Native chat") != 0)
                         result = 4;
                     if (!capture.empty() && !capture_png(capture))
                         result = 5;

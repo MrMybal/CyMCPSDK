@@ -11,12 +11,16 @@ Depuis PowerShell, avec Visual Studio 2022 C++ et son composant CMake :
 
 ```powershell
 ./tools/build-chat.ps1 -CyUISource ../CyUI
-./out/ChatLab-windows-x64/cymcp_chat_app.exe --language fr
+./out/ChatLab-windows-x64/cymcp_chat_app.exe
 ```
 
 Le script prépare l'environnement Visual Studio x64, configure Ninja, compile, exécute les tests, installe le SDK
 et rassemble l'exécutable et ses notices dans `out/ChatLab-windows-x64/`.
 Il ne télécharge ni moteur IA ni dépendance GPU.
+L'anglais est la langue de démarrage. Choisir Français dans Appearance pour changer
+la langue de l'interface, ou utiliser explicitement `--language fr`. La démonstration
+locale prend aussi la langue choisie à la connexion. **Help (F1)** ouvre le manuel
+CyDoc local fourni dans le dossier `Documentation/`, en anglais ou en français.
 
 Pour une compilation CMake directe, dans un environnement C++ configuré :
 

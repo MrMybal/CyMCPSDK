@@ -1,128 +1,162 @@
-# CyMCPSDK
+<table width="100%">
+  <tr>
+    <td width="300" align="left" valign="top">
+      <a href="Documentation/Documentation.html#/en/overview">Manual</a><br>
+      <a href="https://github.com/MrMybal/CyMCPSDK">Repository</a><br><br>
+      <sub>README</sub><br>
+      <a href="README.md">English</a> · <a href="README.fr.md">Français</a>
+    </td>
+    <td width="400" align="center" valign="middle">
+      <strong>CyMCPSDK</strong><br><sub>C++20 SDK</sub>
+    </td>
+    <td width="300" align="right" valign="top">
+      <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.2</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Build from source · Windows x64 example</sub></p>
+    </td>
+  </tr>
+</table>
 
-Bibliothèque C++20 modulaire sous **MIT**, pour exposer les opérations d'une application aux IA,
-intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.5.1**.
+<h1 align="center">CyMCPSDK</h1>
 
-Le SDK est natif : aucune dépendance Python à l'exécution. Un module de tchat **CyUI optionnel**
-et une petite application Windows de test sont disponibles. Aucun modèle, moteur d'inférence,
-runtime GPU ou pilote n'est embarqué.
-Android est reporté. Windows et Linux constituent les cibles initiales ; macOS est prévu par les adaptateurs.
-Voir [les preuves de validation et les limites](Docs/Validation.md) avant d'intégrer.
+A modular C++20 library for application developers who want AI agents to use their app,
+conversations inside the app, and connections to other applications' tools. It provides
+native SDK/MCP transports and an optional CyUI Markdown chat panel.
+
+> **IN DEVELOPMENT · 0.5.2**
+>
+> The Windows example is available as a source build. Linux/macOS distribution and dependency
+> installation work remain in progress. Read the [version notes and known issues](VERSION.md).
+
+[![Chat Lab in English, showing a streamed local Markdown demonstration](assets/screenshots/chat-lab-en.png)](assets/screenshots/chat-lab-en.png)
+
+## What you can build
+
+Register your application's operations once, then expose them through native calls, SDK JSON
+or an authenticated local MCP server. Connect an AI provider to those operations, or use the
+MCP client to forward selected tools from another application.
+
+Use CLI agents, native APIs or an existing local model service for conversations. The provider
+registry includes 22 extensible profiles, including Codex, Claude Code, OpenCode, Antigravity,
+ACP agents, Responses, Messages, OpenRouter and Ollama. Actual models and capabilities come
+from the configured provider. Credentials and model weights are supplied separately.
+
+Chat Lab demonstrates streamed messages, Markdown/code/tables, attachments, cancellation,
+exact session reconnection and optional history. Its demonstration counter can be used by an
+AI or another MCP/SDK client. English is the default; French and five CyUI themes are available.
+**Help (F1)** opens the supplied local manual.
 
 ## Modules
 
-| Cible CMake | Fonction |
-|---|---|
-| `CyMCP::Core` | Registre d'opérations, schémas, politiques de droits, annulation, événements et worker pool |
-| `CyMCP::Platform` | Processus natifs sans shell, stdin, stdout/stderr simultanés, limites et arrêt des processus possédés |
-| `CyMCP::Http` | HTTP(S) client, streaming, serveur JSON loopback authentifié |
-| `CyMCP::MCP` | Serveur et client MCP : stdio, HTTP JSON, découverte et appels d'outils |
-| `CyMCP::AI` | Conversations, registre extensible, agents CLI/ACP et API natives, streaming et outils |
-| `CyMCP::Local` | Supervision d'un moteur local et installation de composants vérifiés depuis l'app |
-| `CyMCP::ChatUI` | Module optionnel : contrôleur asynchrone et panneau de tchat natif CyUI/Markdown |
-| `CyMCP::SDK` | Agrégat des modules du SDK, sans dépendance graphique |
+| CMake target | Purpose |
+| --- | --- |
+| `CyMCP::Core` | Typed operations, schemas, permission policies, cancellation and workers |
+| `CyMCP::Platform` | Child processes with structured arguments and owned-process cleanup |
+| `CyMCP::Http` | HTTP(S), streaming and authenticated loopback JSON server |
+| `CyMCP::MCP` | MCP tools over stdio and local HTTP JSON, server and client |
+| `CyMCP::AI` | Provider factories, CLI/ACP/API transports, conversations and tool exchanges |
+| `CyMCP::Local` | Local engine supervision and verified dependency downloads |
+| `CyMCP::ChatUI` | Optional asynchronous controller and native CyUI chat panel |
+| `CyMCP::SDK` | SDK aggregate without graphical dependencies |
 
-Les modules lourds se désactivent avec `CYMCP_BUILD_HTTP`, `CYMCP_BUILD_MCP`, `CYMCP_BUILD_AI`
-et `CYMCP_BUILD_LOCAL`. Le processus natif a son option `CYMCP_BUILD_PLATFORM`.
-Les dépendances entre modules sont contrôlées par CMake. Le preset `core-only` compile uniquement le socle.
-`CYMCP_BUILD_CHAT_UI` et `CYMCP_BUILD_CHAT_APP` sont désactivés par défaut ; CyUI est fourni par l'hôte.
+Host policies can restrict operations or explicitly permit all registered actions. Native agent
+permissions remain separate. No Python runtime, AI CLI, inference engine, model, CUDA runtime
+or driver is bundled. Android is deferred.
 
-## Tester le tchat Windows
+---
 
-```powershell
-./tools/build-chat.ps1 -CyUISource ../CyUI
-./out/ChatLab-windows-x64/cymcp_chat_app.exe --language fr
-```
+## Installation
 
-Le [guide du module ChatUI](Docs/ChatUI.md) décrit l'intégration dans une autre app.
-L'exemple propose les 22 profils de fournisseurs, un catalogue de modèles réel ou une saisie manuelle,
-streaming Markdown, pièces jointes, arrêt, reconnexion et historique facultatif.
-Le mode **Demo / Markdown (no AI)** vérifie l'interface sans compte ; il produit du texte déterministe.
-L'interface est en anglais par défaut, avec français et cinq thèmes CyUI disponibles.
-La section **App commands** permet d'exposer un compteur de démonstration à l'IA,
-à un client MCP local ou directement au SDK JSON. Les modifications s'autorisent explicitement.
-Les [tests de l'application dans les deux sens](Docs/ChatAppValidation.md) distinguent
-les échanges simulés des générations réellement exécutées avec Codex, Antigravity et Ollama.
+No GitHub binary release is published for 0.5.2. Build from source with access to this repository.
+For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 runtime and DX11
+(WARP fallback available). Keep `Documentation/`, `licenses/` and notices beside the executable.
 
-## Compiler
+1. Build the Windows example with the commands below.
+2. Run `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
+3. Choose **Demo / Markdown (no AI)**, **Connect / New chat**, then send a message with **Ctrl+Enter**.
+4. Select a real provider and model to use its installed CLI, API account or local service.
 
-Prérequis : CMake 3.24+, compilateur C++20, threads système.
-Windows : Visual Studio 2022 C++ et Windows SDK. Linux : GCC 12+ ou Clang compatible, plus les
-headers et bibliothèques de développement libcurl lorsque le module HTTP est activé.
-Sur macOS, les sources utilisent libcurl et les API POSIX ; la validation sur machine macOS reste à réaliser.
+Open [Documentation/Documentation.html](Documentation/Documentation.html#/en/quickstart)
+from a local checkout or package. Download the complete documentation folder; GitHub's HTML
+file viewer displays source, so it is not the manual reader. Reading locally needs no server or Node.js.
+
+## Source, build and required libraries
+
+### Requirements
+
+- CMake 3.24+, a C++20 compiler and system threads.
+- Windows: Visual Studio 2022 C++ tools and Windows SDK.
+- Linux/macOS: POSIX APIs and libcurl development files for HTTP(S); see current platform issues.
+- Optional chat UI: a host [CyUI](https://github.com/MrMybal/CyUI) checkout with DocumentViews.
 
 ```sh
+git clone https://github.com/MrMybal/CyMCPSDK.git
+cd CyMCPSDK
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel 4
-ctest --test-dir build -C Release --output-on-failure
-```
-
-Avec Ninja, depuis un environnement de compilation configuré :
-
-```sh
-cmake --preset release
-cmake --build --preset release
-ctest --preset release
-```
-
-Les petites dépendances MIT sont versionnées dans `third_party/` : aucun téléchargement requis pour compiler.
-Le SDK utilise WinHTTP et BCrypt sous Windows, libcurl et le générateur aléatoire système sur Unix.
-Le workflow `.github/workflows/build.yml` prépare les builds Windows, Linux et macOS ; sa présence ne prouve
-pas leur exécution. Aucune CI n'est déclenchée par une compilation locale.
-
-## Essayer sans IA ni compte
-
-Dans `build/Release/` avec Visual Studio, ou directement dans `build/` avec Ninja :
-
-```sh
-cymcp_example describe
-cymcp_example invoke sum examples/sum.json
-cymcp_example mcp
-```
-
-`invoke` lit un fichier JSON pour éviter les problèmes d'échappement du shell.
-`jsonl` accepte `{"method":"invoke","name":"sum","arguments":{"a":2,"b":3}}`, une requête par ligne.
-Le protocole applicatif JSONL et MCP sont distincts.
-
-`serve [PORT]` expose `/v1` (JSON applicatif) et `/mcp` sur `127.0.0.1`.
-Configurer au préalable `CYMCP_TOKEN` avec une valeur aléatoire de 32 caractères minimum.
-Chaque requête utilise `Authorization: Bearer ...`. Le secret n'est pas affiché ni écrit dans un fichier de configuration.
-
-## Intégrer à une application
-
-```cmake
-set(CYMCP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(CYMCP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/CyMCPSDK)
-target_link_libraries(my_app PRIVATE CyMCP::Core CyMCP::MCP)
-```
-
-Une installation CMake est également fournie :
-
-```sh
 cmake --install build --config Release --prefix install
 ```
 
-Puis `find_package(CyMCPSDK CONFIG REQUIRED)` et les mêmes cibles `CyMCP::*`.
-Lire [le guide d'intégration](Docs/Integration.md) pour les droits, les conversations,
-les autres applications et les moteurs locaux. Les exemples en ligne de commande restent indépendants
-de toute interface graphique ; l'application Windows utilise le module optionnel ChatUI.
+For the Windows chat example, place CyUI beside the SDK or pass its real path:
 
-Le [guide des fournisseurs](Docs/Providers.md) décrit les **22 profils intégrés**, leurs capacités et l'ajout
-de nouveaux connecteurs par factory. `cymcp_chat providers` imprime le catalogue ; `cymcp_chat models CONFIG.json`
-découvre les modèles et `cymcp_chat CONFIG.json` dialogue par événements JSONL.
-OpenCode utilise désormais ACP persistant ; le CLI 1.x reste disponible sous `opencode-cli`.
-Les agents intégrés comprennent aussi Gemini CLI, Qwen Code, Kimi et goose. Command Code et CodeBuddy
-possèdent chacun un profil ACP persistant supplémentaire. Les capacités sont négociées avec chaque agent.
-Claude Code et Antigravity gardent leur processus de conversation ouvert par défaut dans le registre.
-Claude conserve les réglages utilisateur natifs et ne bloque pas la connexion sur un contrôle de login préalable.
-Le [guide des conversations](Docs/Conversations.md) couvre les pièces jointes portables, la sauvegarde privée
-optionnelle, la reprise exacte après déconnexion et les mesures du premier token et des tours chauds.
-`cymcp_chat benchmark CONFIG.json` mesure un fournisseur configuré avec de vrais échanges ; il ne lance
-aucune installation. Les essais cloud de cette machine n'ont pas encore produit de génération réussie.
+```powershell
+./tools/build-chat.ps1 -CyUISource ../CyUI
+./out/ChatLab-windows-x64/cymcp_chat_app.exe
+```
 
-## Licence
+<details>
+<summary>Link the library and choose optional modules</summary>
 
-Copyright (c) 2026 Cyberalien. Code du SDK sous [MIT](LICENSE).
-Conserver également les [notices des dépendances](THIRD_PARTY_NOTICES.md).
-Les composants externes téléchargés conservent leurs licences.
+```cmake
+find_package(CyMCPSDK 0.5 CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI)
+```
+
+Alternatively use `add_subdirectory(external/CyMCPSDK)`. Disable unneeded modules with
+`CYMCP_BUILD_HTTP`, `CYMCP_BUILD_PLATFORM`, `CYMCP_BUILD_MCP`, `CYMCP_BUILD_AI` and
+`CYMCP_BUILD_LOCAL`. CMake checks dependencies. The `core-only` preset builds the operation core.
+`CYMCP_BUILD_CHAT_UI` and `CYMCP_BUILD_CHAT_APP` default to off. An installed ChatUI consumer
+provides `CyUI::DocumentViews` before requesting `find_package(... COMPONENTS ChatUI)`.
+See the [integration manual](Documentation/Documentation.html#/en/integration).
+
+</details>
+
+---
+
+## License
+
+CyMCPSDK uses the [MIT license](LICENSE). Copyright © 2026 Cyberalien.
+External engines, models and provider services retain their own terms.
+
+### Third-party libraries
+
+| Library · source | License · terms | Use / scope |
+| --- | --- | --- |
+| [nlohmann/json](https://github.com/nlohmann/json) 3.12.0 | [MIT](third_party/nlohmann/LICENSE.MIT) | SDK JSON types and validation |
+| [cpp-httplib](https://github.com/yhirose/cpp-httplib) 0.66.0 | [MIT](third_party/httplib/LICENSE) | Local HTTP server; development fixtures |
+| [PicoSHA2](https://github.com/okdshin/PicoSHA2) | [MIT](third_party/picosha2/LICENSE) | Artifact hashing |
+| [libcurl](https://curl.se/libcurl/) | [curl license and TLS notices](THIRD_PARTY_NOTICES.md) | Host HTTP(S) dependency on Linux/macOS |
+| [CyUI](https://github.com/MrMybal/CyUI), Dear ImGui, MD4C | [MIT notices](THIRD_PARTY_NOTICES.md) | Optional native UI/Markdown modules |
+| Lexilla/Scintilla lexers | [Permissive notices](THIRD_PARTY_NOTICES.md) | Optional CyUI code highlighting |
+| JetBrains Mono | [SIL OFL 1.1 notice](THIRD_PARTY_NOTICES.md) | Optional CyUI embedded font |
+| [CyDoc](https://github.com/MrMybal/CyDoc) 0.1.0 | [MIT](Documentation/DocData/CyDoc-MIT.txt) | Static documentation reader; not a native SDK dependency |
+| marked, PrismJS, esbuild | [MIT notices](THIRD_PARTY_NOTICES.md) | Documentation generation only |
+
+Retain the complete [third-party notices](THIRD_PARTY_NOTICES.md) and the `licenses/`
+folder supplied with redistributed application builds. This table indexes their terms.
+
+## References and links
+
+- [English manual](Documentation/Documentation.html#/en/overview)
+- [Version notes and known issues](VERSION.md)
+- [Source repository](https://github.com/MrMybal/CyMCPSDK)
+- [Issue tracker](https://github.com/MrMybal/CyMCPSDK/issues)
+
+<details>
+<summary><strong>AI Usage</strong></summary>
+
+- [Primary agent guide](Documentation/DocAI.md) — architecture, build and integration contracts.
+- [Detailed integration](Docs/Integration.md) — existing French developer reference.
+- [Provider profiles](Docs/Providers.md) — existing French transport reference.
+
+</details>

@@ -1,0 +1,1054 @@
+{
+  "schemaVersion": 1,
+  "name": "CyMCPSDK",
+  "version": "0.5.2",
+  "defaultLocale": "en",
+  "locales": [
+    {
+      "code": "en",
+      "label": "English"
+    },
+    {
+      "code": "fr",
+      "label": "Français"
+    }
+  ],
+  "aliases": {},
+  "pages": [
+    {
+      "id": "chat-lab",
+      "title": "Chat Lab controls",
+      "description": "Connect a provider, send messages and expose the demonstration app commands.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 2,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"connect\">Connect<a class=\"heading-anchor\" href=\"#/en/chat-lab/connect\" aria-label=\"Link to Connect\">#</a></h2><p>Select a provider, then its model. <strong>Refresh model catalogue</strong> asks the provider for\nits actual models; otherwise enter an exact model ID manually. Model and connection\nchanges apply to the next <strong>Connect / New chat</strong>. A provider can reject unavailable models.</p>\n<p>Expand <strong>Executable</strong> for a native CLI path, JSON argument array and working directory.\nUse the actual <code>.exe</code>, or <code>node.exe</code> and its script arguments; shell wrappers are not launched.\n<strong>Advanced settings (JSON)</strong> accepts provider-specific settings. <strong>System prompt</strong> supplies\ninstructions at session creation. See <a href=\"#/en/providers/configure\">providers</a>.</p>\n<h2 id=\"messages\">Send and stop<a class=\"heading-anchor\" href=\"#/en/chat-lab/messages\" aria-label=\"Link to Send and stop\">#</a></h2><p>Type in the composer. <strong>Ctrl+Enter</strong> sends; <strong>Enter</strong> inserts a line. <strong>Attach files</strong> selects\nlocal attachments. Text streams into the Markdown transcript; activity and thinking appear\nwhen emitted by the provider. <strong>Follow responses</strong> controls automatic scrolling.</p>\n<p><strong>Stop</strong> requests cancellation. A partial answer remains marked interrupted.\n<strong>Reconnect</strong> explicitly resumes the current session; it does not resend the interrupted message.\nSee <a href=\"#/en/conversations\">conversations and history</a>.</p>\n<h2 id=\"commands\">Let an AI use app commands<a class=\"heading-anchor\" href=\"#/en/chat-lab/commands\" aria-label=\"Link to Let an AI use app commands\">#</a></h2><p>Expand <strong>App commands</strong>. The demonstration exposes <code>get_counter</code> and <code>set_counter</code>,\nwith integer values between −1,000,000 and 1,000,000. The current value is visible in the panel.</p>\n<ol>\n<li>Enable <strong>Allow counter changes</strong> if you want writes to succeed.</li>\n<li>Enable <strong>AI may use app commands</strong>, then make a new connection to Codex or a supported API transport.</li>\n<li>Ask the AI to set the demonstration counter and read it back.</li>\n</ol>\n<p>Direct attachment supports Codex, Responses, Messages, Chat Completions/OpenRouter and Ollama.\nOther CLIs use their native MCP configuration and return <code>Unsupported</code> for this direct-attachment option.</p>\n<h2 id=\"external\">Connect another application<a class=\"heading-anchor\" href=\"#/en/chat-lab/external\" aria-label=\"Link to Connect another application\">#</a></h2><p><strong>Expose local MCP</strong> creates an authenticated loopback server on a free port.\nCopy the displayed endpoint and use <strong>Copy MCP token</strong> to configure your client.\nUse <code>/mcp</code> for MCP tools, or <code>/v1</code> on the same port for direct SDK JSON.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token punctuation\">{</span><span class=\"token property\">\"method\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"invoke\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"name\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"arguments\"</span><span class=\"token operator\">:</span><span class=\"token punctuation\">{</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span></span></code></pre></div><p>Both routes share the same counter and live write policy. Disabling writes does not\ndisconnect the client. Disabling the MCP server closes the endpoint; enabling it again\ncreates a new token. See <a href=\"#/en/operations\">operations</a> and <a href=\"#/en/permissions\">permissions</a>.</p>\n",
+      "text": "Connect # Select a provider, then its model. Refresh model catalogue asks the provider for its actual models; otherwise enter an exact model ID manually. Model and connection changes apply to the next Connect / New chat . A provider can reject unavailable models. Expand Executable for a native CLI path, JSON argument array and working directory. Use the actual .exe , or node.exe and its script arguments; shell wrappers are not launched. Advanced settings (JSON) accepts provider-specific settings. System prompt supplies instructions at session creation. See providers . Send and stop # Type in the composer. Ctrl+Enter sends; Enter inserts a line. Attach files selects local attachments. Text streams into the Markdown transcript; activity and thinking appear when emitted by the provider. Follow responses controls automatic scrolling. Stop requests cancellation. A partial answer remains marked interrupted. Reconnect explicitly resumes the current session; it does not resend the interrupted message. See conversations and history . Let an AI use app commands # Expand App commands . The demonstration exposes get_counter and set_counter , with integer values between −1,000,000 and 1,000,000. The current value is visible in the panel. Enable Allow counter changes if you want writes to succeed. Enable AI may use app commands , then make a new connection to Codex or a supported API transport. Ask the AI to set the demonstration counter and read it back. Direct attachment supports Codex, Responses, Messages, Chat Completions/OpenRouter and Ollama. Other CLIs use their native MCP configuration and return Unsupported for this direct-attachment option. Connect another application # Expose local MCP creates an authenticated loopback server on a free port. Copy the displayed endpoint and use Copy MCP token to configure your client. Use /mcp for MCP tools, or /v1 on the same port for direct SDK JSON. json Copy { \"method\" : \"invoke\" , \"name\" : \"get_counter\" , \"arguments\" : { } } Both routes share the same counter and live write policy. Disabling writes does not disconnect the client. Disabling the MCP server closes the endpoint; enabling it again creates a new token. See operations and permissions . {\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "headings": [
+        {
+          "id": "connect",
+          "text": "Connect",
+          "level": 2
+        },
+        {
+          "id": "messages",
+          "text": "Send and stop",
+          "level": 2
+        },
+        {
+          "id": "commands",
+          "text": "Let an AI use app commands",
+          "level": 2
+        },
+        {
+          "id": "external",
+          "text": "Connect another application",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1"
+      ],
+      "languages": [
+        "json"
+      ],
+      "code": "{\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "assets": [],
+      "links": [
+        "#/en/providers/configure",
+        "#/en/conversations",
+        "#/en/operations",
+        "#/en/permissions"
+      ],
+      "kind": "guide"
+    },
+    {
+      "id": "conversations",
+      "title": "Conversations and history",
+      "description": "Attach files, cancel a turn and restore an exact conversation without replaying it.",
+      "section": "Guides",
+      "parent": "chat-lab",
+      "order": 2,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"attachments\">Attachments<a class=\"heading-anchor\" href=\"#/en/conversations/attachments\" aria-label=\"Link to Attachments\">#</a></h2><p><strong>Attach files</strong> snapshots the selected local files on the worker. Supported types include images,\naudio and text/PDF resources, depending on the transport and model. The panel lists attachment names;\nrich media preview requires resource services supplied by the host application.</p>\n<p>The composer accepts up to 16 files and 64 KiB of message text. File/content budgets and MIME/base64\nvalidation also apply. Unsupported content is rejected explicitly. A model receiving an image\ndoes not imply support for audio or documents.</p>\n<h2 id=\"history\">Preserve a conversation<a class=\"heading-anchor\" href=\"#/en/conversations/history\" aria-label=\"Link to Preserve a conversation\">#</a></h2><ol>\n<li>Enable <strong>Save history</strong> before connecting.</li>\n<li>Choose a private directory and a simple history ID.</li>\n<li>Send messages normally; each completed or interrupted turn is saved automatically.</li>\n<li>Select the same provider/model, directory and ID, then <strong>Restore saved chat</strong>.</li>\n</ol>\n<p>History is optional. It contains messages, tool results and embedded attachments: treat it as user data.\nKeys and connection configuration are not included. A storage error appears separately from a successful\ngeneration. Restoring does not resend a prompt or repeat an executed command.</p>\n<h2 id=\"resume\">Resume and cancel<a class=\"heading-anchor\" href=\"#/en/conversations/resume\" aria-label=\"Link to Resume and cancel\">#</a></h2><p>Native providers resume their exact session when supported; stateless APIs use the host&#39;s saved history.\nIf the native session cannot be loaded, <code>SessionInvalid</code> preserves the history instead of creating a\nreplacement conversation. ACP session loading depends on the agent&#39;s negotiated capabilities.</p>\n<p><strong>Stop</strong> cancels the active operation. <strong>Reconnect</strong> explicitly reopens the connection when needed.\nAfter interruption, decide whether to send another message; there is no automatic generation retry.</p>\n<h2 id=\"api\">Public C++ API<a class=\"heading-anchor\" href=\"#/en/conversations/api\" aria-label=\"Link to Public C++ API\">#</a></h2><p><code>Conversation::checkpoint()</code> returns a restorable snapshot. <code>ConversationStore::save(id, conversation)</code>\nwrites it privately and atomically; <code>load(id)</code> reads it for <code>Conversation::restore(snapshot)</code>.\nThe provider/model must match the snapshot. Keep provider instances and the executor alive until all\nasynchronous operations finish. Callbacks run on the calling worker, not the UI thread.</p>\n",
+      "text": "Attachments # Attach files snapshots the selected local files on the worker. Supported types include images, audio and text/PDF resources, depending on the transport and model. The panel lists attachment names; rich media preview requires resource services supplied by the host application. The composer accepts up to 16 files and 64 KiB of message text. File/content budgets and MIME/base64 validation also apply. Unsupported content is rejected explicitly. A model receiving an image does not imply support for audio or documents. Preserve a conversation # Enable Save history before connecting. Choose a private directory and a simple history ID. Send messages normally; each completed or interrupted turn is saved automatically. Select the same provider/model, directory and ID, then Restore saved chat . History is optional. It contains messages, tool results and embedded attachments: treat it as user data. Keys and connection configuration are not included. A storage error appears separately from a successful generation. Restoring does not resend a prompt or repeat an executed command. Resume and cancel # Native providers resume their exact session when supported; stateless APIs use the host's saved history. If the native session cannot be loaded, SessionInvalid preserves the history instead of creating a replacement conversation. ACP session loading depends on the agent's negotiated capabilities. Stop cancels the active operation. Reconnect explicitly reopens the connection when needed. After interruption, decide whether to send another message; there is no automatic generation retry. Public C++ API # Conversation::checkpoint() returns a restorable snapshot. ConversationStore::save(id, conversation) writes it privately and atomically; load(id) reads it for Conversation::restore(snapshot) . The provider/model must match the snapshot. Keep provider instances and the executor alive until all asynchronous operations finish. Callbacks run on the calling worker, not the UI thread.",
+      "headings": [
+        {
+          "id": "attachments",
+          "text": "Attachments",
+          "level": 2
+        },
+        {
+          "id": "history",
+          "text": "Preserve a conversation",
+          "level": 2
+        },
+        {
+          "id": "resume",
+          "text": "Resume and cancel",
+          "level": 2
+        },
+        {
+          "id": "api",
+          "text": "Public C++ API",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [],
+      "kind": "guide"
+    },
+    {
+      "id": "integration",
+      "title": "Integrate the C++ library",
+      "description": "Link only the modules your host needs and keep provider work outside its UI thread.",
+      "section": "SDK",
+      "order": 0,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"build\">Build requirements<a class=\"heading-anchor\" href=\"#/en/integration/build\" aria-label=\"Link to Build requirements\">#</a></h2><p>Use CMake 3.24+, C++20 and system threads. Windows uses Visual Studio 2022 C++, Windows SDK,\nWinHTTP and BCrypt. Linux/macOS use POSIX APIs and libcurl development files for HTTP(S).\nCurrent cross-platform distribution limits are listed in the source version notes.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>sh</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-bash\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">cmake <span class=\"token parameter variable\">-S</span> <span class=\"token builtin class-name\">.</span> <span class=\"token parameter variable\">-B</span> build <span class=\"token parameter variable\">-DCMAKE_BUILD_TYPE</span><span class=\"token operator\">=</span>Release</span><span class=\"code-line\" id=\"L2\" data-line=\"2\">cmake <span class=\"token parameter variable\">--build</span> build <span class=\"token parameter variable\">--config</span> Release <span class=\"token parameter variable\">--parallel</span> <span class=\"token number\">4</span></span><span class=\"code-line\" id=\"L3\" data-line=\"3\">cmake <span class=\"token parameter variable\">--install</span> build <span class=\"token parameter variable\">--config</span> Release <span class=\"token parameter variable\">--prefix</span> <span class=\"token function\">install</span></span></code></pre></div><p>An installed host uses the exported targets:</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cmake</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-cmake\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\"><span class=\"token keyword\">find_package</span><span class=\"token punctuation\">(</span>CyMCPSDK <span class=\"token number\">0.5</span> CONFIG REQUIRED<span class=\"token punctuation\">)</span></span><span class=\"code-line\" id=\"code-2-L2\" data-line=\"2\"><span class=\"token keyword\">target_link_libraries</span><span class=\"token punctuation\">(</span>my_app <span class=\"token namespace\">PRIVATE</span> <span class=\"token inserted class-name\">CyMCP::Core</span> <span class=\"token inserted class-name\">CyMCP::MCP</span> <span class=\"token inserted class-name\">CyMCP::AI</span><span class=\"token punctuation\">)</span></span></code></pre></div><p>Alternatively use <code>add_subdirectory(external/CyMCPSDK)</code>. Disable unneeded modules with\n<code>CYMCP_BUILD_HTTP</code>, <code>CYMCP_BUILD_PLATFORM</code>, <code>CYMCP_BUILD_MCP</code>, <code>CYMCP_BUILD_AI</code> and\n<code>CYMCP_BUILD_LOCAL</code>; CMake checks dependencies. <code>core-only</code> builds the operation core.</p>\n<h2 id=\"providers\">Create a conversation<a class=\"heading-anchor\" href=\"#/en/integration/providers\" aria-label=\"Link to Create a conversation\">#</a></h2><div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"code-3-L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/ai.hpp></span></span></span><span class=\"code-line\" id=\"code-3-L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"code-3-L3\" data-line=\"3\">cymcp<span class=\"token double-colon punctuation\">::</span>ProviderRegistry providers<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-3-L4\" data-line=\"4\">cymcp<span class=\"token double-colon punctuation\">::</span>ProviderConfig config<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-3-L5\" data-line=\"5\">config<span class=\"token punctuation\">.</span>settings<span class=\"token punctuation\">[</span><span class=\"token string\">\"base_url\"</span><span class=\"token punctuation\">]</span> <span class=\"token operator\">=</span> <span class=\"token string\">\"http://127.0.0.1:11434\"</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-3-L6\" data-line=\"6\"><span class=\"token keyword\">auto</span> provider <span class=\"token operator\">=</span> providers<span class=\"token punctuation\">.</span><span class=\"token function\">create</span><span class=\"token punctuation\">(</span><span class=\"token string\">\"ollama\"</span><span class=\"token punctuation\">,</span> config<span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p>Construct <code>Conversation(provider, model_id)</code> with a real installed model ID, then call\n<code>connect()</code> and <code>send(text_block(prompt))</code>. These synchronous calls belong on a worker.\n<code>send_async(executor, content, context)</code> returns a future; keep the executor/provider alive.\n<code>CallContext.events</code> receives deltas and activity. Transfer them through an <code>EventQueue</code>\nto the UI. <code>cancel()</code> requests cancellation; <code>reconnect()</code> is explicit.</p>\n<h2 id=\"chat-ui\">Embed the CyUI panel<a class=\"heading-anchor\" href=\"#/en/integration/chat-ui\" aria-label=\"Link to Embed the CyUI panel\">#</a></h2><p><code>CYMCP_BUILD_CHAT_UI</code> and <code>CYMCP_BUILD_CHAT_APP</code> are off by default. The host supplies\n<code>CyUI::DocumentViews</code>, or sets <code>CYMCP_CYUI_SOURCE_DIR</code> to a compatible CyUI checkout.\nAn installed consumer creates its CyUI target before requesting <code>COMPONENTS ChatUI</code>.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"code-4-L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/chat_ui.hpp></span></span></span><span class=\"code-line\" id=\"code-4-L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"code-4-L3\" data-line=\"3\"><span class=\"token comment\">// After the host has created its ImGui context and initialized CyUI:</span></span><span class=\"code-line\" id=\"code-4-L4\" data-line=\"4\">cymcp<span class=\"token double-colon punctuation\">::</span>ChatController controller<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-4-L5\" data-line=\"5\">cymcp<span class=\"token double-colon punctuation\">::</span>ChatPanel <span class=\"token function\">panel</span><span class=\"token punctuation\">(</span>controller<span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-4-L6\" data-line=\"6\"> </span><span class=\"code-line\" id=\"code-4-L7\" data-line=\"7\"><span class=\"token comment\">// Inside the host window, between NewFrame and Render:</span></span><span class=\"code-line\" id=\"code-4-L8\" data-line=\"8\">panel<span class=\"token punctuation\">.</span><span class=\"token function\">draw</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p><code>ChatController::open(ChatConnection)</code> schedules the connection. <code>send</code>, <code>refresh_models</code>,\n<code>save</code>, <code>disconnect</code> and <code>reconnect</code> also schedule worker operations; <code>poll</code> transfers results.\nUse the controller and its state from one host UI thread. Destroy it before the ImGui context\nand provider modules. Its destructor cancels and joins the worker.</p>\n<p><code>ChatPanelOptions</code> supplies file selection, link opening and cached document resources.\nWithout a link callback, the panel offers a link to copy. Set the host&#39;s initial CyUI locale\nto <code>en</code> for English; the Windows example does so by default.</p>\n",
+      "text": "Build requirements # Use CMake 3.24+, C++20 and system threads. Windows uses Visual Studio 2022 C++, Windows SDK, WinHTTP and BCrypt. Linux/macOS use POSIX APIs and libcurl development files for HTTP(S). Current cross-platform distribution limits are listed in the source version notes. sh Copy cmake -S . -B build -DCMAKE_BUILD_TYPE = Release cmake --build build --config Release --parallel 4 cmake --install build --config Release --prefix install An installed host uses the exported targets: cmake Copy find_package ( CyMCPSDK 0.5 CONFIG REQUIRED ) target_link_libraries ( my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI ) Alternatively use add_subdirectory(external/CyMCPSDK) . Disable unneeded modules with CYMCP_BUILD_HTTP , CYMCP_BUILD_PLATFORM , CYMCP_BUILD_MCP , CYMCP_BUILD_AI and CYMCP_BUILD_LOCAL ; CMake checks dependencies. core-only builds the operation core. Create a conversation # cpp Copy # include <cymcp/ai.hpp> cymcp :: ProviderRegistry providers ; cymcp :: ProviderConfig config ; config . settings [ \"base_url\" ] = \"http://127.0.0.1:11434\" ; auto provider = providers . create ( \"ollama\" , config ) ; Construct Conversation(provider, model_id) with a real installed model ID, then call connect() and send(text_block(prompt)) . These synchronous calls belong on a worker. send_async(executor, content, context) returns a future; keep the executor/provider alive. CallContext.events receives deltas and activity. Transfer them through an EventQueue to the UI. cancel() requests cancellation; reconnect() is explicit. Embed the CyUI panel # CYMCP_BUILD_CHAT_UI and CYMCP_BUILD_CHAT_APP are off by default. The host supplies CyUI::DocumentViews , or sets CYMCP_CYUI_SOURCE_DIR to a compatible CyUI checkout. An installed consumer creates its CyUI target before requesting COMPONENTS ChatUI . cpp Copy # include <cymcp/chat_ui.hpp> // After the host has created its ImGui context and initialized CyUI: cymcp :: ChatController controller ; cymcp :: ChatPanel panel ( controller ) ; // Inside the host window, between NewFrame and Render: panel . draw ( ) ; ChatController::open(ChatConnection) schedules the connection. send , refresh_models , save , disconnect and reconnect also schedule worker operations; poll transfers results. Use the controller and its state from one host UI thread. Destroy it before the ImGui context and provider modules. Its destructor cancels and joins the worker. ChatPanelOptions supplies file selection, link opening and cached document resources. Without a link callback, the panel offers a link to copy. Set the host's initial CyUI locale to en for English; the Windows example does so by default. cmake -S . -B build -DCMAKE_BUILD_TYPE=Release cmake --build build --config Release --parallel 4 cmake --install build --config Release --prefix install find_package(CyMCPSDK 0.5 CONFIG REQUIRED) target_link_libraries(my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI) #include <cymcp/ai.hpp> cymcp::ProviderRegistry providers; cymcp::ProviderConfig config; config.settings[\"base_url\"] = \"http://127.0.0.1:11434\"; auto provider = providers.create(\"ollama\", config); #include <cymcp/chat_ui.hpp> // After the host has created its ImGui context and initialized CyUI: cymcp::ChatController controller; cymcp::ChatPanel panel(controller); // Inside the host window, between NewFrame and Render: panel.draw();",
+      "headings": [
+        {
+          "id": "build",
+          "text": "Build requirements",
+          "level": 2
+        },
+        {
+          "id": "providers",
+          "text": "Create a conversation",
+          "level": 2
+        },
+        {
+          "id": "chat-ui",
+          "text": "Embed the CyUI panel",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "code-2-L1",
+        "code-2-L2",
+        "code-3-L1",
+        "code-3-L2",
+        "code-3-L3",
+        "code-3-L4",
+        "code-3-L5",
+        "code-3-L6",
+        "code-4-L1",
+        "code-4-L2",
+        "code-4-L3",
+        "code-4-L4",
+        "code-4-L5",
+        "code-4-L6",
+        "code-4-L7",
+        "code-4-L8"
+      ],
+      "languages": [
+        "bash",
+        "cmake",
+        "cpp"
+      ],
+      "code": "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release\ncmake --build build --config Release --parallel 4\ncmake --install build --config Release --prefix install\nfind_package(CyMCPSDK 0.5 CONFIG REQUIRED)\ntarget_link_libraries(my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI)\n#include <cymcp/ai.hpp>\n\ncymcp::ProviderRegistry providers;\ncymcp::ProviderConfig config;\nconfig.settings[\"base_url\"] = \"http://127.0.0.1:11434\";\nauto provider = providers.create(\"ollama\", config);\n#include <cymcp/chat_ui.hpp>\n\n// After the host has created its ImGui context and initialized CyUI:\ncymcp::ChatController controller;\ncymcp::ChatPanel panel(controller);\n\n// Inside the host window, between NewFrame and Render:\npanel.draw();",
+      "assets": [],
+      "links": [],
+      "kind": "guide"
+    },
+    {
+      "id": "licenses",
+      "title": "Licenses and components",
+      "description": "Understand the MIT SDK license and separately licensed optional components.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 5,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"sdk\">CyMCPSDK<a class=\"heading-anchor\" href=\"#/en/licenses/sdk\" aria-label=\"Link to CyMCPSDK\">#</a></h2><p>Copyright © 2026 Cyberalien. CyMCPSDK source is distributed under the MIT license.\nKeep the copyright and permission notice with redistributed copies. The source root&#39;s\n<code>LICENSE</code> and <code>THIRD_PARTY_NOTICES.md</code> contain the terms and component notices.</p>\n<h2 id=\"components\">Components<a class=\"heading-anchor\" href=\"#/en/licenses/components\" aria-label=\"Link to Components\">#</a></h2><table>\n<thead>\n<tr>\n<th>Component</th>\n<th>License</th>\n<th>Scope</th>\n</tr>\n</thead>\n<tbody><tr>\n<td>nlohmann/json 3.12.0</td>\n<td>MIT</td>\n<td>SDK JSON representation and validation</td>\n</tr>\n<tr>\n<td>cpp-httplib 0.66.0</td>\n<td>MIT</td>\n<td>Local HTTP server and test fixtures</td>\n</tr>\n<tr>\n<td>PicoSHA2</td>\n<td>MIT</td>\n<td>Artifact verification</td>\n</tr>\n<tr>\n<td>System libcurl</td>\n<td>curl license and host TLS terms</td>\n<td>HTTP(S) on Linux/macOS</td>\n</tr>\n<tr>\n<td>CyUI, Dear ImGui, MD4C</td>\n<td>MIT</td>\n<td>Optional native chat rendering</td>\n</tr>\n<tr>\n<td>Lexilla/Scintilla lexers</td>\n<td>Their permissive notices</td>\n<td>Optional code highlighting through CyUI</td>\n</tr>\n<tr>\n<td>JetBrains Mono</td>\n<td>SIL Open Font License 1.1</td>\n<td>CyUI&#39;s embedded font</td>\n</tr>\n<tr>\n<td>CyDoc reader</td>\n<td>MIT</td>\n<td>This static documentation reader</td>\n</tr>\n<tr>\n<td>marked, PrismJS, esbuild</td>\n<td>MIT</td>\n<td>Documentation generation tools only</td>\n</tr>\n</tbody></table>\n<p>The Windows package carries the complete optional UI notices in <code>licenses/</code>.\nThis manual includes the SDK and CyDoc MIT texts in <code>DocData/</code>.\nNo inference engine, model or GPU runtime acquires the SDK&#39;s MIT license: separately\ninstalled components and provider services retain their own terms.</p>\n",
+      "text": "CyMCPSDK # Copyright © 2026 Cyberalien. CyMCPSDK source is distributed under the MIT license. Keep the copyright and permission notice with redistributed copies. The source root's LICENSE and THIRD_PARTY_NOTICES.md contain the terms and component notices. Components # Component License Scope nlohmann/json 3.12.0 MIT SDK JSON representation and validation cpp-httplib 0.66.0 MIT Local HTTP server and test fixtures PicoSHA2 MIT Artifact verification System libcurl curl license and host TLS terms HTTP(S) on Linux/macOS CyUI, Dear ImGui, MD4C MIT Optional native chat rendering Lexilla/Scintilla lexers Their permissive notices Optional code highlighting through CyUI JetBrains Mono SIL Open Font License 1.1 CyUI's embedded font CyDoc reader MIT This static documentation reader marked, PrismJS, esbuild MIT Documentation generation tools only The Windows package carries the complete optional UI notices in licenses/ . This manual includes the SDK and CyDoc MIT texts in DocData/ . No inference engine, model or GPU runtime acquires the SDK's MIT license: separately installed components and provider services retain their own terms.",
+      "headings": [
+        {
+          "id": "sdk",
+          "text": "CyMCPSDK",
+          "level": 2
+        },
+        {
+          "id": "components",
+          "text": "Components",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [],
+      "kind": "guide"
+    },
+    {
+      "id": "local-engines",
+      "title": "Local engines and dependencies",
+      "description": "Connect an existing service or supervise an installed llama.cpp-compatible engine.",
+      "section": "SDK",
+      "parent": "integration",
+      "order": 3,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"service\">Use an existing service<a class=\"heading-anchor\" href=\"#/en/local-engines/service\" aria-label=\"Link to Use an existing service\">#</a></h2><p>Choose <code>ollama</code> for Ollama&#39;s native API, <code>lmstudio</code> for its compatible server, or <code>llama.cpp</code>\nfor an already running compatible endpoint. Set the actual service URL and a model it provides.\nChoosing a provider profile does not install or launch that product.</p>\n<p>Chat Lab connects to local services. It does not currently offer a model or GPU package installer.\nThe application embedding the SDK can provide its own installation workflow.</p>\n<h2 id=\"supervise\">Supervise a native engine<a class=\"heading-anchor\" href=\"#/en/local-engines/supervise\" aria-label=\"Link to Supervise a native engine\">#</a></h2><p><code>LocalEngine</code> owns a llama.cpp-compatible child process. Its options include the native executable,\nmodel path, private working directory, context token count, GPU layers and startup timeout.\nThe executable and model must already exist and be compatible with each other.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/local.hpp></span></span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"L3\" data-line=\"3\"><span class=\"token keyword\">void</span> <span class=\"token function\">start_local</span><span class=\"token punctuation\">(</span><span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>filesystem<span class=\"token double-colon punctuation\">::</span>path<span class=\"token operator\">&amp;</span> server_executable<span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L4\" data-line=\"4\">                 <span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>filesystem<span class=\"token double-colon punctuation\">::</span>path<span class=\"token operator\">&amp;</span> model<span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L5\" data-line=\"5\">                 <span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>filesystem<span class=\"token double-colon punctuation\">::</span>path<span class=\"token operator\">&amp;</span> private_work_directory<span class=\"token punctuation\">)</span> <span class=\"token punctuation\">{</span></span><span class=\"code-line\" id=\"L6\" data-line=\"6\">    cymcp<span class=\"token double-colon punctuation\">::</span>LocalEngineOptions options<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L7\" data-line=\"7\">    options<span class=\"token punctuation\">.</span>process<span class=\"token punctuation\">.</span>executable <span class=\"token operator\">=</span> server_executable<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L8\" data-line=\"8\">    options<span class=\"token punctuation\">.</span>model <span class=\"token operator\">=</span> model<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L9\" data-line=\"9\">    options<span class=\"token punctuation\">.</span>private_work_directory <span class=\"token operator\">=</span> private_work_directory<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L10\" data-line=\"10\">    cymcp<span class=\"token double-colon punctuation\">::</span>LocalEngine <span class=\"token function\">engine</span><span class=\"token punctuation\">(</span>options<span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L11\" data-line=\"11\">    engine<span class=\"token punctuation\">.</span><span class=\"token function\">start</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L12\" data-line=\"12\">    <span class=\"token comment\">// While engine remains alive, configure an API provider with</span></span><span class=\"code-line\" id=\"L13\" data-line=\"13\">    <span class=\"token comment\">// engine.base_url() and engine.token(), then run the host's conversation.</span></span><span class=\"code-line\" id=\"L14\" data-line=\"14\">    engine<span class=\"token punctuation\">.</span><span class=\"token function\">stop</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L15\" data-line=\"15\"><span class=\"token punctuation\">}</span></span></code></pre></div><p>Keep the engine alive until conversations finish. The supervisor checks readiness, supplies a private\nauthentication file and stops its owned process tree. It does not manage an unrelated user service.\nChoose GPU settings according to the installed engine and runtime; no GPU component is bundled.</p>\n<h2 id=\"dependencies\">Download verified components<a class=\"heading-anchor\" href=\"#/en/local-engines/dependencies\" aria-label=\"Link to Download verified components\">#</a></h2><p><code>DependencyManager</code> consumes a trusted host-supplied <code>Package</code> manifest containing artifact URLs,\nrelative paths, byte sizes, SHA-256 hashes and optional installer arguments. It provides <code>install</code>,\n<code>verify</code>, <code>run_installer</code> and <code>uninstall</code>. Its host policy decides whether those actions are allowed;\nan elevation callback handles installers that need it.</p>\n<p>Keep manifests under application control, never model output. Artifact paths stay in the configured\ncache; HTTPS and declared redirect hosts constrain downloads. External packages retain their own\nlicenses. Automatic archive extraction, HTTP Range resumption and GPU package catalogues remain\noutside the current implementation.</p>\n",
+      "text": "Use an existing service # Choose ollama for Ollama's native API, lmstudio for its compatible server, or llama.cpp for an already running compatible endpoint. Set the actual service URL and a model it provides. Choosing a provider profile does not install or launch that product. Chat Lab connects to local services. It does not currently offer a model or GPU package installer. The application embedding the SDK can provide its own installation workflow. Supervise a native engine # LocalEngine owns a llama.cpp-compatible child process. Its options include the native executable, model path, private working directory, context token count, GPU layers and startup timeout. The executable and model must already exist and be compatible with each other. cpp Copy # include <cymcp/local.hpp> void start_local ( const std :: filesystem :: path & server_executable , const std :: filesystem :: path & model , const std :: filesystem :: path & private_work_directory ) { cymcp :: LocalEngineOptions options ; options . process . executable = server_executable ; options . model = model ; options . private_work_directory = private_work_directory ; cymcp :: LocalEngine engine ( options ) ; engine . start ( ) ; // While engine remains alive, configure an API provider with // engine.base_url() and engine.token(), then run the host's conversation. engine . stop ( ) ; } Keep the engine alive until conversations finish. The supervisor checks readiness, supplies a private authentication file and stops its owned process tree. It does not manage an unrelated user service. Choose GPU settings according to the installed engine and runtime; no GPU component is bundled. Download verified components # DependencyManager consumes a trusted host-supplied Package manifest containing artifact URLs, relative paths, byte sizes, SHA-256 hashes and optional installer arguments. It provides install , verify , run_installer and uninstall . Its host policy decides whether those actions are allowed; an elevation callback handles installers that need it. Keep manifests under application control, never model output. Artifact paths stay in the configured cache; HTTPS and declared redirect hosts constrain downloads. External packages retain their own licenses. Automatic archive extraction, HTTP Range resumption and GPU package catalogues remain outside the current implementation. #include <cymcp/local.hpp> void start_local(const std::filesystem::path& server_executable, const std::filesystem::path& model, const std::filesystem::path& private_work_directory) { cymcp::LocalEngineOptions options; options.process.executable = server_executable; options.model = model; options.private_work_directory = private_work_directory; cymcp::LocalEngine engine(options); engine.start(); // While engine remains alive, configure an API provider with // engine.base_url() and engine.token(), then run the host's conversation. engine.stop(); }",
+      "headings": [
+        {
+          "id": "service",
+          "text": "Use an existing service",
+          "level": 2
+        },
+        {
+          "id": "supervise",
+          "text": "Supervise a native engine",
+          "level": 2
+        },
+        {
+          "id": "dependencies",
+          "text": "Download verified components",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L9",
+        "L10",
+        "L11",
+        "L12",
+        "L13",
+        "L14",
+        "L15"
+      ],
+      "languages": [
+        "cpp"
+      ],
+      "code": "#include <cymcp/local.hpp>\n\nvoid start_local(const std::filesystem::path& server_executable,\n                 const std::filesystem::path& model,\n                 const std::filesystem::path& private_work_directory) {\n    cymcp::LocalEngineOptions options;\n    options.process.executable = server_executable;\n    options.model = model;\n    options.private_work_directory = private_work_directory;\n    cymcp::LocalEngine engine(options);\n    engine.start();\n    // While engine remains alive, configure an API provider with\n    // engine.base_url() and engine.token(), then run the host's conversation.\n    engine.stop();\n}",
+      "assets": [],
+      "links": [],
+      "kind": "guide"
+    },
+    {
+      "id": "operations",
+      "title": "Expose application operations",
+      "description": "Share one typed registry between native calls, SDK JSON, MCP and supported AI tools.",
+      "section": "SDK",
+      "parent": "integration",
+      "order": 1,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"registry\">Define a registry<a class=\"heading-anchor\" href=\"#/en/operations/registry\" aria-label=\"Link to Define a registry\">#</a></h2><p>An <code>Operation</code> has a portable name, a description, object input/output schemas, a read-only\nflag and a handler. The <code>Registry</code> validates inputs, applies its policy and checks declared outputs.\nThe read-only flag describes the operation; it does not override a denied policy.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/core.hpp></span></span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"L3\" data-line=\"3\">cymcp<span class=\"token double-colon punctuation\">::</span>Registry <span class=\"token function\">commands</span><span class=\"token punctuation\">(</span>cymcp<span class=\"token double-colon punctuation\">::</span><span class=\"token class-name\">Policy</span><span class=\"token double-colon punctuation\">::</span><span class=\"token function\">allow_all</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L4\" data-line=\"4\">commands<span class=\"token punctuation\">.</span><span class=\"token function\">add</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"Read the demonstration counter.\"</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L5\" data-line=\"5\">    <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"type\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"object\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token string\">\"additionalProperties\"</span><span class=\"token punctuation\">,</span> <span class=\"token boolean\">false</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L6\" data-line=\"6\">    <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"type\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"object\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L7\" data-line=\"7\">     <span class=\"token punctuation\">{</span><span class=\"token string\">\"properties\"</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"value\"</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"type\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"integer\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L8\" data-line=\"8\">     <span class=\"token punctuation\">{</span><span class=\"token string\">\"required\"</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token string\">\"value\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token string\">\"additionalProperties\"</span><span class=\"token punctuation\">,</span> <span class=\"token boolean\">false</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L9\" data-line=\"9\">    <span class=\"token boolean\">true</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L10\" data-line=\"10\">    <span class=\"token punctuation\">[</span><span class=\"token punctuation\">]</span><span class=\"token punctuation\">(</span><span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">,</span> <span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">)</span> <span class=\"token punctuation\">{</span> <span class=\"token keyword\">return</span> cymcp<span class=\"token double-colon punctuation\">::</span>Json<span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"value\"</span><span class=\"token punctuation\">,</span> <span class=\"token number\">42</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">;</span> <span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L11\" data-line=\"11\"><span class=\"token keyword\">auto</span> result <span class=\"token operator\">=</span> commands<span class=\"token punctuation\">.</span><span class=\"token function\">invoke</span><span class=\"token punctuation\">(</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span> cymcp<span class=\"token double-colon punctuation\">::</span><span class=\"token class-name\">Json</span><span class=\"token double-colon punctuation\">::</span><span class=\"token function\">object</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p>This example explicitly permits its harmless read operation. For an editable domain, use the\nhost&#39;s policy and synchronize access to its objects. MCP handlers can run concurrently; marshal\nUI-bound mutations onto the host&#39;s event loop and keep captured state alive.</p>\n<h2 id=\"sdk\">Direct SDK JSON<a class=\"heading-anchor\" href=\"#/en/operations/sdk\" aria-label=\"Link to Direct SDK JSON\">#</a></h2><p><code>dispatch_app(registry, request, context)</code> accepts these application messages:</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\"><span class=\"token punctuation\">{</span><span class=\"token property\">\"method\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"describe\"</span><span class=\"token punctuation\">}</span></span></code></pre></div><div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"code-3-L1\" data-line=\"1\"><span class=\"token punctuation\">{</span><span class=\"token property\">\"method\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"invoke\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"name\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"arguments\"</span><span class=\"token operator\">:</span><span class=\"token punctuation\">{</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span></span></code></pre></div><p>The example CLI supports <code>describe</code>, <code>invoke</code>, and application JSONL on stdin. Application JSONL\nand MCP JSON-RPC are separate protocols. In Chat Lab, the same requests go to <code>/v1</code> on its enabled\nlocal server, with <code>Content-Type: application/json</code> and the Bearer token.</p>\n<h2 id=\"mcp\">MCP server and client<a class=\"heading-anchor\" href=\"#/en/operations/mcp\" aria-label=\"Link to MCP server and client\">#</a></h2><p><code>McpServer(registry)</code> exposes operations as MCP tools. <code>serve_stdio(input, output)</code> serves a CLI\nconnection; <code>handle(request, context)</code> integrates with an HTTP endpoint. Keep the registry and\nserver alive for the entire connection.</p>\n<p><code>McpClient(ProcessOptions)</code> connects over stdio; <code>McpClient(url, token)</code> connects to local HTTP\nwhen HTTP support is built. Call <code>connect</code>, <code>list_tools</code> and <code>call_tool(name, arguments)</code>.\nInspect an MCP result&#39;s <code>isError</code> before treating its <code>structuredContent</code> as successful output.</p>\n<p>To let an AI in app A use app B, connect a client to B, register explicit forwarding operations\nin A and attach that registry to a supported provider. Preserve B&#39;s schema and enforce A&#39;s policy\nbefore forwarding. Do not let model output register arbitrary new operations.</p>\n<h2 id=\"tools\">Attach tools to a conversation<a class=\"heading-anchor\" href=\"#/en/operations/tools\" aria-label=\"Link to Attach tools to a conversation\">#</a></h2><p>Supply a shared registry in <code>ProviderConfig.tools</code> for supported API providers or Codex&#39;s dynamic\ntools. The registry owns the policy for actual app operations. For other CLIs, expose MCP and pass\ntheir provider-native MCP configuration. ACP uses <code>settings.mcp_servers</code> as an ACP-format array.\nSee <a href=\"#/en/permissions\">permissions</a> before exposing mutations.</p>\n",
+      "text": "Define a registry # An Operation has a portable name, a description, object input/output schemas, a read-only flag and a handler. The Registry validates inputs, applies its policy and checks declared outputs. The read-only flag describes the operation; it does not override a denied policy. cpp Copy # include <cymcp/core.hpp> cymcp :: Registry commands ( cymcp :: Policy :: allow_all ( ) ) ; commands . add ( { \"get_counter\" , \"Read the demonstration counter.\" , { { \"type\" , \"object\" } , { \"additionalProperties\" , false } } , { { \"type\" , \"object\" } , { \"properties\" , { { \"value\" , { { \"type\" , \"integer\" } } } } } , { \"required\" , { \"value\" } } , { \"additionalProperties\" , false } } , true , [ ] ( const auto & , const auto & ) { return cymcp :: Json { { \"value\" , 42 } } ; } } ) ; auto result = commands . invoke ( \"get_counter\" , cymcp :: Json :: object ( ) ) ; This example explicitly permits its harmless read operation. For an editable domain, use the host's policy and synchronize access to its objects. MCP handlers can run concurrently; marshal UI-bound mutations onto the host's event loop and keep captured state alive. Direct SDK JSON # dispatch_app(registry, request, context) accepts these application messages: json Copy { \"method\" : \"describe\" } json Copy { \"method\" : \"invoke\" , \"name\" : \"get_counter\" , \"arguments\" : { } } The example CLI supports describe , invoke , and application JSONL on stdin. Application JSONL and MCP JSON-RPC are separate protocols. In Chat Lab, the same requests go to /v1 on its enabled local server, with Content-Type: application/json and the Bearer token. MCP server and client # McpServer(registry) exposes operations as MCP tools. serve_stdio(input, output) serves a CLI connection; handle(request, context) integrates with an HTTP endpoint. Keep the registry and server alive for the entire connection. McpClient(ProcessOptions) connects over stdio; McpClient(url, token) connects to local HTTP when HTTP support is built. Call connect , list_tools and call_tool(name, arguments) . Inspect an MCP result's isError before treating its structuredContent as successful output. To let an AI in app A use app B, connect a client to B, register explicit forwarding operations in A and attach that registry to a supported provider. Preserve B's schema and enforce A's policy before forwarding. Do not let model output register arbitrary new operations. Attach tools to a conversation # Supply a shared registry in ProviderConfig.tools for supported API providers or Codex's dynamic tools. The registry owns the policy for actual app operations. For other CLIs, expose MCP and pass their provider-native MCP configuration. ACP uses settings.mcp_servers as an ACP-format array. See permissions before exposing mutations. #include <cymcp/core.hpp> cymcp::Registry commands(cymcp::Policy::allow_all()); commands.add({\"get_counter\", \"Read the demonstration counter.\", {{\"type\", \"object\"}, {\"additionalProperties\", false}}, {{\"type\", \"object\"}, {\"properties\", {{\"value\", {{\"type\", \"integer\"}}}}}, {\"required\", {\"value\"}}, {\"additionalProperties\", false}}, true, [](const auto&, const auto&) { return cymcp::Json{{\"value\", 42}}; }}); auto result = commands.invoke(\"get_counter\", cymcp::Json::object()); {\"method\":\"describe\"} {\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "headings": [
+        {
+          "id": "registry",
+          "text": "Define a registry",
+          "level": 2
+        },
+        {
+          "id": "sdk",
+          "text": "Direct SDK JSON",
+          "level": 2
+        },
+        {
+          "id": "mcp",
+          "text": "MCP server and client",
+          "level": 2
+        },
+        {
+          "id": "tools",
+          "text": "Attach tools to a conversation",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L9",
+        "L10",
+        "L11",
+        "code-2-L1",
+        "code-3-L1"
+      ],
+      "languages": [
+        "cpp",
+        "json"
+      ],
+      "code": "#include <cymcp/core.hpp>\n\ncymcp::Registry commands(cymcp::Policy::allow_all());\ncommands.add({\"get_counter\", \"Read the demonstration counter.\",\n    {{\"type\", \"object\"}, {\"additionalProperties\", false}},\n    {{\"type\", \"object\"},\n     {\"properties\", {{\"value\", {{\"type\", \"integer\"}}}}},\n     {\"required\", {\"value\"}}, {\"additionalProperties\", false}},\n    true,\n    [](const auto&, const auto&) { return cymcp::Json{{\"value\", 42}}; }});\nauto result = commands.invoke(\"get_counter\", cymcp::Json::object());\n{\"method\":\"describe\"}\n{\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "assets": [],
+      "links": [
+        "#/en/permissions"
+      ],
+      "kind": "guide"
+    },
+    {
+      "id": "overview",
+      "title": "CyMCPSDK",
+      "description": "Add AI conversations and application tools to a native C++ application.",
+      "section": "Guides",
+      "order": 0,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"workflows\">Choose your workflow<a class=\"heading-anchor\" href=\"#/en/overview/workflows\" aria-label=\"Link to Choose your workflow\">#</a></h2><p>CyMCPSDK is an MIT C++20 library for application developers. Register application\noperations once, expose them through a direct SDK or MCP, and connect the application\nto CLI agents, APIs or a local model service. The optional CyUI panel displays conversations.</p>\n<table>\n<thead>\n<tr>\n<th>Your task</th>\n<th>Start here</th>\n</tr>\n</thead>\n<tbody><tr>\n<td>Try the Windows application</td>\n<td><a href=\"#/en/quickstart\">Quickstart</a></td>\n</tr>\n<tr>\n<td>Configure a chat and use its tools</td>\n<td><a href=\"#/en/chat-lab\">Chat Lab</a></td>\n</tr>\n<tr>\n<td>Add the library to your application</td>\n<td><a href=\"#/en/integration\">C++ integration</a></td>\n</tr>\n<tr>\n<td>Let an AI or another app call your operations</td>\n<td><a href=\"#/en/operations\">Application operations</a></td>\n</tr>\n<tr>\n<td>Choose access rules</td>\n<td><a href=\"#/en/permissions\">Permissions</a></td>\n</tr>\n<tr>\n<td>Use an installed local engine</td>\n<td><a href=\"#/en/local-engines\">Local engines</a></td>\n</tr>\n</tbody></table>\n<h2 id=\"modules\">Modules<a class=\"heading-anchor\" href=\"#/en/overview/modules\" aria-label=\"Link to Modules\">#</a></h2><table>\n<thead>\n<tr>\n<th>CMake target</th>\n<th>Role</th>\n</tr>\n</thead>\n<tbody><tr>\n<td><code>CyMCP::Core</code></td>\n<td>Operation registry, schemas, policies, cancellation and bounded workers</td>\n</tr>\n<tr>\n<td><code>CyMCP::Platform</code></td>\n<td>Native child processes and structured arguments</td>\n</tr>\n<tr>\n<td><code>CyMCP::Http</code></td>\n<td>HTTP(S) client, streaming and authenticated loopback server</td>\n</tr>\n<tr>\n<td><code>CyMCP::MCP</code></td>\n<td>MCP tool server/client over stdio or local HTTP JSON</td>\n</tr>\n<tr>\n<td><code>CyMCP::AI</code></td>\n<td>Provider profiles, sessions, conversations and tool exchanges</td>\n</tr>\n<tr>\n<td><code>CyMCP::Local</code></td>\n<td>Engine supervision and verified dependency downloads</td>\n</tr>\n<tr>\n<td><code>CyMCP::ChatUI</code></td>\n<td>Optional CyUI controller and Markdown chat panel</td>\n</tr>\n<tr>\n<td><code>CyMCP::SDK</code></td>\n<td>SDK modules without the graphical dependency</td>\n</tr>\n</tbody></table>\n<h2 id=\"scope\">Scope<a class=\"heading-anchor\" href=\"#/en/overview/scope\" aria-label=\"Link to Scope\">#</a></h2><p>The library does not bundle a model, AI CLI, inference engine, CUDA runtime or driver.\nInstall and configure the provider you choose. Native accounts and service terms still apply.\nSee <a href=\"#/en/providers\">provider choices</a> and <a href=\"#/en/licenses\">licenses</a>.</p>\n<p>The Windows example uses Win32/DX11. ChatUI uses the host application&#39;s CyUI/ImGui backend.\nLinux/macOS distribution work is still in progress; Android is deferred.</p>\n<h2 id=\"navigation\">Read this manual<a class=\"heading-anchor\" href=\"#/en/overview/navigation\" aria-label=\"Link to Read this manual\">#</a></h2><p>Use the page tree or search field; <strong>Ctrl+K</strong> opens search. Switch between English and\nFrench in the reader. The complete <code>Documentation</code> folder opens directly from disk.\nIn Chat Lab, <strong>Help (F1)</strong> opens the chat guide in the selected application language.</p>\n",
+      "text": "Choose your workflow # CyMCPSDK is an MIT C++20 library for application developers. Register application operations once, expose them through a direct SDK or MCP, and connect the application to CLI agents, APIs or a local model service. The optional CyUI panel displays conversations. Your task Start here Try the Windows application Quickstart Configure a chat and use its tools Chat Lab Add the library to your application C++ integration Let an AI or another app call your operations Application operations Choose access rules Permissions Use an installed local engine Local engines Modules # CMake target Role CyMCP::Core Operation registry, schemas, policies, cancellation and bounded workers CyMCP::Platform Native child processes and structured arguments CyMCP::Http HTTP(S) client, streaming and authenticated loopback server CyMCP::MCP MCP tool server/client over stdio or local HTTP JSON CyMCP::AI Provider profiles, sessions, conversations and tool exchanges CyMCP::Local Engine supervision and verified dependency downloads CyMCP::ChatUI Optional CyUI controller and Markdown chat panel CyMCP::SDK SDK modules without the graphical dependency Scope # The library does not bundle a model, AI CLI, inference engine, CUDA runtime or driver. Install and configure the provider you choose. Native accounts and service terms still apply. See provider choices and licenses . The Windows example uses Win32/DX11. ChatUI uses the host application's CyUI/ImGui backend. Linux/macOS distribution work is still in progress; Android is deferred. Read this manual # Use the page tree or search field; Ctrl+K opens search. Switch between English and French in the reader. The complete Documentation folder opens directly from disk. In Chat Lab, Help (F1) opens the chat guide in the selected application language.",
+      "headings": [
+        {
+          "id": "workflows",
+          "text": "Choose your workflow",
+          "level": 2
+        },
+        {
+          "id": "modules",
+          "text": "Modules",
+          "level": 2
+        },
+        {
+          "id": "scope",
+          "text": "Scope",
+          "level": 2
+        },
+        {
+          "id": "navigation",
+          "text": "Read this manual",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [
+        "#/en/quickstart",
+        "#/en/chat-lab",
+        "#/en/integration",
+        "#/en/operations",
+        "#/en/permissions",
+        "#/en/local-engines",
+        "#/en/providers",
+        "#/en/licenses"
+      ],
+      "kind": "guide"
+    },
+    {
+      "id": "permissions",
+      "title": "Configure permissions",
+      "description": "Choose host operation policies and native agent approval behavior independently.",
+      "section": "SDK",
+      "parent": "integration",
+      "order": 2,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"policy\">Choose the host policy<a class=\"heading-anchor\" href=\"#/en/permissions/policy\" aria-label=\"Link to Choose the host policy\">#</a></h2><p>A default <code>Policy</code> denies operations. Use a callback to decide from the call context,\noperation name and arguments, or explicitly use <code>Policy::allow_all()</code> when the host wants\nunrestricted access to its registered domain. The SDK does not require confirmation dialogs.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">cymcp<span class=\"token double-colon punctuation\">::</span>Policy <span class=\"token function\">reads_only</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">[</span><span class=\"token punctuation\">]</span><span class=\"token punctuation\">(</span><span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">,</span> <span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>string<span class=\"token operator\">&amp;</span> name<span class=\"token punctuation\">,</span> <span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">)</span> <span class=\"token punctuation\">{</span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\">    <span class=\"token keyword\">return</span> name <span class=\"token operator\">==</span> <span class=\"token string\">\"get_counter\"</span> <span class=\"token operator\">?</span> cymcp<span class=\"token double-colon punctuation\">::</span>Decision<span class=\"token double-colon punctuation\">::</span>allow <span class=\"token operator\">:</span> cymcp<span class=\"token double-colon punctuation\">::</span>Decision<span class=\"token double-colon punctuation\">::</span>deny<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L3\" data-line=\"3\"><span class=\"token punctuation\">}</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p>Permission to call one operation does not create new application capabilities. Keep operation\nhandlers and schemas as narrow as the application needs. Domain validation still applies in an\nallow-all policy. Cancellation and resource budgets are separate from permission decisions.</p>\n<h2 id=\"agents\">Agent approval and app operations<a class=\"heading-anchor\" href=\"#/en/permissions/agents\" aria-label=\"Link to Agent approval and app operations\">#</a></h2><p>Native agent permissions are separate from the operation registry. In Chat Lab,\n<strong>Allow all actions</strong> requests the provider&#39;s unrestricted mode; <strong>Allow counter changes</strong>\ncontrols the example operation registry. An enabled switch cannot remove restrictions imposed\nby an external provider or operating system.</p>\n<p>ACP filesystem and terminal client services are not announced by default. An embedding host\nmust declare <code>settings.client_capabilities</code>, provide <code>request_handler</code> and choose its approval\npolicy. The host implements the file/terminal behavior and cleanup; a capability flag alone\ndoes not create a terminal service.</p>\n<h2 id=\"network\">Authenticate a local server<a class=\"heading-anchor\" href=\"#/en/permissions/network\" aria-label=\"Link to Authenticate a local server\">#</a></h2><p>The loopback HTTP server requires a token of at least 32 characters and rejects requests carrying\n<code>Origin</code>. Pass the token in <code>Authorization: Bearer ...</code>. Chat Lab generates a new random token\nwhen its server starts; it displays only the endpoint and offers an explicit token-copy action.</p>\n<p>Authentication identifies an allowed client; it does not replace operation authorization.\nKeep the local server&#39;s lifetime, token distribution and domain policy under the host&#39;s control.</p>\n",
+      "text": "Choose the host policy # A default Policy denies operations. Use a callback to decide from the call context, operation name and arguments, or explicitly use Policy::allow_all() when the host wants unrestricted access to its registered domain. The SDK does not require confirmation dialogs. cpp Copy cymcp :: Policy reads_only ( [ ] ( const auto & , const std :: string & name , const auto & ) { return name == \"get_counter\" ? cymcp :: Decision :: allow : cymcp :: Decision :: deny ; } ) ; Permission to call one operation does not create new application capabilities. Keep operation handlers and schemas as narrow as the application needs. Domain validation still applies in an allow-all policy. Cancellation and resource budgets are separate from permission decisions. Agent approval and app operations # Native agent permissions are separate from the operation registry. In Chat Lab, Allow all actions requests the provider's unrestricted mode; Allow counter changes controls the example operation registry. An enabled switch cannot remove restrictions imposed by an external provider or operating system. ACP filesystem and terminal client services are not announced by default. An embedding host must declare settings.client_capabilities , provide request_handler and choose its approval policy. The host implements the file/terminal behavior and cleanup; a capability flag alone does not create a terminal service. Authenticate a local server # The loopback HTTP server requires a token of at least 32 characters and rejects requests carrying Origin . Pass the token in Authorization: Bearer ... . Chat Lab generates a new random token when its server starts; it displays only the endpoint and offers an explicit token-copy action. Authentication identifies an allowed client; it does not replace operation authorization. Keep the local server's lifetime, token distribution and domain policy under the host's control. cymcp::Policy reads_only([](const auto&, const std::string& name, const auto&) { return name == \"get_counter\" ? cymcp::Decision::allow : cymcp::Decision::deny; });",
+      "headings": [
+        {
+          "id": "policy",
+          "text": "Choose the host policy",
+          "level": 2
+        },
+        {
+          "id": "agents",
+          "text": "Agent approval and app operations",
+          "level": 2
+        },
+        {
+          "id": "network",
+          "text": "Authenticate a local server",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "languages": [
+        "cpp"
+      ],
+      "code": "cymcp::Policy reads_only([](const auto&, const std::string& name, const auto&) {\n    return name == \"get_counter\" ? cymcp::Decision::allow : cymcp::Decision::deny;\n});",
+      "assets": [],
+      "links": [],
+      "kind": "guide"
+    },
+    {
+      "id": "providers",
+      "title": "Choose a provider",
+      "description": "Select a CLI, native API or local endpoint and supply its real model and credentials.",
+      "section": "Guides",
+      "parent": "chat-lab",
+      "order": 1,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"profiles\">Built-in profiles<a class=\"heading-anchor\" href=\"#/en/providers/profiles\" aria-label=\"Link to Built-in profiles\">#</a></h2><table>\n<thead>\n<tr>\n<th>Type</th>\n<th>Registry IDs</th>\n</tr>\n</thead>\n<tbody><tr>\n<td>Native agents</td>\n<td><code>codex</code>, <code>claude-code</code>, <code>antigravity</code>, <code>command-code</code>, <code>codebuddy</code></td>\n</tr>\n<tr>\n<td>ACP v1 agents</td>\n<td><code>opencode</code>, <code>gemini</code>, <code>qwen-code</code>, <code>kimi</code>, <code>goose</code>, <code>devin</code>, <code>command-code-acp</code>, <code>codebuddy-acp</code>, <code>acp</code></td>\n</tr>\n<tr>\n<td>Historical OpenCode 1.x</td>\n<td><code>opencode-cli</code></td>\n</tr>\n<tr>\n<td>Native APIs</td>\n<td><code>openai</code> (Responses), <code>anthropic</code> (Messages), <code>openrouter</code>, <code>ollama</code></td>\n</tr>\n<tr>\n<td>Compatible HTTP servers</td>\n<td><code>openai-compatible</code>, <code>llama.cpp</code>, <code>lmstudio</code></td>\n</tr>\n</tbody></table>\n<p>These 22 profiles describe transports and launch recipes. The installed version, server and model\ndetermine actual capabilities. ACP v1 negotiates session loading, models, modes and prompt content.\n<code>opencode-cli</code> is the older JSONL transport; current OpenCode uses <code>opencode</code> with ACP.</p>\n<h2 id=\"configure\">Configure a connection<a class=\"heading-anchor\" href=\"#/en/providers/configure\" aria-label=\"Link to Configure a connection\">#</a></h2><p>Native CLIs use their existing environment and account. Select the native executable when a\npackage manager exposes only a shell wrapper. Provider-specific arguments are structured strings;\nthe SDK does not run them through a shell. <code>process.environment</code> passes child-only environment values.</p>\n<p>API credentials come from a named environment variable or Chat Lab&#39;s masked memory field.\nFor example, the CLI and GUI can load this non-secret configuration with <code>--config</code>:</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token punctuation\">{</span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\">  <span class=\"token property\">\"provider\"</span><span class=\"token operator\">:</span> <span class=\"token string\">\"openai\"</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L3\" data-line=\"3\">  <span class=\"token property\">\"model\"</span><span class=\"token operator\">:</span> <span class=\"token string\">\"\"</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L4\" data-line=\"4\">  <span class=\"token property\">\"api_key_env\"</span><span class=\"token operator\">:</span> <span class=\"token string\">\"OPENAI_API_KEY\"</span></span><span class=\"code-line\" id=\"L5\" data-line=\"5\"><span class=\"token punctuation\">}</span></span></code></pre></div><p>Enter a model returned by your provider before sending. Do not put a real key in a JSON file.\nUse <code>settings.base_url</code> for an endpoint override. The Ollama profile expects its native\nAPI base, whereas compatible servers commonly use a base ending in <code>/v1</code>.</p>\n<h2 id=\"models\">Discover models and capabilities<a class=\"heading-anchor\" href=\"#/en/providers/models\" aria-label=\"Link to Discover models and capabilities\">#</a></h2><p>The headless example exposes:</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>sh</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-bash\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\">cymcp_chat providers</span><span class=\"code-line\" id=\"code-2-L2\" data-line=\"2\">cymcp_chat models examples/chat-ollama.json</span></code></pre></div><p><code>providers</code> lists configured transport capabilities; <code>models</code> contacts the selected provider.\nAn unsupported catalogue is not proof that chat is unavailable: use an exact model ID from the\nnative provider. A chosen model applies to a new connection. The SDK does not silently switch\nmodels or replay failed generations.</p>\n<h2 id=\"extension\">Add a provider<a class=\"heading-anchor\" href=\"#/en/providers/extension\" aria-label=\"Link to Add a provider\">#</a></h2><p>Implement the public <code>Provider</code> interface and register a <code>ProviderDescriptor</code> plus factory with\n<code>ProviderRegistry::add</code>. Keep <code>connect</code>, <code>start_session</code>, <code>send</code> and <code>disconnect</code> consistent with\nthe advertised capabilities. <code>ProviderConfig</code> supplies arguments, settings, credentials,\nan optional operation registry and permission callbacks. See <a href=\"#/en/integration/providers\">integration</a>.</p>\n",
+      "text": "Built-in profiles # Type Registry IDs Native agents codex , claude-code , antigravity , command-code , codebuddy ACP v1 agents opencode , gemini , qwen-code , kimi , goose , devin , command-code-acp , codebuddy-acp , acp Historical OpenCode 1.x opencode-cli Native APIs openai (Responses), anthropic (Messages), openrouter , ollama Compatible HTTP servers openai-compatible , llama.cpp , lmstudio These 22 profiles describe transports and launch recipes. The installed version, server and model determine actual capabilities. ACP v1 negotiates session loading, models, modes and prompt content. opencode-cli is the older JSONL transport; current OpenCode uses opencode with ACP. Configure a connection # Native CLIs use their existing environment and account. Select the native executable when a package manager exposes only a shell wrapper. Provider-specific arguments are structured strings; the SDK does not run them through a shell. process.environment passes child-only environment values. API credentials come from a named environment variable or Chat Lab's masked memory field. For example, the CLI and GUI can load this non-secret configuration with --config : json Copy { \"provider\" : \"openai\" , \"model\" : \"\" , \"api_key_env\" : \"OPENAI_API_KEY\" } Enter a model returned by your provider before sending. Do not put a real key in a JSON file. Use settings.base_url for an endpoint override. The Ollama profile expects its native API base, whereas compatible servers commonly use a base ending in /v1 . Discover models and capabilities # The headless example exposes: sh Copy cymcp_chat providers cymcp_chat models examples/chat-ollama.json providers lists configured transport capabilities; models contacts the selected provider. An unsupported catalogue is not proof that chat is unavailable: use an exact model ID from the native provider. A chosen model applies to a new connection. The SDK does not silently switch models or replay failed generations. Add a provider # Implement the public Provider interface and register a ProviderDescriptor plus factory with ProviderRegistry::add . Keep connect , start_session , send and disconnect consistent with the advertised capabilities. ProviderConfig supplies arguments, settings, credentials, an optional operation registry and permission callbacks. See integration . { \"provider\": \"openai\", \"model\": \"\", \"api_key_env\": \"OPENAI_API_KEY\" } cymcp_chat providers cymcp_chat models examples/chat-ollama.json",
+      "headings": [
+        {
+          "id": "profiles",
+          "text": "Built-in profiles",
+          "level": 2
+        },
+        {
+          "id": "configure",
+          "text": "Configure a connection",
+          "level": 2
+        },
+        {
+          "id": "models",
+          "text": "Discover models and capabilities",
+          "level": 2
+        },
+        {
+          "id": "extension",
+          "text": "Add a provider",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "code-2-L1",
+        "code-2-L2"
+      ],
+      "languages": [
+        "json",
+        "bash"
+      ],
+      "code": "{\n  \"provider\": \"openai\",\n  \"model\": \"\",\n  \"api_key_env\": \"OPENAI_API_KEY\"\n}\ncymcp_chat providers\ncymcp_chat models examples/chat-ollama.json",
+      "assets": [],
+      "links": [
+        "#/en/integration/providers"
+      ],
+      "kind": "guide"
+    },
+    {
+      "id": "quickstart",
+      "title": "Start Chat Lab",
+      "description": "Build and open the Windows example, then try its local Markdown demonstration.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 1,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"build\">Build the example<a class=\"heading-anchor\" href=\"#/en/quickstart/build\" aria-label=\"Link to Build the example\">#</a></h2><p>Use Windows 10/11 x64 with Visual Studio 2022&#39;s <strong>Desktop development with C++</strong> workload,\nWindows SDK and CMake tools. Obtain a compatible <a href=\"https://github.com/MrMybal/CyUI\" target=\"_blank\" rel=\"noopener noreferrer\">CyUI checkout</a>\nbeside the SDK, or pass its actual location to the script.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>powershell</span><button type=\"button\" data-copy-code>Copy</button></div><pre><code class=\"language-powershell\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">./tools/build-chat.ps1 -CyUISource ../CyUI</span><span class=\"code-line\" id=\"L2\" data-line=\"2\">./out/ChatLab-windows-x64/cymcp_chat_app.exe</span></code></pre></div><p>The script compiles and assembles <code>out/ChatLab-windows-x64</code>. Keep its executable,\n<code>Documentation</code>, <code>licenses</code>, <code>LICENSE</code> and <code>THIRD_PARTY_NOTICES.md</code> together.\nThe Microsoft Visual C++ 2015–2022 x64 runtime is required. DX11 is used, with a WARP fallback.</p>\n<h2 id=\"demo\">Try without an account<a class=\"heading-anchor\" href=\"#/en/quickstart/demo\" aria-label=\"Link to Try without an account\">#</a></h2><ol>\n<li>Start the application. <strong>English</strong> is the default language.</li>\n<li>Keep <strong>Demo / Markdown (no AI)</strong> selected and choose <strong>Connect / New chat</strong>.</li>\n<li>Type a message and choose <strong>Send</strong>, or press <strong>Ctrl+Enter</strong>.</li>\n<li>Read the streamed Markdown, select text or copy a message.</li>\n</ol>\n<figure data-cydoc-module=\"image\" data-cydoc-id=\"chat-overview\" data-config=\"{&quot;id&quot;:&quot;chat-overview&quot;,&quot;src&quot;:&quot;assets/chat-lab-en.png&quot;,&quot;alt&quot;:&quot;Chat Lab in English showing its local Markdown demonstration&quot;,&quot;controls&quot;:&quot;minimal&quot;}\"><img src=\"assets/chat-lab-en.png\" alt=\"Chat Lab in English showing its local Markdown demonstration\" loading=\"lazy\" decoding=\"async\"></figure><p>The demonstration generates fixed local text; it does not call a model. Choose a\n<a href=\"#/en/providers\">provider</a> for an actual conversation. <strong>Enter</strong> adds a line in the composer.</p>\n<h2 id=\"language\">Language and help<a class=\"heading-anchor\" href=\"#/en/quickstart/language\" aria-label=\"Link to Language and help\">#</a></h2><p>Under <strong>Appearance</strong>, choose <strong>English</strong> or <strong>Français</strong>, and a CyUI theme.\nReconnect the demonstration after changing language to produce new text in that language.\nAI responses follow the selected model and your prompt; changing interface language\ndoes not translate existing messages.</p>\n<p><strong>Help (F1)</strong> opens this manual at <a href=\"#/en/chat-lab\">Chat Lab</a>. It uses the complete local\nmanual folder beside the executable. The reader does not need an HTTP server.</p>\n",
+      "text": "Build the example # Use Windows 10/11 x64 with Visual Studio 2022's Desktop development with C++ workload, Windows SDK and CMake tools. Obtain a compatible CyUI checkout beside the SDK, or pass its actual location to the script. powershell Copy ./tools/build-chat.ps1 -CyUISource ../CyUI ./out/ChatLab-windows-x64/cymcp_chat_app.exe The script compiles and assembles out/ChatLab-windows-x64 . Keep its executable, Documentation , licenses , LICENSE and THIRD_PARTY_NOTICES.md together. The Microsoft Visual C++ 2015–2022 x64 runtime is required. DX11 is used, with a WARP fallback. Try without an account # Start the application. English is the default language. Keep Demo / Markdown (no AI) selected and choose Connect / New chat . Type a message and choose Send , or press Ctrl+Enter . Read the streamed Markdown, select text or copy a message. The demonstration generates fixed local text; it does not call a model. Choose a provider for an actual conversation. Enter adds a line in the composer. Language and help # Under Appearance , choose English or Français , and a CyUI theme. Reconnect the demonstration after changing language to produce new text in that language. AI responses follow the selected model and your prompt; changing interface language does not translate existing messages. Help (F1) opens this manual at Chat Lab . It uses the complete local manual folder beside the executable. The reader does not need an HTTP server. ./tools/build-chat.ps1 -CyUISource ../CyUI ./out/ChatLab-windows-x64/cymcp_chat_app.exe",
+      "headings": [
+        {
+          "id": "build",
+          "text": "Build the example",
+          "level": 2
+        },
+        {
+          "id": "demo",
+          "text": "Try without an account",
+          "level": 2
+        },
+        {
+          "id": "language",
+          "text": "Language and help",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2"
+      ],
+      "languages": [
+        "powershell"
+      ],
+      "code": "./tools/build-chat.ps1 -CyUISource ../CyUI\n./out/ChatLab-windows-x64/cymcp_chat_app.exe",
+      "assets": [
+        "assets/chat-lab-en.png"
+      ],
+      "links": [
+        "https://github.com/MrMybal/CyUI",
+        "#/en/providers",
+        "#/en/chat-lab"
+      ],
+      "kind": "media"
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Resolve connection problems",
+      "description": "Understand provider errors, interrupted sessions and missing local help.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 4,
+      "revision": "1",
+      "locale": "en",
+      "html": "<h2 id=\"connection\">Connection errors<a class=\"heading-anchor\" href=\"#/en/troubleshooting/connection\" aria-label=\"Link to Connection errors\">#</a></h2><table>\n<thead>\n<tr>\n<th>Error or symptom</th>\n<th>What to do</th>\n</tr>\n</thead>\n<tbody><tr>\n<td><code>ExecutableMissing</code></td>\n<td>Select the native CLI executable; verify it runs in the intended account/environment.</td>\n</tr>\n<tr>\n<td><code>AuthenticationRequired</code></td>\n<td>Check authentication in the provider&#39;s native tool, or supply the API credential through its environment/memory field.</td>\n</tr>\n<tr>\n<td><code>ProviderError</code> after connecting</td>\n<td>Verify the exact model ID, account entitlement and provider-native error outside the app.</td>\n</tr>\n<tr>\n<td>Catalogue returns <code>Unsupported</code></td>\n<td>Enter a real model ID manually; some transports do not expose discovery.</td>\n</tr>\n<tr>\n<td>Local endpoint unreachable</td>\n<td>Start the local service and check its base URL/port and API format.</td>\n</tr>\n<tr>\n<td><code>UnsupportedContent</code></td>\n<td>Choose a model/transport accepting that attachment type, or remove the attachment.</td>\n</tr>\n</tbody></table>\n<p>The CLI account used by a launched process can differ from another terminal&#39;s environment.\nUse <code>process.environment</code> when the host intentionally needs child-specific values. A successful\nconnection is not a guarantee that the account can perform a generation.</p>\n<h2 id=\"interrupted\">Interrupted conversations<a class=\"heading-anchor\" href=\"#/en/troubleshooting/interrupted\" aria-label=\"Link to Interrupted conversations\">#</a></h2><p><code>Cancelled</code> is an interruption, not a successful final answer. A truncated stream can report\n<code>UnexpectedEOF</code>. Keep the partial text, reconnect explicitly, and decide what to send next.\n<code>SessionInvalid</code> means the exact native session could not be resumed; retain its saved history.</p>\n<p><code>Backpressure</code> or <code>ContextTooLarge</code> means a queue/display/content budget was reached. Save the\nconversation and start a new one, or reduce attachments. ChatUI bounds events and displayed text;\nit does not silently drop a conversation to stay below its budget.</p>\n<h2 id=\"help\">Missing manual<a class=\"heading-anchor\" href=\"#/en/troubleshooting/help\" aria-label=\"Link to Missing manual\">#</a></h2><p>Keep <code>Documentation/Documentation.html</code> and the complete <code>Documentation/DocData</code> directory\nbeside Chat Lab. F1 opens that installed copy, not an online fallback. If the folder is absent,\nrestore it from the application package or rebuild the package. Open the HTML directly to check\nits local scripts and images. The reader needs no Node.js or web server.</p>\n",
+      "text": "Connection errors # Error or symptom What to do ExecutableMissing Select the native CLI executable; verify it runs in the intended account/environment. AuthenticationRequired Check authentication in the provider's native tool, or supply the API credential through its environment/memory field. ProviderError after connecting Verify the exact model ID, account entitlement and provider-native error outside the app. Catalogue returns Unsupported Enter a real model ID manually; some transports do not expose discovery. Local endpoint unreachable Start the local service and check its base URL/port and API format. UnsupportedContent Choose a model/transport accepting that attachment type, or remove the attachment. The CLI account used by a launched process can differ from another terminal's environment. Use process.environment when the host intentionally needs child-specific values. A successful connection is not a guarantee that the account can perform a generation. Interrupted conversations # Cancelled is an interruption, not a successful final answer. A truncated stream can report UnexpectedEOF . Keep the partial text, reconnect explicitly, and decide what to send next. SessionInvalid means the exact native session could not be resumed; retain its saved history. Backpressure or ContextTooLarge means a queue/display/content budget was reached. Save the conversation and start a new one, or reduce attachments. ChatUI bounds events and displayed text; it does not silently drop a conversation to stay below its budget. Missing manual # Keep Documentation/Documentation.html and the complete Documentation/DocData directory beside Chat Lab. F1 opens that installed copy, not an online fallback. If the folder is absent, restore it from the application package or rebuild the package. Open the HTML directly to check its local scripts and images. The reader needs no Node.js or web server.",
+      "headings": [
+        {
+          "id": "connection",
+          "text": "Connection errors",
+          "level": 2
+        },
+        {
+          "id": "interrupted",
+          "text": "Interrupted conversations",
+          "level": 2
+        },
+        {
+          "id": "help",
+          "text": "Missing manual",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [],
+      "kind": "guide"
+    },
+    {
+      "id": "chat-lab",
+      "title": "Commandes de Chat Lab",
+      "description": "Connecter un fournisseur, envoyer des messages et exposer les commandes de démonstration.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 2,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"connect\">Se connecter<a class=\"heading-anchor\" href=\"#/fr/chat-lab/connect\" aria-label=\"Lien vers Se connecter\">#</a></h2><p>Sélectionner un fournisseur, puis son modèle. <strong>Actualiser le catalogue</strong> demande les vrais\nmodèles au fournisseur ; sinon saisir manuellement un identifiant exact. Les changements\nde modèle ou de connexion s&#39;appliquent à <strong>Connecter / Nouveau tchat</strong>.\nUn fournisseur peut refuser un modèle indisponible.</p>\n<p>Déplier <strong>Exécutable</strong> pour le chemin du CLI natif, le tableau JSON d&#39;arguments et le dossier\nde travail. Utiliser le vrai <code>.exe</code>, ou <code>node.exe</code> accompagné des arguments de son script ;\nles wrappers shell ne sont pas lancés. <strong>Paramètres avancés (JSON)</strong> reçoit les réglages du\nfournisseur. <strong>Consigne système</strong> fournit les instructions à la création de session.\nConsulter les <a href=\"#/fr/providers/configure\">fournisseurs</a>.</p>\n<h2 id=\"messages\">Envoyer et arrêter<a class=\"heading-anchor\" href=\"#/fr/chat-lab/messages\" aria-label=\"Lien vers Envoyer et arrêter\">#</a></h2><p>Écrire dans la zone de saisie. <strong>Ctrl+Entrée</strong> envoie ; <strong>Entrée</strong> ajoute une ligne.\n<strong>Joindre des fichiers</strong> sélectionne les pièces jointes locales. Le texte arrive dans le\ntranscript Markdown ; l&#39;activité et la réflexion apparaissent lorsque le fournisseur les émet.\n<strong>Suivre les réponses</strong> règle le défilement automatique.</p>\n<p><strong>Arrêter</strong> demande l&#39;annulation. La réponse partielle reste marquée interrompue.\n<strong>Reconnecter</strong> reprend explicitement la session actuelle, sans renvoyer le message interrompu.\nConsulter les <a href=\"#/fr/conversations\">conversations et l&#39;historique</a>.</p>\n<h2 id=\"commands\">Permettre à une IA d&#39;utiliser les commandes<a class=\"heading-anchor\" href=\"#/fr/chat-lab/commands\" aria-label=\"Lien vers Permettre à une IA d&#39;utiliser les commandes\">#</a></h2><p>Déplier <strong>Commandes de l&#39;application</strong>. La démonstration expose <code>get_counter</code> et <code>set_counter</code>,\npour des entiers entre −1 000 000 et 1 000 000. Le panneau affiche la valeur actuelle.</p>\n<ol>\n<li>Activer <strong>Autoriser la modification du compteur</strong> pour permettre les écritures.</li>\n<li>Activer <strong>L&#39;IA peut appeler les commandes de l&#39;app</strong>, puis créer une connexion Codex ou API compatible.</li>\n<li>Demander à l&#39;IA de modifier le compteur de démonstration, puis de le relire.</li>\n</ol>\n<p>L&#39;attachement direct prend en charge Codex, Responses, Messages, Chat Completions/OpenRouter et Ollama.\nLes autres CLI utilisent leur configuration MCP native et renvoient <code>Unsupported</code> pour cette option.</p>\n<h2 id=\"external\">Connecter une autre application<a class=\"heading-anchor\" href=\"#/fr/chat-lab/external\" aria-label=\"Lien vers Connecter une autre application\">#</a></h2><p><strong>Activer le MCP local</strong> crée un serveur loopback authentifié sur un port libre.\nCopier l&#39;adresse affichée et utiliser <strong>Copier le jeton MCP</strong> pour configurer le client.\nUtiliser <code>/mcp</code> pour les outils MCP ou <code>/v1</code> sur le même port pour le SDK JSON direct.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token punctuation\">{</span><span class=\"token property\">\"method\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"invoke\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"name\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"arguments\"</span><span class=\"token operator\">:</span><span class=\"token punctuation\">{</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span></span></code></pre></div><p>Les deux routes partagent le compteur et la politique d&#39;écriture active. Interdire les écritures\nne déconnecte pas le client. Désactiver le serveur ferme l&#39;adresse ; le réactiver crée un nouveau\njeton. Consulter les <a href=\"#/fr/operations\">opérations</a> et les <a href=\"#/fr/permissions\">droits</a>.</p>\n",
+      "text": "Se connecter # Sélectionner un fournisseur, puis son modèle. Actualiser le catalogue demande les vrais modèles au fournisseur ; sinon saisir manuellement un identifiant exact. Les changements de modèle ou de connexion s'appliquent à Connecter / Nouveau tchat . Un fournisseur peut refuser un modèle indisponible. Déplier Exécutable pour le chemin du CLI natif, le tableau JSON d'arguments et le dossier de travail. Utiliser le vrai .exe , ou node.exe accompagné des arguments de son script ; les wrappers shell ne sont pas lancés. Paramètres avancés (JSON) reçoit les réglages du fournisseur. Consigne système fournit les instructions à la création de session. Consulter les fournisseurs . Envoyer et arrêter # Écrire dans la zone de saisie. Ctrl+Entrée envoie ; Entrée ajoute une ligne. Joindre des fichiers sélectionne les pièces jointes locales. Le texte arrive dans le transcript Markdown ; l'activité et la réflexion apparaissent lorsque le fournisseur les émet. Suivre les réponses règle le défilement automatique. Arrêter demande l'annulation. La réponse partielle reste marquée interrompue. Reconnecter reprend explicitement la session actuelle, sans renvoyer le message interrompu. Consulter les conversations et l'historique . Permettre à une IA d'utiliser les commandes # Déplier Commandes de l'application . La démonstration expose get_counter et set_counter , pour des entiers entre −1 000 000 et 1 000 000. Le panneau affiche la valeur actuelle. Activer Autoriser la modification du compteur pour permettre les écritures. Activer L'IA peut appeler les commandes de l'app , puis créer une connexion Codex ou API compatible. Demander à l'IA de modifier le compteur de démonstration, puis de le relire. L'attachement direct prend en charge Codex, Responses, Messages, Chat Completions/OpenRouter et Ollama. Les autres CLI utilisent leur configuration MCP native et renvoient Unsupported pour cette option. Connecter une autre application # Activer le MCP local crée un serveur loopback authentifié sur un port libre. Copier l'adresse affichée et utiliser Copier le jeton MCP pour configurer le client. Utiliser /mcp pour les outils MCP ou /v1 sur le même port pour le SDK JSON direct. json Copier { \"method\" : \"invoke\" , \"name\" : \"get_counter\" , \"arguments\" : { } } Les deux routes partagent le compteur et la politique d'écriture active. Interdire les écritures ne déconnecte pas le client. Désactiver le serveur ferme l'adresse ; le réactiver crée un nouveau jeton. Consulter les opérations et les droits . {\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "headings": [
+        {
+          "id": "connect",
+          "text": "Se connecter",
+          "level": 2
+        },
+        {
+          "id": "messages",
+          "text": "Envoyer et arrêter",
+          "level": 2
+        },
+        {
+          "id": "commands",
+          "text": "Permettre à une IA d'utiliser les commandes",
+          "level": 2
+        },
+        {
+          "id": "external",
+          "text": "Connecter une autre application",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1"
+      ],
+      "languages": [
+        "json"
+      ],
+      "code": "{\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "assets": [],
+      "links": [
+        "#/fr/providers/configure",
+        "#/fr/conversations",
+        "#/fr/operations",
+        "#/fr/permissions"
+      ],
+      "kind": "guide",
+      "revision": "6f538605e6d5"
+    },
+    {
+      "id": "conversations",
+      "title": "Conversations et historique",
+      "description": "Joindre des fichiers, annuler un tour et reprendre exactement une conversation sans la rejouer.",
+      "section": "Guides",
+      "parent": "chat-lab",
+      "order": 2,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"attachments\">Pièces jointes<a class=\"heading-anchor\" href=\"#/fr/conversations/attachments\" aria-label=\"Lien vers Pièces jointes\">#</a></h2><p><strong>Joindre des fichiers</strong> capture les fichiers locaux sélectionnés sur le worker. Images, audio et\nressources texte/PDF sont acceptés selon le transport et le modèle. Le panneau affiche les noms ;\nun aperçu multimédia enrichi nécessite les services de ressources fournis par l&#39;application hôte.</p>\n<p>La saisie accepte jusqu&#39;à 16 fichiers et 64 Kio de texte. Des budgets de fichiers/contenus et la\nvalidation MIME/base64 s&#39;appliquent aussi. Un contenu incompatible est refusé explicitement.\nUn modèle qui reçoit une image ne prend pas forcément en charge l&#39;audio ou les documents.</p>\n<h2 id=\"history\">Conserver une conversation<a class=\"heading-anchor\" href=\"#/fr/conversations/history\" aria-label=\"Lien vers Conserver une conversation\">#</a></h2><ol>\n<li>Activer <strong>Enregistrer l&#39;historique</strong> avant la connexion.</li>\n<li>Choisir un dossier privé et un identifiant d&#39;historique simple.</li>\n<li>Envoyer les messages normalement ; chaque tour terminé ou interrompu est sauvegardé automatiquement.</li>\n<li>Choisir les mêmes fournisseur/modèle, dossier et ID, puis <strong>Reprendre le tchat enregistré</strong>.</li>\n</ol>\n<p>L&#39;historique est optionnel. Il contient messages, résultats d&#39;outils et pièces jointes intégrées : ce sont\ndes données utilisateur. Les clés et réglages de connexion n&#39;y sont pas inclus. Une erreur de stockage\ns&#39;affiche séparément d&#39;une génération réussie. Restaurer ne renvoie aucune consigne et ne répète aucune commande.</p>\n<h2 id=\"resume\">Reprise et annulation<a class=\"heading-anchor\" href=\"#/fr/conversations/resume\" aria-label=\"Lien vers Reprise et annulation\">#</a></h2><p>Les fournisseurs natifs reprennent leur session exacte lorsqu&#39;ils le permettent ; les API sans état\nutilisent l&#39;historique conservé par l&#39;hôte. Si la session native ne peut pas être chargée, <code>SessionInvalid</code>\npréserve l&#39;historique au lieu de créer une conversation de remplacement. La reprise ACP dépend des\ncapacités négociées avec l&#39;agent.</p>\n<p><strong>Arrêter</strong> annule l&#39;opération active. <strong>Reconnecter</strong> rouvre explicitement la connexion si nécessaire.\nAprès interruption, choisir d&#39;envoyer ou non un nouveau message ; aucune génération n&#39;est retentée automatiquement.</p>\n<h2 id=\"api\">API C++ publique<a class=\"heading-anchor\" href=\"#/fr/conversations/api\" aria-label=\"Lien vers API C++ publique\">#</a></h2><p><code>Conversation::checkpoint()</code> retourne un instantané restaurable. <code>ConversationStore::save(id, conversation)</code>\nl&#39;écrit de façon privée et atomique ; <code>load(id)</code> le lit pour <code>Conversation::restore(snapshot)</code>.\nLe fournisseur/modèle doit correspondre. Garder les instances de fournisseur et l&#39;executor en vie jusqu&#39;à\nla fin des opérations asynchrones. Les callbacks s&#39;exécutent sur le worker appelant, pas sur le thread UI.</p>\n",
+      "text": "Pièces jointes # Joindre des fichiers capture les fichiers locaux sélectionnés sur le worker. Images, audio et ressources texte/PDF sont acceptés selon le transport et le modèle. Le panneau affiche les noms ; un aperçu multimédia enrichi nécessite les services de ressources fournis par l'application hôte. La saisie accepte jusqu'à 16 fichiers et 64 Kio de texte. Des budgets de fichiers/contenus et la validation MIME/base64 s'appliquent aussi. Un contenu incompatible est refusé explicitement. Un modèle qui reçoit une image ne prend pas forcément en charge l'audio ou les documents. Conserver une conversation # Activer Enregistrer l'historique avant la connexion. Choisir un dossier privé et un identifiant d'historique simple. Envoyer les messages normalement ; chaque tour terminé ou interrompu est sauvegardé automatiquement. Choisir les mêmes fournisseur/modèle, dossier et ID, puis Reprendre le tchat enregistré . L'historique est optionnel. Il contient messages, résultats d'outils et pièces jointes intégrées : ce sont des données utilisateur. Les clés et réglages de connexion n'y sont pas inclus. Une erreur de stockage s'affiche séparément d'une génération réussie. Restaurer ne renvoie aucune consigne et ne répète aucune commande. Reprise et annulation # Les fournisseurs natifs reprennent leur session exacte lorsqu'ils le permettent ; les API sans état utilisent l'historique conservé par l'hôte. Si la session native ne peut pas être chargée, SessionInvalid préserve l'historique au lieu de créer une conversation de remplacement. La reprise ACP dépend des capacités négociées avec l'agent. Arrêter annule l'opération active. Reconnecter rouvre explicitement la connexion si nécessaire. Après interruption, choisir d'envoyer ou non un nouveau message ; aucune génération n'est retentée automatiquement. API C++ publique # Conversation::checkpoint() retourne un instantané restaurable. ConversationStore::save(id, conversation) l'écrit de façon privée et atomique ; load(id) le lit pour Conversation::restore(snapshot) . Le fournisseur/modèle doit correspondre. Garder les instances de fournisseur et l'executor en vie jusqu'à la fin des opérations asynchrones. Les callbacks s'exécutent sur le worker appelant, pas sur le thread UI.",
+      "headings": [
+        {
+          "id": "attachments",
+          "text": "Pièces jointes",
+          "level": 2
+        },
+        {
+          "id": "history",
+          "text": "Conserver une conversation",
+          "level": 2
+        },
+        {
+          "id": "resume",
+          "text": "Reprise et annulation",
+          "level": 2
+        },
+        {
+          "id": "api",
+          "text": "API C++ publique",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [],
+      "kind": "guide",
+      "revision": "8492fa04fe53"
+    },
+    {
+      "id": "integration",
+      "title": "Intégrer la bibliothèque C++",
+      "description": "Lier uniquement les modules nécessaires et déporter les fournisseurs hors du thread UI.",
+      "section": "SDK",
+      "order": 0,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"build\">Prérequis de compilation<a class=\"heading-anchor\" href=\"#/fr/integration/build\" aria-label=\"Lien vers Prérequis de compilation\">#</a></h2><p>Utiliser CMake 3.24+, C++20 et les threads système. Windows utilise Visual Studio 2022 C++,\nWindows SDK, WinHTTP et BCrypt. Linux/macOS utilisent les API POSIX et les fichiers de\ndéveloppement libcurl pour HTTP(S). Les limites de distribution multiplateforme actuelles\nfigurent dans les notes de version des sources.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>sh</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-bash\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">cmake <span class=\"token parameter variable\">-S</span> <span class=\"token builtin class-name\">.</span> <span class=\"token parameter variable\">-B</span> build <span class=\"token parameter variable\">-DCMAKE_BUILD_TYPE</span><span class=\"token operator\">=</span>Release</span><span class=\"code-line\" id=\"L2\" data-line=\"2\">cmake <span class=\"token parameter variable\">--build</span> build <span class=\"token parameter variable\">--config</span> Release <span class=\"token parameter variable\">--parallel</span> <span class=\"token number\">4</span></span><span class=\"code-line\" id=\"L3\" data-line=\"3\">cmake <span class=\"token parameter variable\">--install</span> build <span class=\"token parameter variable\">--config</span> Release <span class=\"token parameter variable\">--prefix</span> <span class=\"token function\">install</span></span></code></pre></div><p>Un hôte qui consomme l&#39;installation utilise les cibles exportées :</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cmake</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-cmake\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\"><span class=\"token keyword\">find_package</span><span class=\"token punctuation\">(</span>CyMCPSDK <span class=\"token number\">0.5</span> CONFIG REQUIRED<span class=\"token punctuation\">)</span></span><span class=\"code-line\" id=\"code-2-L2\" data-line=\"2\"><span class=\"token keyword\">target_link_libraries</span><span class=\"token punctuation\">(</span>my_app <span class=\"token namespace\">PRIVATE</span> <span class=\"token inserted class-name\">CyMCP::Core</span> <span class=\"token inserted class-name\">CyMCP::MCP</span> <span class=\"token inserted class-name\">CyMCP::AI</span><span class=\"token punctuation\">)</span></span></code></pre></div><p>Autre possibilité : <code>add_subdirectory(external/CyMCPSDK)</code>. Désactiver les modules inutiles\navec <code>CYMCP_BUILD_HTTP</code>, <code>CYMCP_BUILD_PLATFORM</code>, <code>CYMCP_BUILD_MCP</code>, <code>CYMCP_BUILD_AI</code> et\n<code>CYMCP_BUILD_LOCAL</code> ; CMake vérifie leurs dépendances. <code>core-only</code> compile le cœur des opérations.</p>\n<h2 id=\"providers\">Créer une conversation<a class=\"heading-anchor\" href=\"#/fr/integration/providers\" aria-label=\"Lien vers Créer une conversation\">#</a></h2><div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"code-3-L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/ai.hpp></span></span></span><span class=\"code-line\" id=\"code-3-L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"code-3-L3\" data-line=\"3\">cymcp<span class=\"token double-colon punctuation\">::</span>ProviderRegistry providers<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-3-L4\" data-line=\"4\">cymcp<span class=\"token double-colon punctuation\">::</span>ProviderConfig config<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-3-L5\" data-line=\"5\">config<span class=\"token punctuation\">.</span>settings<span class=\"token punctuation\">[</span><span class=\"token string\">\"base_url\"</span><span class=\"token punctuation\">]</span> <span class=\"token operator\">=</span> <span class=\"token string\">\"http://127.0.0.1:11434\"</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-3-L6\" data-line=\"6\"><span class=\"token keyword\">auto</span> provider <span class=\"token operator\">=</span> providers<span class=\"token punctuation\">.</span><span class=\"token function\">create</span><span class=\"token punctuation\">(</span><span class=\"token string\">\"ollama\"</span><span class=\"token punctuation\">,</span> config<span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p>Construire <code>Conversation(provider, model_id)</code> avec l&#39;ID réel d&#39;un modèle installé, puis appeler\n<code>connect()</code> et <code>send(text_block(prompt))</code>. Ces appels synchrones s&#39;exécutent sur un worker.\n<code>send_async(executor, content, context)</code> retourne un futur ; garder executor et fournisseur en vie.\n<code>CallContext.events</code> reçoit les deltas et l&#39;activité. Les transférer par <code>EventQueue</code> vers\nl&#39;interface. <code>cancel()</code> demande l&#39;annulation ; <code>reconnect()</code> reste explicite.</p>\n<h2 id=\"chat-ui\">Intégrer le panneau CyUI<a class=\"heading-anchor\" href=\"#/fr/integration/chat-ui\" aria-label=\"Lien vers Intégrer le panneau CyUI\">#</a></h2><p><code>CYMCP_BUILD_CHAT_UI</code> et <code>CYMCP_BUILD_CHAT_APP</code> sont désactivés par défaut. L&#39;hôte fournit\n<code>CyUI::DocumentViews</code>, ou renseigne <code>CYMCP_CYUI_SOURCE_DIR</code> avec une copie compatible de CyUI.\nUn consommateur installé crée sa cible CyUI avant de demander <code>COMPONENTS ChatUI</code>.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"code-4-L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/chat_ui.hpp></span></span></span><span class=\"code-line\" id=\"code-4-L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"code-4-L3\" data-line=\"3\"><span class=\"token comment\">// Après la création du contexte ImGui et l'initialisation de CyUI par l'hôte :</span></span><span class=\"code-line\" id=\"code-4-L4\" data-line=\"4\">cymcp<span class=\"token double-colon punctuation\">::</span>ChatController controller<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-4-L5\" data-line=\"5\">cymcp<span class=\"token double-colon punctuation\">::</span>ChatPanel <span class=\"token function\">panel</span><span class=\"token punctuation\">(</span>controller<span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"code-4-L6\" data-line=\"6\"> </span><span class=\"code-line\" id=\"code-4-L7\" data-line=\"7\"><span class=\"token comment\">// Dans la fenêtre hôte, entre NewFrame et Render :</span></span><span class=\"code-line\" id=\"code-4-L8\" data-line=\"8\">panel<span class=\"token punctuation\">.</span><span class=\"token function\">draw</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p><code>ChatController::open(ChatConnection)</code> programme la connexion. <code>send</code>, <code>refresh_models</code>,\n<code>save</code>, <code>disconnect</code> et <code>reconnect</code> programment aussi des opérations sur le worker ; <code>poll</code>\ntransfère leurs résultats. Utiliser le contrôleur et son état depuis un seul thread UI hôte.\nLe détruire avant le contexte ImGui et les modules fournisseurs. Son destructeur annule et attend le worker.</p>\n<p><code>ChatPanelOptions</code> fournit la sélection des fichiers, l&#39;ouverture des liens et les ressources\nde documents en cache. Sans callback de lien, le panneau propose le lien à copier.\nInitialiser la locale CyUI de l&#39;hôte à <code>en</code> pour l&#39;anglais ; c&#39;est le défaut de l&#39;exemple Windows.</p>\n",
+      "text": "Prérequis de compilation # Utiliser CMake 3.24+, C++20 et les threads système. Windows utilise Visual Studio 2022 C++, Windows SDK, WinHTTP et BCrypt. Linux/macOS utilisent les API POSIX et les fichiers de développement libcurl pour HTTP(S). Les limites de distribution multiplateforme actuelles figurent dans les notes de version des sources. sh Copier cmake -S . -B build -DCMAKE_BUILD_TYPE = Release cmake --build build --config Release --parallel 4 cmake --install build --config Release --prefix install Un hôte qui consomme l'installation utilise les cibles exportées : cmake Copier find_package ( CyMCPSDK 0.5 CONFIG REQUIRED ) target_link_libraries ( my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI ) Autre possibilité : add_subdirectory(external/CyMCPSDK) . Désactiver les modules inutiles avec CYMCP_BUILD_HTTP , CYMCP_BUILD_PLATFORM , CYMCP_BUILD_MCP , CYMCP_BUILD_AI et CYMCP_BUILD_LOCAL ; CMake vérifie leurs dépendances. core-only compile le cœur des opérations. Créer une conversation # cpp Copier # include <cymcp/ai.hpp> cymcp :: ProviderRegistry providers ; cymcp :: ProviderConfig config ; config . settings [ \"base_url\" ] = \"http://127.0.0.1:11434\" ; auto provider = providers . create ( \"ollama\" , config ) ; Construire Conversation(provider, model_id) avec l'ID réel d'un modèle installé, puis appeler connect() et send(text_block(prompt)) . Ces appels synchrones s'exécutent sur un worker. send_async(executor, content, context) retourne un futur ; garder executor et fournisseur en vie. CallContext.events reçoit les deltas et l'activité. Les transférer par EventQueue vers l'interface. cancel() demande l'annulation ; reconnect() reste explicite. Intégrer le panneau CyUI # CYMCP_BUILD_CHAT_UI et CYMCP_BUILD_CHAT_APP sont désactivés par défaut. L'hôte fournit CyUI::DocumentViews , ou renseigne CYMCP_CYUI_SOURCE_DIR avec une copie compatible de CyUI. Un consommateur installé crée sa cible CyUI avant de demander COMPONENTS ChatUI . cpp Copier # include <cymcp/chat_ui.hpp> // Après la création du contexte ImGui et l'initialisation de CyUI par l'hôte : cymcp :: ChatController controller ; cymcp :: ChatPanel panel ( controller ) ; // Dans la fenêtre hôte, entre NewFrame et Render : panel . draw ( ) ; ChatController::open(ChatConnection) programme la connexion. send , refresh_models , save , disconnect et reconnect programment aussi des opérations sur le worker ; poll transfère leurs résultats. Utiliser le contrôleur et son état depuis un seul thread UI hôte. Le détruire avant le contexte ImGui et les modules fournisseurs. Son destructeur annule et attend le worker. ChatPanelOptions fournit la sélection des fichiers, l'ouverture des liens et les ressources de documents en cache. Sans callback de lien, le panneau propose le lien à copier. Initialiser la locale CyUI de l'hôte à en pour l'anglais ; c'est le défaut de l'exemple Windows. cmake -S . -B build -DCMAKE_BUILD_TYPE=Release cmake --build build --config Release --parallel 4 cmake --install build --config Release --prefix install find_package(CyMCPSDK 0.5 CONFIG REQUIRED) target_link_libraries(my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI) #include <cymcp/ai.hpp> cymcp::ProviderRegistry providers; cymcp::ProviderConfig config; config.settings[\"base_url\"] = \"http://127.0.0.1:11434\"; auto provider = providers.create(\"ollama\", config); #include <cymcp/chat_ui.hpp> // Après la création du contexte ImGui et l'initialisation de CyUI par l'hôte : cymcp::ChatController controller; cymcp::ChatPanel panel(controller); // Dans la fenêtre hôte, entre NewFrame et Render : panel.draw();",
+      "headings": [
+        {
+          "id": "build",
+          "text": "Prérequis de compilation",
+          "level": 2
+        },
+        {
+          "id": "providers",
+          "text": "Créer une conversation",
+          "level": 2
+        },
+        {
+          "id": "chat-ui",
+          "text": "Intégrer le panneau CyUI",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "code-2-L1",
+        "code-2-L2",
+        "code-3-L1",
+        "code-3-L2",
+        "code-3-L3",
+        "code-3-L4",
+        "code-3-L5",
+        "code-3-L6",
+        "code-4-L1",
+        "code-4-L2",
+        "code-4-L3",
+        "code-4-L4",
+        "code-4-L5",
+        "code-4-L6",
+        "code-4-L7",
+        "code-4-L8"
+      ],
+      "languages": [
+        "bash",
+        "cmake",
+        "cpp"
+      ],
+      "code": "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release\ncmake --build build --config Release --parallel 4\ncmake --install build --config Release --prefix install\nfind_package(CyMCPSDK 0.5 CONFIG REQUIRED)\ntarget_link_libraries(my_app PRIVATE CyMCP::Core CyMCP::MCP CyMCP::AI)\n#include <cymcp/ai.hpp>\n\ncymcp::ProviderRegistry providers;\ncymcp::ProviderConfig config;\nconfig.settings[\"base_url\"] = \"http://127.0.0.1:11434\";\nauto provider = providers.create(\"ollama\", config);\n#include <cymcp/chat_ui.hpp>\n\n// Après la création du contexte ImGui et l'initialisation de CyUI par l'hôte :\ncymcp::ChatController controller;\ncymcp::ChatPanel panel(controller);\n\n// Dans la fenêtre hôte, entre NewFrame et Render :\npanel.draw();",
+      "assets": [],
+      "links": [],
+      "kind": "guide",
+      "revision": "1ec77eb96cec"
+    },
+    {
+      "id": "licenses",
+      "title": "Licences et composants",
+      "description": "Comprendre la licence MIT du SDK et les conditions des composants optionnels.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 5,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"sdk\">CyMCPSDK<a class=\"heading-anchor\" href=\"#/fr/licenses/sdk\" aria-label=\"Lien vers CyMCPSDK\">#</a></h2><p>Copyright © 2026 Cyberalien. Les sources CyMCPSDK sont distribuées sous licence MIT.\nConserver copyright et autorisation dans les copies redistribuées. <code>LICENSE</code> et\n<code>THIRD_PARTY_NOTICES.md</code> à la racine des sources contiennent les conditions et notices des composants.</p>\n<h2 id=\"components\">Composants<a class=\"heading-anchor\" href=\"#/fr/licenses/components\" aria-label=\"Lien vers Composants\">#</a></h2><table>\n<thead>\n<tr>\n<th>Composant</th>\n<th>Licence</th>\n<th>Périmètre</th>\n</tr>\n</thead>\n<tbody><tr>\n<td>nlohmann/json 3.12.0</td>\n<td>MIT</td>\n<td>Représentation JSON et validation du SDK</td>\n</tr>\n<tr>\n<td>cpp-httplib 0.66.0</td>\n<td>MIT</td>\n<td>Serveur HTTP local et transports de test</td>\n</tr>\n<tr>\n<td>PicoSHA2</td>\n<td>MIT</td>\n<td>Vérification des artefacts</td>\n</tr>\n<tr>\n<td>libcurl système</td>\n<td>Licence curl et conditions TLS de l&#39;hôte</td>\n<td>HTTP(S) Linux/macOS</td>\n</tr>\n<tr>\n<td>CyUI, Dear ImGui, MD4C</td>\n<td>MIT</td>\n<td>Rendu du tchat natif optionnel</td>\n</tr>\n<tr>\n<td>Lexers Lexilla/Scintilla</td>\n<td>Leurs notices permissives</td>\n<td>Coloration du code optionnelle via CyUI</td>\n</tr>\n<tr>\n<td>JetBrains Mono</td>\n<td>SIL Open Font License 1.1</td>\n<td>Police embarquée par CyUI</td>\n</tr>\n<tr>\n<td>Lecteur CyDoc</td>\n<td>MIT</td>\n<td>Ce lecteur de documentation statique</td>\n</tr>\n<tr>\n<td>marked, PrismJS, esbuild</td>\n<td>MIT</td>\n<td>Outils de génération de documentation uniquement</td>\n</tr>\n</tbody></table>\n<p>Le paquet Windows contient les notices complètes de l&#39;UI optionnelle dans <code>licenses/</code>.\nCe manuel inclut les textes MIT du SDK et de CyDoc dans <code>DocData/</code>.\nLes moteurs d&#39;inférence, modèles et runtimes GPU ne prennent pas la licence MIT du SDK :\nles composants installés séparément et les services fournisseurs gardent leurs propres conditions.</p>\n",
+      "text": "CyMCPSDK # Copyright © 2026 Cyberalien. Les sources CyMCPSDK sont distribuées sous licence MIT. Conserver copyright et autorisation dans les copies redistribuées. LICENSE et THIRD_PARTY_NOTICES.md à la racine des sources contiennent les conditions et notices des composants. Composants # Composant Licence Périmètre nlohmann/json 3.12.0 MIT Représentation JSON et validation du SDK cpp-httplib 0.66.0 MIT Serveur HTTP local et transports de test PicoSHA2 MIT Vérification des artefacts libcurl système Licence curl et conditions TLS de l'hôte HTTP(S) Linux/macOS CyUI, Dear ImGui, MD4C MIT Rendu du tchat natif optionnel Lexers Lexilla/Scintilla Leurs notices permissives Coloration du code optionnelle via CyUI JetBrains Mono SIL Open Font License 1.1 Police embarquée par CyUI Lecteur CyDoc MIT Ce lecteur de documentation statique marked, PrismJS, esbuild MIT Outils de génération de documentation uniquement Le paquet Windows contient les notices complètes de l'UI optionnelle dans licenses/ . Ce manuel inclut les textes MIT du SDK et de CyDoc dans DocData/ . Les moteurs d'inférence, modèles et runtimes GPU ne prennent pas la licence MIT du SDK : les composants installés séparément et les services fournisseurs gardent leurs propres conditions.",
+      "headings": [
+        {
+          "id": "sdk",
+          "text": "CyMCPSDK",
+          "level": 2
+        },
+        {
+          "id": "components",
+          "text": "Composants",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [],
+      "kind": "guide",
+      "revision": "06003b5b41cd"
+    },
+    {
+      "id": "local-engines",
+      "title": "Moteurs locaux et dépendances",
+      "description": "Connecter un service existant ou superviser un moteur compatible llama.cpp installé.",
+      "section": "SDK",
+      "parent": "integration",
+      "order": 3,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"service\">Utiliser un service existant<a class=\"heading-anchor\" href=\"#/fr/local-engines/service\" aria-label=\"Lien vers Utiliser un service existant\">#</a></h2><p>Choisir <code>ollama</code> pour l&#39;API native Ollama, <code>lmstudio</code> pour son serveur compatible, ou <code>llama.cpp</code>\npour une adresse compatible déjà active. Renseigner l&#39;URL réelle du service et un modèle qu&#39;il propose.\nChoisir un profil fournisseur n&#39;installe ni ne lance ce produit.</p>\n<p>Chat Lab se connecte aux services locaux. Il ne propose pas encore d&#39;installateur de modèles ou de\npaquets GPU. L&#39;application qui intègre le SDK peut fournir son propre parcours d&#39;installation.</p>\n<h2 id=\"supervise\">Superviser un moteur natif<a class=\"heading-anchor\" href=\"#/fr/local-engines/supervise\" aria-label=\"Lien vers Superviser un moteur natif\">#</a></h2><p><code>LocalEngine</code> possède un processus enfant compatible llama.cpp. Ses options comprennent le chemin\nde l&#39;exécutable, le modèle, un dossier de travail privé, le contexte en tokens, les couches GPU et le\ndélai de démarrage. Exécutable et modèle doivent déjà exister et être compatibles.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/local.hpp></span></span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"L3\" data-line=\"3\"><span class=\"token keyword\">void</span> <span class=\"token function\">start_local</span><span class=\"token punctuation\">(</span><span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>filesystem<span class=\"token double-colon punctuation\">::</span>path<span class=\"token operator\">&amp;</span> server_executable<span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L4\" data-line=\"4\">                 <span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>filesystem<span class=\"token double-colon punctuation\">::</span>path<span class=\"token operator\">&amp;</span> model<span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L5\" data-line=\"5\">                 <span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>filesystem<span class=\"token double-colon punctuation\">::</span>path<span class=\"token operator\">&amp;</span> private_work_directory<span class=\"token punctuation\">)</span> <span class=\"token punctuation\">{</span></span><span class=\"code-line\" id=\"L6\" data-line=\"6\">    cymcp<span class=\"token double-colon punctuation\">::</span>LocalEngineOptions options<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L7\" data-line=\"7\">    options<span class=\"token punctuation\">.</span>process<span class=\"token punctuation\">.</span>executable <span class=\"token operator\">=</span> server_executable<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L8\" data-line=\"8\">    options<span class=\"token punctuation\">.</span>model <span class=\"token operator\">=</span> model<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L9\" data-line=\"9\">    options<span class=\"token punctuation\">.</span>private_work_directory <span class=\"token operator\">=</span> private_work_directory<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L10\" data-line=\"10\">    cymcp<span class=\"token double-colon punctuation\">::</span>LocalEngine <span class=\"token function\">engine</span><span class=\"token punctuation\">(</span>options<span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L11\" data-line=\"11\">    engine<span class=\"token punctuation\">.</span><span class=\"token function\">start</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L12\" data-line=\"12\">    <span class=\"token comment\">// Pendant la vie de engine, configurer un fournisseur API avec</span></span><span class=\"code-line\" id=\"L13\" data-line=\"13\">    <span class=\"token comment\">// engine.base_url() et engine.token(), puis exécuter la conversation hôte.</span></span><span class=\"code-line\" id=\"L14\" data-line=\"14\">    engine<span class=\"token punctuation\">.</span><span class=\"token function\">stop</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L15\" data-line=\"15\"><span class=\"token punctuation\">}</span></span></code></pre></div><p>Garder le moteur en vie jusqu&#39;à la fin des conversations. Le superviseur vérifie sa disponibilité,\nfournit un fichier d&#39;authentification privé et arrête l&#39;arbre de processus qu&#39;il possède. Il ne gère pas\nun service utilisateur indépendant. Choisir les paramètres GPU selon le moteur et le runtime installés ;\naucun composant GPU n&#39;est embarqué.</p>\n<h2 id=\"dependencies\">Télécharger des composants vérifiés<a class=\"heading-anchor\" href=\"#/fr/local-engines/dependencies\" aria-label=\"Lien vers Télécharger des composants vérifiés\">#</a></h2><p><code>DependencyManager</code> reçoit un manifeste <code>Package</code> de confiance fourni par l&#39;hôte : URL des artefacts,\nchemins relatifs, tailles, empreintes SHA-256 et arguments d&#39;installation éventuels. Il propose\n<code>install</code>, <code>verify</code>, <code>run_installer</code> et <code>uninstall</code>. La politique hôte décide des actions permises ;\nun callback d&#39;élévation gère les installateurs qui en ont besoin.</p>\n<p>L&#39;application contrôle les manifestes, jamais la sortie d&#39;un modèle. Les chemins restent dans le cache\nconfiguré ; HTTPS et les hôtes de redirection déclarés encadrent les téléchargements. Les paquets\nexternes gardent leurs licences. L&#39;extraction automatique d&#39;archives, la reprise HTTP Range et les\ncatalogues de paquets GPU ne sont pas encore implémentés.</p>\n",
+      "text": "Utiliser un service existant # Choisir ollama pour l'API native Ollama, lmstudio pour son serveur compatible, ou llama.cpp pour une adresse compatible déjà active. Renseigner l'URL réelle du service et un modèle qu'il propose. Choisir un profil fournisseur n'installe ni ne lance ce produit. Chat Lab se connecte aux services locaux. Il ne propose pas encore d'installateur de modèles ou de paquets GPU. L'application qui intègre le SDK peut fournir son propre parcours d'installation. Superviser un moteur natif # LocalEngine possède un processus enfant compatible llama.cpp. Ses options comprennent le chemin de l'exécutable, le modèle, un dossier de travail privé, le contexte en tokens, les couches GPU et le délai de démarrage. Exécutable et modèle doivent déjà exister et être compatibles. cpp Copier # include <cymcp/local.hpp> void start_local ( const std :: filesystem :: path & server_executable , const std :: filesystem :: path & model , const std :: filesystem :: path & private_work_directory ) { cymcp :: LocalEngineOptions options ; options . process . executable = server_executable ; options . model = model ; options . private_work_directory = private_work_directory ; cymcp :: LocalEngine engine ( options ) ; engine . start ( ) ; // Pendant la vie de engine, configurer un fournisseur API avec // engine.base_url() et engine.token(), puis exécuter la conversation hôte. engine . stop ( ) ; } Garder le moteur en vie jusqu'à la fin des conversations. Le superviseur vérifie sa disponibilité, fournit un fichier d'authentification privé et arrête l'arbre de processus qu'il possède. Il ne gère pas un service utilisateur indépendant. Choisir les paramètres GPU selon le moteur et le runtime installés ; aucun composant GPU n'est embarqué. Télécharger des composants vérifiés # DependencyManager reçoit un manifeste Package de confiance fourni par l'hôte : URL des artefacts, chemins relatifs, tailles, empreintes SHA-256 et arguments d'installation éventuels. Il propose install , verify , run_installer et uninstall . La politique hôte décide des actions permises ; un callback d'élévation gère les installateurs qui en ont besoin. L'application contrôle les manifestes, jamais la sortie d'un modèle. Les chemins restent dans le cache configuré ; HTTPS et les hôtes de redirection déclarés encadrent les téléchargements. Les paquets externes gardent leurs licences. L'extraction automatique d'archives, la reprise HTTP Range et les catalogues de paquets GPU ne sont pas encore implémentés. #include <cymcp/local.hpp> void start_local(const std::filesystem::path& server_executable, const std::filesystem::path& model, const std::filesystem::path& private_work_directory) { cymcp::LocalEngineOptions options; options.process.executable = server_executable; options.model = model; options.private_work_directory = private_work_directory; cymcp::LocalEngine engine(options); engine.start(); // Pendant la vie de engine, configurer un fournisseur API avec // engine.base_url() et engine.token(), puis exécuter la conversation hôte. engine.stop(); }",
+      "headings": [
+        {
+          "id": "service",
+          "text": "Utiliser un service existant",
+          "level": 2
+        },
+        {
+          "id": "supervise",
+          "text": "Superviser un moteur natif",
+          "level": 2
+        },
+        {
+          "id": "dependencies",
+          "text": "Télécharger des composants vérifiés",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L9",
+        "L10",
+        "L11",
+        "L12",
+        "L13",
+        "L14",
+        "L15"
+      ],
+      "languages": [
+        "cpp"
+      ],
+      "code": "#include <cymcp/local.hpp>\n\nvoid start_local(const std::filesystem::path& server_executable,\n                 const std::filesystem::path& model,\n                 const std::filesystem::path& private_work_directory) {\n    cymcp::LocalEngineOptions options;\n    options.process.executable = server_executable;\n    options.model = model;\n    options.private_work_directory = private_work_directory;\n    cymcp::LocalEngine engine(options);\n    engine.start();\n    // Pendant la vie de engine, configurer un fournisseur API avec\n    // engine.base_url() et engine.token(), puis exécuter la conversation hôte.\n    engine.stop();\n}",
+      "assets": [],
+      "links": [],
+      "kind": "guide",
+      "revision": "a1b2b6e89651"
+    },
+    {
+      "id": "operations",
+      "title": "Exposer les opérations de l'app",
+      "description": "Partager un registre typé entre appels natifs, SDK JSON, MCP et outils IA compatibles.",
+      "section": "SDK",
+      "parent": "integration",
+      "order": 1,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"registry\">Définir un registre<a class=\"heading-anchor\" href=\"#/fr/operations/registry\" aria-label=\"Lien vers Définir un registre\">#</a></h2><p>Une <code>Operation</code> contient un nom portable, une description, des schémas objet d&#39;entrée/sortie,\nun indicateur de lecture seule et un handler. <code>Registry</code> valide les entrées, applique sa politique\net vérifie les sorties déclarées. L&#39;indicateur de lecture seule ne remplace pas une politique de refus.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token macro property\"><span class=\"token directive-hash\">#</span><span class=\"token directive keyword\">include</span> <span class=\"token string\">&lt;cymcp/core.hpp></span></span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\"> </span><span class=\"code-line\" id=\"L3\" data-line=\"3\">cymcp<span class=\"token double-colon punctuation\">::</span>Registry <span class=\"token function\">commands</span><span class=\"token punctuation\">(</span>cymcp<span class=\"token double-colon punctuation\">::</span><span class=\"token class-name\">Policy</span><span class=\"token double-colon punctuation\">::</span><span class=\"token function\">allow_all</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L4\" data-line=\"4\">commands<span class=\"token punctuation\">.</span><span class=\"token function\">add</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"Lire le compteur de démonstration.\"</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L5\" data-line=\"5\">    <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"type\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"object\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token string\">\"additionalProperties\"</span><span class=\"token punctuation\">,</span> <span class=\"token boolean\">false</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L6\" data-line=\"6\">    <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"type\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"object\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L7\" data-line=\"7\">     <span class=\"token punctuation\">{</span><span class=\"token string\">\"properties\"</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"value\"</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"type\"</span><span class=\"token punctuation\">,</span> <span class=\"token string\">\"integer\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L8\" data-line=\"8\">     <span class=\"token punctuation\">{</span><span class=\"token string\">\"required\"</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token string\">\"value\"</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span> <span class=\"token punctuation\">{</span><span class=\"token string\">\"additionalProperties\"</span><span class=\"token punctuation\">,</span> <span class=\"token boolean\">false</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L9\" data-line=\"9\">    <span class=\"token boolean\">true</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L10\" data-line=\"10\">    <span class=\"token punctuation\">[</span><span class=\"token punctuation\">]</span><span class=\"token punctuation\">(</span><span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">,</span> <span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">)</span> <span class=\"token punctuation\">{</span> <span class=\"token keyword\">return</span> cymcp<span class=\"token double-colon punctuation\">::</span>Json<span class=\"token punctuation\">{</span><span class=\"token punctuation\">{</span><span class=\"token string\">\"value\"</span><span class=\"token punctuation\">,</span> <span class=\"token number\">42</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">;</span> <span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L11\" data-line=\"11\"><span class=\"token keyword\">auto</span> result <span class=\"token operator\">=</span> commands<span class=\"token punctuation\">.</span><span class=\"token function\">invoke</span><span class=\"token punctuation\">(</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span> cymcp<span class=\"token double-colon punctuation\">::</span><span class=\"token class-name\">Json</span><span class=\"token double-colon punctuation\">::</span><span class=\"token function\">object</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p>Cet exemple autorise explicitement sa lecture sans effet de bord. Pour un domaine modifiable,\nutiliser la politique de l&#39;hôte et synchroniser ses objets. Les handlers MCP peuvent être concurrents ;\ntransférer les mutations liées à l&#39;UI vers la boucle d&#39;événements et garder les données capturées en vie.</p>\n<h2 id=\"sdk\">SDK JSON direct<a class=\"heading-anchor\" href=\"#/fr/operations/sdk\" aria-label=\"Lien vers SDK JSON direct\">#</a></h2><p><code>dispatch_app(registry, request, context)</code> accepte ces messages applicatifs :</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\"><span class=\"token punctuation\">{</span><span class=\"token property\">\"method\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"describe\"</span><span class=\"token punctuation\">}</span></span></code></pre></div><div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"code-3-L1\" data-line=\"1\"><span class=\"token punctuation\">{</span><span class=\"token property\">\"method\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"invoke\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"name\"</span><span class=\"token operator\">:</span><span class=\"token string\">\"get_counter\"</span><span class=\"token punctuation\">,</span><span class=\"token property\">\"arguments\"</span><span class=\"token operator\">:</span><span class=\"token punctuation\">{</span><span class=\"token punctuation\">}</span><span class=\"token punctuation\">}</span></span></code></pre></div><p>Le CLI d&#39;exemple propose <code>describe</code>, <code>invoke</code> et le JSONL applicatif sur stdin. JSONL applicatif et\nJSON-RPC MCP sont deux protocoles distincts. Dans Chat Lab, ces mêmes requêtes vont vers <code>/v1</code>\nsur le serveur local activé, avec <code>Content-Type: application/json</code> et le jeton Bearer.</p>\n<h2 id=\"mcp\">Serveur et client MCP<a class=\"heading-anchor\" href=\"#/fr/operations/mcp\" aria-label=\"Lien vers Serveur et client MCP\">#</a></h2><p><code>McpServer(registry)</code> expose les opérations comme outils MCP. <code>serve_stdio(input, output)</code> sert\nune connexion CLI ; <code>handle(request, context)</code> s&#39;intègre à un endpoint HTTP. Garder registre et\nserveur en vie pendant toute la connexion.</p>\n<p><code>McpClient(ProcessOptions)</code> se connecte par stdio ; <code>McpClient(url, token)</code> utilise HTTP local\nlorsque ce support est compilé. Appeler <code>connect</code>, <code>list_tools</code> et <code>call_tool(name, arguments)</code>.\nVérifier <code>isError</code> dans le résultat MCP avant de traiter <code>structuredContent</code> comme une sortie réussie.</p>\n<p>Pour qu&#39;une IA dans l&#39;app A utilise l&#39;app B, connecter un client à B, enregistrer des opérations\nde transfert explicites dans A et attacher ce registre à un fournisseur compatible. Conserver le\nschéma de B et appliquer la politique de A avant le transfert. Une réponse de modèle ne doit pas\npouvoir enregistrer librement de nouvelles opérations.</p>\n<h2 id=\"tools\">Attacher les outils à une conversation<a class=\"heading-anchor\" href=\"#/fr/operations/tools\" aria-label=\"Lien vers Attacher les outils à une conversation\">#</a></h2><p>Fournir un registre partagé dans <code>ProviderConfig.tools</code> pour les API compatibles ou les outils\ndynamiques Codex. Ce registre porte la politique des opérations réelles de l&#39;app. Pour les autres\nCLI, exposer MCP et passer leur configuration MCP native. ACP utilise <code>settings.mcp_servers</code>\nsous forme de tableau au format ACP. Consulter les <a href=\"#/fr/permissions\">droits</a> avant d&#39;exposer des mutations.</p>\n",
+      "text": "Définir un registre # Une Operation contient un nom portable, une description, des schémas objet d'entrée/sortie, un indicateur de lecture seule et un handler. Registry valide les entrées, applique sa politique et vérifie les sorties déclarées. L'indicateur de lecture seule ne remplace pas une politique de refus. cpp Copier # include <cymcp/core.hpp> cymcp :: Registry commands ( cymcp :: Policy :: allow_all ( ) ) ; commands . add ( { \"get_counter\" , \"Lire le compteur de démonstration.\" , { { \"type\" , \"object\" } , { \"additionalProperties\" , false } } , { { \"type\" , \"object\" } , { \"properties\" , { { \"value\" , { { \"type\" , \"integer\" } } } } } , { \"required\" , { \"value\" } } , { \"additionalProperties\" , false } } , true , [ ] ( const auto & , const auto & ) { return cymcp :: Json { { \"value\" , 42 } } ; } } ) ; auto result = commands . invoke ( \"get_counter\" , cymcp :: Json :: object ( ) ) ; Cet exemple autorise explicitement sa lecture sans effet de bord. Pour un domaine modifiable, utiliser la politique de l'hôte et synchroniser ses objets. Les handlers MCP peuvent être concurrents ; transférer les mutations liées à l'UI vers la boucle d'événements et garder les données capturées en vie. SDK JSON direct # dispatch_app(registry, request, context) accepte ces messages applicatifs : json Copier { \"method\" : \"describe\" } json Copier { \"method\" : \"invoke\" , \"name\" : \"get_counter\" , \"arguments\" : { } } Le CLI d'exemple propose describe , invoke et le JSONL applicatif sur stdin. JSONL applicatif et JSON-RPC MCP sont deux protocoles distincts. Dans Chat Lab, ces mêmes requêtes vont vers /v1 sur le serveur local activé, avec Content-Type: application/json et le jeton Bearer. Serveur et client MCP # McpServer(registry) expose les opérations comme outils MCP. serve_stdio(input, output) sert une connexion CLI ; handle(request, context) s'intègre à un endpoint HTTP. Garder registre et serveur en vie pendant toute la connexion. McpClient(ProcessOptions) se connecte par stdio ; McpClient(url, token) utilise HTTP local lorsque ce support est compilé. Appeler connect , list_tools et call_tool(name, arguments) . Vérifier isError dans le résultat MCP avant de traiter structuredContent comme une sortie réussie. Pour qu'une IA dans l'app A utilise l'app B, connecter un client à B, enregistrer des opérations de transfert explicites dans A et attacher ce registre à un fournisseur compatible. Conserver le schéma de B et appliquer la politique de A avant le transfert. Une réponse de modèle ne doit pas pouvoir enregistrer librement de nouvelles opérations. Attacher les outils à une conversation # Fournir un registre partagé dans ProviderConfig.tools pour les API compatibles ou les outils dynamiques Codex. Ce registre porte la politique des opérations réelles de l'app. Pour les autres CLI, exposer MCP et passer leur configuration MCP native. ACP utilise settings.mcp_servers sous forme de tableau au format ACP. Consulter les droits avant d'exposer des mutations. #include <cymcp/core.hpp> cymcp::Registry commands(cymcp::Policy::allow_all()); commands.add({\"get_counter\", \"Lire le compteur de démonstration.\", {{\"type\", \"object\"}, {\"additionalProperties\", false}}, {{\"type\", \"object\"}, {\"properties\", {{\"value\", {{\"type\", \"integer\"}}}}}, {\"required\", {\"value\"}}, {\"additionalProperties\", false}}, true, [](const auto&, const auto&) { return cymcp::Json{{\"value\", 42}}; }}); auto result = commands.invoke(\"get_counter\", cymcp::Json::object()); {\"method\":\"describe\"} {\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "headings": [
+        {
+          "id": "registry",
+          "text": "Définir un registre",
+          "level": 2
+        },
+        {
+          "id": "sdk",
+          "text": "SDK JSON direct",
+          "level": 2
+        },
+        {
+          "id": "mcp",
+          "text": "Serveur et client MCP",
+          "level": 2
+        },
+        {
+          "id": "tools",
+          "text": "Attacher les outils à une conversation",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L9",
+        "L10",
+        "L11",
+        "code-2-L1",
+        "code-3-L1"
+      ],
+      "languages": [
+        "cpp",
+        "json"
+      ],
+      "code": "#include <cymcp/core.hpp>\n\ncymcp::Registry commands(cymcp::Policy::allow_all());\ncommands.add({\"get_counter\", \"Lire le compteur de démonstration.\",\n    {{\"type\", \"object\"}, {\"additionalProperties\", false}},\n    {{\"type\", \"object\"},\n     {\"properties\", {{\"value\", {{\"type\", \"integer\"}}}}},\n     {\"required\", {\"value\"}}, {\"additionalProperties\", false}},\n    true,\n    [](const auto&, const auto&) { return cymcp::Json{{\"value\", 42}}; }});\nauto result = commands.invoke(\"get_counter\", cymcp::Json::object());\n{\"method\":\"describe\"}\n{\"method\":\"invoke\",\"name\":\"get_counter\",\"arguments\":{}}",
+      "assets": [],
+      "links": [
+        "#/fr/permissions"
+      ],
+      "kind": "guide",
+      "revision": "b599fa879be3"
+    },
+    {
+      "id": "overview",
+      "title": "CyMCPSDK",
+      "description": "Ajouter conversations IA et outils applicatifs à une application C++ native.",
+      "section": "Guides",
+      "order": 0,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"workflows\">Choisir un parcours<a class=\"heading-anchor\" href=\"#/fr/overview/workflows\" aria-label=\"Lien vers Choisir un parcours\">#</a></h2><p>CyMCPSDK est une bibliothèque C++20 sous MIT pour les développeurs d&#39;applications.\nEnregistrer les opérations une fois, les exposer par SDK direct ou MCP, puis connecter\nl&#39;application à des agents CLI, des API ou un service de modèle local. Le panneau CyUI\noptionnel affiche les conversations.</p>\n<table>\n<thead>\n<tr>\n<th>Votre besoin</th>\n<th>Point de départ</th>\n</tr>\n</thead>\n<tbody><tr>\n<td>Essayer l&#39;application Windows</td>\n<td><a href=\"#/fr/quickstart\">Démarrage</a></td>\n</tr>\n<tr>\n<td>Configurer un tchat et ses outils</td>\n<td><a href=\"#/fr/chat-lab\">Chat Lab</a></td>\n</tr>\n<tr>\n<td>Ajouter la bibliothèque à votre application</td>\n<td><a href=\"#/fr/integration\">Intégration C++</a></td>\n</tr>\n<tr>\n<td>Permettre à une IA ou une autre app d&#39;appeler vos opérations</td>\n<td><a href=\"#/fr/operations\">Opérations applicatives</a></td>\n</tr>\n<tr>\n<td>Choisir les règles d&#39;accès</td>\n<td><a href=\"#/fr/permissions\">Droits</a></td>\n</tr>\n<tr>\n<td>Utiliser un moteur local installé</td>\n<td><a href=\"#/fr/local-engines\">Moteurs locaux</a></td>\n</tr>\n</tbody></table>\n<h2 id=\"modules\">Modules<a class=\"heading-anchor\" href=\"#/fr/overview/modules\" aria-label=\"Lien vers Modules\">#</a></h2><table>\n<thead>\n<tr>\n<th>Cible CMake</th>\n<th>Rôle</th>\n</tr>\n</thead>\n<tbody><tr>\n<td><code>CyMCP::Core</code></td>\n<td>Registre d&#39;opérations, schémas, politiques, annulation et workers bornés</td>\n</tr>\n<tr>\n<td><code>CyMCP::Platform</code></td>\n<td>Processus enfants natifs et arguments structurés</td>\n</tr>\n<tr>\n<td><code>CyMCP::Http</code></td>\n<td>Client HTTP(S), streaming et serveur loopback authentifié</td>\n</tr>\n<tr>\n<td><code>CyMCP::MCP</code></td>\n<td>Serveur/client d&#39;outils MCP par stdio ou HTTP JSON local</td>\n</tr>\n<tr>\n<td><code>CyMCP::AI</code></td>\n<td>Profils fournisseurs, sessions, conversations et échanges d&#39;outils</td>\n</tr>\n<tr>\n<td><code>CyMCP::Local</code></td>\n<td>Supervision des moteurs et téléchargements vérifiés</td>\n</tr>\n<tr>\n<td><code>CyMCP::ChatUI</code></td>\n<td>Contrôleur CyUI et panneau de tchat Markdown optionnels</td>\n</tr>\n<tr>\n<td><code>CyMCP::SDK</code></td>\n<td>Modules du SDK sans dépendance graphique</td>\n</tr>\n</tbody></table>\n<h2 id=\"scope\">Périmètre<a class=\"heading-anchor\" href=\"#/fr/overview/scope\" aria-label=\"Lien vers Périmètre\">#</a></h2><p>La bibliothèque n&#39;embarque ni modèle, CLI IA, moteur d&#39;inférence, runtime CUDA ou pilote.\nInstaller et configurer le fournisseur choisi. Ses comptes natifs et conditions restent\napplicables. Consulter les <a href=\"#/fr/providers\">fournisseurs</a> et les <a href=\"#/fr/licenses\">licences</a>.</p>\n<p>L&#39;exemple Windows utilise Win32/DX11. ChatUI utilise le backend CyUI/ImGui de l&#39;application\nhôte. La distribution Linux/macOS reste en cours de réalisation ; Android est reporté.</p>\n<h2 id=\"navigation\">Lire ce manuel<a class=\"heading-anchor\" href=\"#/fr/overview/navigation\" aria-label=\"Lien vers Lire ce manuel\">#</a></h2><p>Utiliser l&#39;arbre des pages ou le champ de recherche ; <strong>Ctrl+K</strong> ouvre la recherche.\nBasculer entre anglais et français dans le lecteur. Le dossier <code>Documentation</code> complet\ns&#39;ouvre directement depuis le disque. Dans Chat Lab, <strong>Aide (F1)</strong> ouvre le guide du tchat\ndans la langue sélectionnée dans l&#39;application.</p>\n",
+      "text": "Choisir un parcours # CyMCPSDK est une bibliothèque C++20 sous MIT pour les développeurs d'applications. Enregistrer les opérations une fois, les exposer par SDK direct ou MCP, puis connecter l'application à des agents CLI, des API ou un service de modèle local. Le panneau CyUI optionnel affiche les conversations. Votre besoin Point de départ Essayer l'application Windows Démarrage Configurer un tchat et ses outils Chat Lab Ajouter la bibliothèque à votre application Intégration C++ Permettre à une IA ou une autre app d'appeler vos opérations Opérations applicatives Choisir les règles d'accès Droits Utiliser un moteur local installé Moteurs locaux Modules # Cible CMake Rôle CyMCP::Core Registre d'opérations, schémas, politiques, annulation et workers bornés CyMCP::Platform Processus enfants natifs et arguments structurés CyMCP::Http Client HTTP(S), streaming et serveur loopback authentifié CyMCP::MCP Serveur/client d'outils MCP par stdio ou HTTP JSON local CyMCP::AI Profils fournisseurs, sessions, conversations et échanges d'outils CyMCP::Local Supervision des moteurs et téléchargements vérifiés CyMCP::ChatUI Contrôleur CyUI et panneau de tchat Markdown optionnels CyMCP::SDK Modules du SDK sans dépendance graphique Périmètre # La bibliothèque n'embarque ni modèle, CLI IA, moteur d'inférence, runtime CUDA ou pilote. Installer et configurer le fournisseur choisi. Ses comptes natifs et conditions restent applicables. Consulter les fournisseurs et les licences . L'exemple Windows utilise Win32/DX11. ChatUI utilise le backend CyUI/ImGui de l'application hôte. La distribution Linux/macOS reste en cours de réalisation ; Android est reporté. Lire ce manuel # Utiliser l'arbre des pages ou le champ de recherche ; Ctrl+K ouvre la recherche. Basculer entre anglais et français dans le lecteur. Le dossier Documentation complet s'ouvre directement depuis le disque. Dans Chat Lab, Aide (F1) ouvre le guide du tchat dans la langue sélectionnée dans l'application.",
+      "headings": [
+        {
+          "id": "workflows",
+          "text": "Choisir un parcours",
+          "level": 2
+        },
+        {
+          "id": "modules",
+          "text": "Modules",
+          "level": 2
+        },
+        {
+          "id": "scope",
+          "text": "Périmètre",
+          "level": 2
+        },
+        {
+          "id": "navigation",
+          "text": "Lire ce manuel",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [
+        "#/fr/quickstart",
+        "#/fr/chat-lab",
+        "#/fr/integration",
+        "#/fr/operations",
+        "#/fr/permissions",
+        "#/fr/local-engines",
+        "#/fr/providers",
+        "#/fr/licenses"
+      ],
+      "kind": "guide",
+      "revision": "cec094cb1b70"
+    },
+    {
+      "id": "permissions",
+      "title": "Configurer les droits",
+      "description": "Choisir séparément la politique des opérations hôtes et les autorisations de l'agent natif.",
+      "section": "SDK",
+      "parent": "integration",
+      "order": 2,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"policy\">Choisir la politique hôte<a class=\"heading-anchor\" href=\"#/fr/permissions/policy\" aria-label=\"Lien vers Choisir la politique hôte\">#</a></h2><p>Une <code>Policy</code> par défaut refuse les opérations. Utiliser un callback pour décider à partir du\ncontexte, du nom de l&#39;opération et des arguments, ou choisir explicitement <code>Policy::allow_all()</code>\nlorsque l&#39;hôte veut un accès libre à son domaine enregistré. Le SDK n&#39;impose pas de boîtes de confirmation.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>cpp</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-cpp\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">cymcp<span class=\"token double-colon punctuation\">::</span>Policy <span class=\"token function\">reads_only</span><span class=\"token punctuation\">(</span><span class=\"token punctuation\">[</span><span class=\"token punctuation\">]</span><span class=\"token punctuation\">(</span><span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">,</span> <span class=\"token keyword\">const</span> std<span class=\"token double-colon punctuation\">::</span>string<span class=\"token operator\">&amp;</span> name<span class=\"token punctuation\">,</span> <span class=\"token keyword\">const</span> <span class=\"token keyword\">auto</span><span class=\"token operator\">&amp;</span><span class=\"token punctuation\">)</span> <span class=\"token punctuation\">{</span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\">    <span class=\"token keyword\">return</span> name <span class=\"token operator\">==</span> <span class=\"token string\">\"get_counter\"</span> <span class=\"token operator\">?</span> cymcp<span class=\"token double-colon punctuation\">::</span>Decision<span class=\"token double-colon punctuation\">::</span>allow <span class=\"token operator\">:</span> cymcp<span class=\"token double-colon punctuation\">::</span>Decision<span class=\"token double-colon punctuation\">::</span>deny<span class=\"token punctuation\">;</span></span><span class=\"code-line\" id=\"L3\" data-line=\"3\"><span class=\"token punctuation\">}</span><span class=\"token punctuation\">)</span><span class=\"token punctuation\">;</span></span></code></pre></div><p>Autoriser une opération ne crée pas de capacités supplémentaires. Limiter les handlers et leurs\nschémas au besoin de l&#39;application. La validation du domaine s&#39;applique même avec une politique\npermissive. L&#39;annulation et les budgets de ressources sont distincts des décisions de droits.</p>\n<h2 id=\"agents\">Autorisations de l&#39;agent et opérations<a class=\"heading-anchor\" href=\"#/fr/permissions/agents\" aria-label=\"Lien vers Autorisations de l&#39;agent et opérations\">#</a></h2><p>Les droits natifs de l&#39;agent sont distincts du registre d&#39;opérations. Dans Chat Lab,\n<strong>Autoriser toutes les actions</strong> demande le mode permissif du fournisseur ; <strong>Autoriser la\nmodification du compteur</strong> contrôle le registre de démonstration. Une option activée ne retire\npas les restrictions imposées par un fournisseur externe ou le système d&#39;exploitation.</p>\n<p>Les services client ACP de fichiers et terminal ne sont pas annoncés par défaut. L&#39;hôte doit\ndéclarer <code>settings.client_capabilities</code>, fournir <code>request_handler</code> et choisir sa politique\nd&#39;autorisation. Il implémente le comportement et le nettoyage des fichiers/terminaux ; une simple\ncapacité déclarée ne crée aucun service de terminal.</p>\n<h2 id=\"network\">Authentifier un serveur local<a class=\"heading-anchor\" href=\"#/fr/permissions/network\" aria-label=\"Lien vers Authentifier un serveur local\">#</a></h2><p>Le serveur HTTP loopback exige un jeton d&#39;au moins 32 caractères et refuse les requêtes portant\n<code>Origin</code>. Passer le jeton dans <code>Authorization: Bearer ...</code>. Chat Lab crée un nouveau jeton aléatoire\nau démarrage du serveur ; il affiche uniquement l&#39;adresse et propose une copie explicite du jeton.</p>\n<p>L&#39;authentification identifie un client autorisé ; elle ne remplace pas les droits des opérations.\nLa durée de vie du serveur, la distribution du jeton et la politique du domaine restent contrôlées par l&#39;hôte.</p>\n",
+      "text": "Choisir la politique hôte # Une Policy par défaut refuse les opérations. Utiliser un callback pour décider à partir du contexte, du nom de l'opération et des arguments, ou choisir explicitement Policy::allow_all() lorsque l'hôte veut un accès libre à son domaine enregistré. Le SDK n'impose pas de boîtes de confirmation. cpp Copier cymcp :: Policy reads_only ( [ ] ( const auto & , const std :: string & name , const auto & ) { return name == \"get_counter\" ? cymcp :: Decision :: allow : cymcp :: Decision :: deny ; } ) ; Autoriser une opération ne crée pas de capacités supplémentaires. Limiter les handlers et leurs schémas au besoin de l'application. La validation du domaine s'applique même avec une politique permissive. L'annulation et les budgets de ressources sont distincts des décisions de droits. Autorisations de l'agent et opérations # Les droits natifs de l'agent sont distincts du registre d'opérations. Dans Chat Lab, Autoriser toutes les actions demande le mode permissif du fournisseur ; Autoriser la modification du compteur contrôle le registre de démonstration. Une option activée ne retire pas les restrictions imposées par un fournisseur externe ou le système d'exploitation. Les services client ACP de fichiers et terminal ne sont pas annoncés par défaut. L'hôte doit déclarer settings.client_capabilities , fournir request_handler et choisir sa politique d'autorisation. Il implémente le comportement et le nettoyage des fichiers/terminaux ; une simple capacité déclarée ne crée aucun service de terminal. Authentifier un serveur local # Le serveur HTTP loopback exige un jeton d'au moins 32 caractères et refuse les requêtes portant Origin . Passer le jeton dans Authorization: Bearer ... . Chat Lab crée un nouveau jeton aléatoire au démarrage du serveur ; il affiche uniquement l'adresse et propose une copie explicite du jeton. L'authentification identifie un client autorisé ; elle ne remplace pas les droits des opérations. La durée de vie du serveur, la distribution du jeton et la politique du domaine restent contrôlées par l'hôte. cymcp::Policy reads_only([](const auto&, const std::string& name, const auto&) { return name == \"get_counter\" ? cymcp::Decision::allow : cymcp::Decision::deny; });",
+      "headings": [
+        {
+          "id": "policy",
+          "text": "Choisir la politique hôte",
+          "level": 2
+        },
+        {
+          "id": "agents",
+          "text": "Autorisations de l'agent et opérations",
+          "level": 2
+        },
+        {
+          "id": "network",
+          "text": "Authentifier un serveur local",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "languages": [
+        "cpp"
+      ],
+      "code": "cymcp::Policy reads_only([](const auto&, const std::string& name, const auto&) {\n    return name == \"get_counter\" ? cymcp::Decision::allow : cymcp::Decision::deny;\n});",
+      "assets": [],
+      "links": [],
+      "kind": "guide",
+      "revision": "13569a6b2d2d"
+    },
+    {
+      "id": "providers",
+      "title": "Choisir un fournisseur",
+      "description": "Sélectionner CLI, API native ou service local avec ses vrais modèles et identifiants.",
+      "section": "Guides",
+      "parent": "chat-lab",
+      "order": 1,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"profiles\">Profils intégrés<a class=\"heading-anchor\" href=\"#/fr/providers/profiles\" aria-label=\"Lien vers Profils intégrés\">#</a></h2><table>\n<thead>\n<tr>\n<th>Type</th>\n<th>Identifiants du registre</th>\n</tr>\n</thead>\n<tbody><tr>\n<td>Agents natifs</td>\n<td><code>codex</code>, <code>claude-code</code>, <code>antigravity</code>, <code>command-code</code>, <code>codebuddy</code></td>\n</tr>\n<tr>\n<td>Agents ACP v1</td>\n<td><code>opencode</code>, <code>gemini</code>, <code>qwen-code</code>, <code>kimi</code>, <code>goose</code>, <code>devin</code>, <code>command-code-acp</code>, <code>codebuddy-acp</code>, <code>acp</code></td>\n</tr>\n<tr>\n<td>OpenCode historique 1.x</td>\n<td><code>opencode-cli</code></td>\n</tr>\n<tr>\n<td>API natives</td>\n<td><code>openai</code> (Responses), <code>anthropic</code> (Messages), <code>openrouter</code>, <code>ollama</code></td>\n</tr>\n<tr>\n<td>Serveurs HTTP compatibles</td>\n<td><code>openai-compatible</code>, <code>llama.cpp</code>, <code>lmstudio</code></td>\n</tr>\n</tbody></table>\n<p>Ces 22 profils décrivent des transports et des recettes de lancement. La version installée, le\nserveur et le modèle déterminent les capacités réelles. ACP v1 négocie le chargement des sessions,\nles modèles, modes et contenus acceptés. <code>opencode-cli</code> est l&#39;ancien transport JSONL ; OpenCode\nactuel utilise <code>opencode</code> avec ACP.</p>\n<h2 id=\"configure\">Configurer une connexion<a class=\"heading-anchor\" href=\"#/fr/providers/configure\" aria-label=\"Lien vers Configurer une connexion\">#</a></h2><p>Les CLI natifs utilisent leur environnement et leur compte existants. Sélectionner le vrai\nexécutable si le gestionnaire de paquets ne fournit qu&#39;un wrapper shell. Les arguments sont\ndes chaînes structurées ; le SDK ne les passe pas à un shell. <code>process.environment</code> transmet\ndes variables uniquement au processus enfant.</p>\n<p>Les identifiants API viennent d&#39;une variable d&#39;environnement nommée ou du champ masqué en mémoire\nde Chat Lab. Le CLI et l&#39;interface peuvent charger cette configuration sans secret avec <code>--config</code> :</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>json</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-json\"><span class=\"code-line\" id=\"L1\" data-line=\"1\"><span class=\"token punctuation\">{</span></span><span class=\"code-line\" id=\"L2\" data-line=\"2\">  <span class=\"token property\">\"provider\"</span><span class=\"token operator\">:</span> <span class=\"token string\">\"openai\"</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L3\" data-line=\"3\">  <span class=\"token property\">\"model\"</span><span class=\"token operator\">:</span> <span class=\"token string\">\"\"</span><span class=\"token punctuation\">,</span></span><span class=\"code-line\" id=\"L4\" data-line=\"4\">  <span class=\"token property\">\"api_key_env\"</span><span class=\"token operator\">:</span> <span class=\"token string\">\"OPENAI_API_KEY\"</span></span><span class=\"code-line\" id=\"L5\" data-line=\"5\"><span class=\"token punctuation\">}</span></span></code></pre></div><p>Saisir un modèle retourné par le fournisseur avant d&#39;envoyer un message. Ne pas mettre de vraie\nclé dans un fichier JSON. <code>settings.base_url</code> remplace l&#39;adresse du service. Le profil Ollama\nattend la base de son API native ; les serveurs compatibles utilisent généralement une base <code>/v1</code>.</p>\n<h2 id=\"models\">Découvrir modèles et capacités<a class=\"heading-anchor\" href=\"#/fr/providers/models\" aria-label=\"Lien vers Découvrir modèles et capacités\">#</a></h2><p>L&#39;exemple sans interface propose :</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>sh</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-bash\"><span class=\"code-line\" id=\"code-2-L1\" data-line=\"1\">cymcp_chat providers</span><span class=\"code-line\" id=\"code-2-L2\" data-line=\"2\">cymcp_chat models examples/chat-ollama.json</span></code></pre></div><p><code>providers</code> liste les capacités des transports configurés ; <code>models</code> contacte le fournisseur choisi.\nUn catalogue non pris en charge ne signifie pas que le tchat est indisponible : utiliser un ID exact\nfourni par l&#39;outil natif. Le modèle choisi s&#39;applique à une nouvelle connexion. Le SDK ne change pas\nsilencieusement de modèle et ne rejoue pas les générations échouées.</p>\n<h2 id=\"extension\">Ajouter un fournisseur<a class=\"heading-anchor\" href=\"#/fr/providers/extension\" aria-label=\"Lien vers Ajouter un fournisseur\">#</a></h2><p>Implémenter l&#39;interface publique <code>Provider</code>, puis enregistrer un <code>ProviderDescriptor</code> et sa factory\navec <code>ProviderRegistry::add</code>. Les méthodes <code>connect</code>, <code>start_session</code>, <code>send</code> et <code>disconnect</code>\ndoivent respecter les capacités annoncées. <code>ProviderConfig</code> fournit arguments, réglages,\nidentifiants, registre d&#39;opérations optionnel et callbacks de droits.\nConsulter l&#39;<a href=\"#/fr/integration/providers\">intégration</a>.</p>\n",
+      "text": "Profils intégrés # Type Identifiants du registre Agents natifs codex , claude-code , antigravity , command-code , codebuddy Agents ACP v1 opencode , gemini , qwen-code , kimi , goose , devin , command-code-acp , codebuddy-acp , acp OpenCode historique 1.x opencode-cli API natives openai (Responses), anthropic (Messages), openrouter , ollama Serveurs HTTP compatibles openai-compatible , llama.cpp , lmstudio Ces 22 profils décrivent des transports et des recettes de lancement. La version installée, le serveur et le modèle déterminent les capacités réelles. ACP v1 négocie le chargement des sessions, les modèles, modes et contenus acceptés. opencode-cli est l'ancien transport JSONL ; OpenCode actuel utilise opencode avec ACP. Configurer une connexion # Les CLI natifs utilisent leur environnement et leur compte existants. Sélectionner le vrai exécutable si le gestionnaire de paquets ne fournit qu'un wrapper shell. Les arguments sont des chaînes structurées ; le SDK ne les passe pas à un shell. process.environment transmet des variables uniquement au processus enfant. Les identifiants API viennent d'une variable d'environnement nommée ou du champ masqué en mémoire de Chat Lab. Le CLI et l'interface peuvent charger cette configuration sans secret avec --config : json Copier { \"provider\" : \"openai\" , \"model\" : \"\" , \"api_key_env\" : \"OPENAI_API_KEY\" } Saisir un modèle retourné par le fournisseur avant d'envoyer un message. Ne pas mettre de vraie clé dans un fichier JSON. settings.base_url remplace l'adresse du service. Le profil Ollama attend la base de son API native ; les serveurs compatibles utilisent généralement une base /v1 . Découvrir modèles et capacités # L'exemple sans interface propose : sh Copier cymcp_chat providers cymcp_chat models examples/chat-ollama.json providers liste les capacités des transports configurés ; models contacte le fournisseur choisi. Un catalogue non pris en charge ne signifie pas que le tchat est indisponible : utiliser un ID exact fourni par l'outil natif. Le modèle choisi s'applique à une nouvelle connexion. Le SDK ne change pas silencieusement de modèle et ne rejoue pas les générations échouées. Ajouter un fournisseur # Implémenter l'interface publique Provider , puis enregistrer un ProviderDescriptor et sa factory avec ProviderRegistry::add . Les méthodes connect , start_session , send et disconnect doivent respecter les capacités annoncées. ProviderConfig fournit arguments, réglages, identifiants, registre d'opérations optionnel et callbacks de droits. Consulter l' intégration . { \"provider\": \"openai\", \"model\": \"\", \"api_key_env\": \"OPENAI_API_KEY\" } cymcp_chat providers cymcp_chat models examples/chat-ollama.json",
+      "headings": [
+        {
+          "id": "profiles",
+          "text": "Profils intégrés",
+          "level": 2
+        },
+        {
+          "id": "configure",
+          "text": "Configurer une connexion",
+          "level": 2
+        },
+        {
+          "id": "models",
+          "text": "Découvrir modèles et capacités",
+          "level": 2
+        },
+        {
+          "id": "extension",
+          "text": "Ajouter un fournisseur",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "code-2-L1",
+        "code-2-L2"
+      ],
+      "languages": [
+        "json",
+        "bash"
+      ],
+      "code": "{\n  \"provider\": \"openai\",\n  \"model\": \"\",\n  \"api_key_env\": \"OPENAI_API_KEY\"\n}\ncymcp_chat providers\ncymcp_chat models examples/chat-ollama.json",
+      "assets": [],
+      "links": [
+        "#/fr/integration/providers"
+      ],
+      "kind": "guide",
+      "revision": "a335ff12e814"
+    },
+    {
+      "id": "quickstart",
+      "title": "Démarrer Chat Lab",
+      "description": "Compiler et ouvrir l'exemple Windows, puis essayer la démonstration Markdown locale.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 1,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"build\">Compiler l&#39;exemple<a class=\"heading-anchor\" href=\"#/fr/quickstart/build\" aria-label=\"Lien vers Compiler l&#39;exemple\">#</a></h2><p>Utiliser Windows 10/11 x64 avec la charge <strong>Développement Desktop en C++</strong> de Visual\nStudio 2022, le Windows SDK et les outils CMake. Placer une copie compatible de\n<a href=\"https://github.com/MrMybal/CyUI\" target=\"_blank\" rel=\"noopener noreferrer\">CyUI</a> à côté du SDK, ou passer son emplacement réel au script.</p>\n<div class=\"code-block\"><div class=\"code-toolbar\"><span>powershell</span><button type=\"button\" data-copy-code>Copier</button></div><pre><code class=\"language-powershell\"><span class=\"code-line\" id=\"L1\" data-line=\"1\">./tools/build-chat.ps1 -CyUISource ../CyUI</span><span class=\"code-line\" id=\"L2\" data-line=\"2\">./out/ChatLab-windows-x64/cymcp_chat_app.exe</span></code></pre></div><p>Le script compile et prépare <code>out/ChatLab-windows-x64</code>. Conserver ensemble l&#39;exécutable,\n<code>Documentation</code>, <code>licenses</code>, <code>LICENSE</code> et <code>THIRD_PARTY_NOTICES.md</code>.\nLe runtime Microsoft Visual C++ 2015–2022 x64 est nécessaire. Le rendu utilise DX11,\navec repli WARP.</p>\n<h2 id=\"demo\">Essayer sans compte<a class=\"heading-anchor\" href=\"#/fr/quickstart/demo\" aria-label=\"Lien vers Essayer sans compte\">#</a></h2><ol>\n<li>Lancer l&#39;application. <strong>L&#39;anglais</strong> est la langue par défaut.</li>\n<li>Conserver <strong>Demo / Markdown (no AI)</strong> et choisir <strong>Connect / New chat</strong>.</li>\n<li>Saisir un message et choisir <strong>Send</strong>, ou appuyer sur <strong>Ctrl+Entrée</strong>.</li>\n<li>Lire le Markdown pendant son affichage progressif, sélectionner du texte ou copier un message.</li>\n</ol>\n<figure data-cydoc-module=\"image\" data-cydoc-id=\"chat-overview\" data-config=\"{&quot;id&quot;:&quot;chat-overview&quot;,&quot;src&quot;:&quot;assets/chat-lab-fr.png&quot;,&quot;alt&quot;:&quot;Chat Lab en français avec sa démonstration Markdown locale&quot;,&quot;controls&quot;:&quot;minimal&quot;}\"><img src=\"assets/chat-lab-fr.png\" alt=\"Chat Lab en français avec sa démonstration Markdown locale\" loading=\"lazy\" decoding=\"async\"></figure><p>La démonstration produit un texte local fixe ; elle n&#39;appelle aucun modèle. Choisir un\n<a href=\"#/fr/providers\">fournisseur</a> pour une vraie conversation. <strong>Entrée</strong> ajoute une ligne dans la saisie.</p>\n<h2 id=\"language\">Langue et aide<a class=\"heading-anchor\" href=\"#/fr/quickstart/language\" aria-label=\"Lien vers Langue et aide\">#</a></h2><p>Dans <strong>Appearance</strong>, sélectionner <strong>Français</strong> ou <strong>English</strong>, puis un thème CyUI.\nReconnecter la démonstration après un changement de langue pour produire le nouveau texte\ndans cette langue. Les réponses IA suivent le modèle et la consigne ; changer la langue\nde l&#39;interface ne traduit pas les messages existants.</p>\n<p><strong>Aide (F1)</strong> ouvre ce manuel sur <a href=\"#/fr/chat-lab\">Chat Lab</a>. Le dossier local complet doit\naccompagner l&#39;exécutable. Le lecteur n&#39;a pas besoin de serveur HTTP.</p>\n",
+      "text": "Compiler l'exemple # Utiliser Windows 10/11 x64 avec la charge Développement Desktop en C++ de Visual Studio 2022, le Windows SDK et les outils CMake. Placer une copie compatible de CyUI à côté du SDK, ou passer son emplacement réel au script. powershell Copier ./tools/build-chat.ps1 -CyUISource ../CyUI ./out/ChatLab-windows-x64/cymcp_chat_app.exe Le script compile et prépare out/ChatLab-windows-x64 . Conserver ensemble l'exécutable, Documentation , licenses , LICENSE et THIRD_PARTY_NOTICES.md . Le runtime Microsoft Visual C++ 2015–2022 x64 est nécessaire. Le rendu utilise DX11, avec repli WARP. Essayer sans compte # Lancer l'application. L'anglais est la langue par défaut. Conserver Demo / Markdown (no AI) et choisir Connect / New chat . Saisir un message et choisir Send , ou appuyer sur Ctrl+Entrée . Lire le Markdown pendant son affichage progressif, sélectionner du texte ou copier un message. La démonstration produit un texte local fixe ; elle n'appelle aucun modèle. Choisir un fournisseur pour une vraie conversation. Entrée ajoute une ligne dans la saisie. Langue et aide # Dans Appearance , sélectionner Français ou English , puis un thème CyUI. Reconnecter la démonstration après un changement de langue pour produire le nouveau texte dans cette langue. Les réponses IA suivent le modèle et la consigne ; changer la langue de l'interface ne traduit pas les messages existants. Aide (F1) ouvre ce manuel sur Chat Lab . Le dossier local complet doit accompagner l'exécutable. Le lecteur n'a pas besoin de serveur HTTP. ./tools/build-chat.ps1 -CyUISource ../CyUI ./out/ChatLab-windows-x64/cymcp_chat_app.exe",
+      "headings": [
+        {
+          "id": "build",
+          "text": "Compiler l'exemple",
+          "level": 2
+        },
+        {
+          "id": "demo",
+          "text": "Essayer sans compte",
+          "level": 2
+        },
+        {
+          "id": "language",
+          "text": "Langue et aide",
+          "level": 2
+        }
+      ],
+      "anchors": [
+        "L1",
+        "L2"
+      ],
+      "languages": [
+        "powershell"
+      ],
+      "code": "./tools/build-chat.ps1 -CyUISource ../CyUI\n./out/ChatLab-windows-x64/cymcp_chat_app.exe",
+      "assets": [
+        "assets/chat-lab-fr.png"
+      ],
+      "links": [
+        "https://github.com/MrMybal/CyUI",
+        "#/fr/providers",
+        "#/fr/chat-lab"
+      ],
+      "kind": "media",
+      "revision": "faba09315537"
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Résoudre un problème de connexion",
+      "description": "Comprendre les erreurs fournisseur, les interruptions et l'absence du manuel local.",
+      "section": "Guides",
+      "parent": "overview",
+      "order": 4,
+      "sourceRevision": "1",
+      "locale": "fr",
+      "html": "<h2 id=\"connection\">Erreurs de connexion<a class=\"heading-anchor\" href=\"#/fr/troubleshooting/connection\" aria-label=\"Lien vers Erreurs de connexion\">#</a></h2><table>\n<thead>\n<tr>\n<th>Erreur ou symptôme</th>\n<th>Action</th>\n</tr>\n</thead>\n<tbody><tr>\n<td><code>ExecutableMissing</code></td>\n<td>Sélectionner le CLI natif et vérifier son exécution dans le compte/environnement voulu.</td>\n</tr>\n<tr>\n<td><code>AuthenticationRequired</code></td>\n<td>Vérifier l&#39;authentification dans l&#39;outil natif, ou fournir l&#39;identifiant API par variable/champ en mémoire.</td>\n</tr>\n<tr>\n<td><code>ProviderError</code> après connexion</td>\n<td>Vérifier l&#39;ID exact du modèle, les droits du compte et l&#39;erreur native hors de l&#39;app.</td>\n</tr>\n<tr>\n<td>Catalogue <code>Unsupported</code></td>\n<td>Saisir un vrai ID de modèle ; certains transports n&#39;exposent pas la découverte.</td>\n</tr>\n<tr>\n<td>Adresse locale injoignable</td>\n<td>Démarrer le service et vérifier URL de base, port et format API.</td>\n</tr>\n<tr>\n<td><code>UnsupportedContent</code></td>\n<td>Choisir un modèle/transport compatible avec cette pièce jointe, ou la retirer.</td>\n</tr>\n</tbody></table>\n<p>Le compte CLI d&#39;un processus lancé peut différer de l&#39;environnement d&#39;un autre terminal.\nUtiliser <code>process.environment</code> si l&#39;hôte a besoin de valeurs propres à l&#39;enfant. Une connexion\nréussie ne garantit pas que le compte peut effectuer une génération.</p>\n<h2 id=\"interrupted\">Conversations interrompues<a class=\"heading-anchor\" href=\"#/fr/troubleshooting/interrupted\" aria-label=\"Lien vers Conversations interrompues\">#</a></h2><p><code>Cancelled</code> indique une interruption, pas une réponse finale réussie. Un flux tronqué peut produire\n<code>UnexpectedEOF</code>. Conserver le texte partiel, reconnecter explicitement, puis choisir le message suivant.\n<code>SessionInvalid</code> indique que la session exacte n&#39;a pas pu être reprise ; garder son historique enregistré.</p>\n<p><code>Backpressure</code> ou <code>ContextTooLarge</code> indique un budget de file, d&#39;affichage ou de contenu atteint.\nSauvegarder puis créer une conversation, ou réduire les pièces jointes. ChatUI borne ses événements\net son texte affiché ; il ne supprime pas silencieusement une conversation pour respecter son budget.</p>\n<h2 id=\"help\">Manuel absent<a class=\"heading-anchor\" href=\"#/fr/troubleshooting/help\" aria-label=\"Lien vers Manuel absent\">#</a></h2><p>Conserver <code>Documentation/Documentation.html</code> et le dossier complet <code>Documentation/DocData</code> à côté\nde Chat Lab. F1 ouvre cette copie installée, sans repli en ligne. Si le dossier manque, le restaurer\ndepuis le paquet applicatif ou reconstruire le paquet. Ouvrir directement le HTML pour vérifier ses\nscripts et images locaux. Le lecteur ne demande ni Node.js ni serveur web.</p>\n",
+      "text": "Erreurs de connexion # Erreur ou symptôme Action ExecutableMissing Sélectionner le CLI natif et vérifier son exécution dans le compte/environnement voulu. AuthenticationRequired Vérifier l'authentification dans l'outil natif, ou fournir l'identifiant API par variable/champ en mémoire. ProviderError après connexion Vérifier l'ID exact du modèle, les droits du compte et l'erreur native hors de l'app. Catalogue Unsupported Saisir un vrai ID de modèle ; certains transports n'exposent pas la découverte. Adresse locale injoignable Démarrer le service et vérifier URL de base, port et format API. UnsupportedContent Choisir un modèle/transport compatible avec cette pièce jointe, ou la retirer. Le compte CLI d'un processus lancé peut différer de l'environnement d'un autre terminal. Utiliser process.environment si l'hôte a besoin de valeurs propres à l'enfant. Une connexion réussie ne garantit pas que le compte peut effectuer une génération. Conversations interrompues # Cancelled indique une interruption, pas une réponse finale réussie. Un flux tronqué peut produire UnexpectedEOF . Conserver le texte partiel, reconnecter explicitement, puis choisir le message suivant. SessionInvalid indique que la session exacte n'a pas pu être reprise ; garder son historique enregistré. Backpressure ou ContextTooLarge indique un budget de file, d'affichage ou de contenu atteint. Sauvegarder puis créer une conversation, ou réduire les pièces jointes. ChatUI borne ses événements et son texte affiché ; il ne supprime pas silencieusement une conversation pour respecter son budget. Manuel absent # Conserver Documentation/Documentation.html et le dossier complet Documentation/DocData à côté de Chat Lab. F1 ouvre cette copie installée, sans repli en ligne. Si le dossier manque, le restaurer depuis le paquet applicatif ou reconstruire le paquet. Ouvrir directement le HTML pour vérifier ses scripts et images locaux. Le lecteur ne demande ni Node.js ni serveur web.",
+      "headings": [
+        {
+          "id": "connection",
+          "text": "Erreurs de connexion",
+          "level": 2
+        },
+        {
+          "id": "interrupted",
+          "text": "Conversations interrompues",
+          "level": 2
+        },
+        {
+          "id": "help",
+          "text": "Manuel absent",
+          "level": 2
+        }
+      ],
+      "anchors": [],
+      "languages": [],
+      "code": "",
+      "assets": [],
+      "links": [],
+      "kind": "guide",
+      "revision": "a80185c94d03"
+    }
+  ]
+}

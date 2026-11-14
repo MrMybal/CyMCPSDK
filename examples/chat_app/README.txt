@@ -1,6 +1,9 @@
-CyMCPSDK Chat Lab 0.5.1 - Windows x64
+CyMCPSDK Chat Lab 0.5.2 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
+English is the default, including the local Markdown demonstration.
+Help (F1) opens the supplied offline manual in the selected language.
+Keep the complete Documentation/ directory beside the executable.
 Demo / Markdown uses deterministic local text and needs no AI account or model.
 Select a provider, enter a model ID when required, then Connect / New chat.
 Refresh model catalogue queries the connected provider. A selected model applies

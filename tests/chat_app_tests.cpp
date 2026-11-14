@@ -1,3 +1,4 @@
+#include "../examples/chat_app/help.hpp"
 #include "test.hpp"
 #include <cymcp/mcp.hpp>
 #include <fstream>
@@ -254,6 +255,23 @@ int main(int argc, char** argv) {
             return 2;
         const auto output = std::filesystem::current_path() / "chat-app-validation";
         private_directory(output);
+        {
+            const auto folder = output / std::filesystem::u8path("help space é#") / "Documentation";
+            private_directory(folder);
+            std::ofstream(folder / "Documentation.html") << "<!doctype html><title>Help</title>";
+            const auto executable = folder.parent_path() / "chat.exe";
+            const auto english = chat_example::help_url(executable, false);
+            check(english.find(L"%20") != std::wstring::npos &&
+                      english.find(L"%C3%A9") != std::wstring::npos &&
+                      english.find(L"%23") != std::wstring::npos &&
+                      english.ends_with(L"#/en/chat-lab"),
+                  "Local help URL encodes spaces, UTF-8 and filename fragments");
+            check(chat_example::help_url(executable, true).ends_with(L"#/fr/chat-lab"),
+                  "Local help uses the explicitly selected French locale");
+            expect_error("DocumentationMissing", [&] {
+                chat_example::help_url(output / "missing-manual" / "chat.exe", false);
+            });
+        }
         ModelServer model;
         Json report = Json::array();
         for (const std::string id :

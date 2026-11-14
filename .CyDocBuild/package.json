@@ -1,0 +1,13 @@
+{
+  "name": "cymcpsdk-documentation",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "devDependencies": {
+    "cydoc": "file:vendor/cydoc-0.1.0-tools.tgz"
+  }
+}
