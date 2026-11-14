@@ -6,3 +6,13 @@
 __pycache__/
 /build-*.log
 /build-toolchain.py
+/.tools/
+/CMakeUserPresets.json
+.env
+.env.*
+!.env.example
+!.env.template
+*.local.json
+*.key
+*.p12
+*.pfx
