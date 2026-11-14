@@ -188,10 +188,8 @@ Json history_for(const Json& messages, ApiProtocol protocol, std::string& system
     for (const auto& message : messages) {
         auto role = message.at("role").get<std::string>();
         auto content = message.value("content", Json(""));
-        if (!content.is_string())
-            throw Error("Unsupported", "Native API adapters currently accept text input");
         if (protocol == ApiProtocol::AnthropicMessages && role == "system") {
-            system += content.get<std::string>() + "\n";
+            system += detail::content_text(content) + "\n";
             continue;
         }
         if (role == "tool") {
@@ -220,8 +218,35 @@ Json history_for(const Json& messages, ApiProtocol protocol, std::string& system
                 history.push_back({{"role", role}, {"content", blocks}});
             else
                 history.push_back(blocks);
-        } else
-            history.push_back({{"role", role}, {"content", content}});
+        } else if (protocol == ApiProtocol::Ollama && content.is_array()) {
+            validate_content(content);
+            Json images = Json::array();
+            std::string text;
+            for (const auto& block : content) {
+                auto type = block.at("type").get<std::string>();
+                if (type == "text")
+                    text += block.at("text").get<std::string>();
+                else if (type == "image")
+                    images.push_back(block.at("data"));
+                else if (type == "resource" && block.at("resource").contains("text"))
+                    text += "\n" + block.at("resource").at("uri").get<std::string>() + "\n" +
+                            block.at("resource").at("text").get<std::string>();
+                else
+                    throw Error("UnsupportedContent",
+                                "Ollama chat supports text and embedded images");
+            }
+            Json wire_message = {{"role", role}, {"content", text}};
+            if (!images.empty())
+                wire_message["images"] = images;
+            history.push_back(std::move(wire_message));
+        } else {
+            auto format =
+                protocol == ApiProtocol::OpenAIResponses     ? detail::ContentFormat::Responses
+                : protocol == ApiProtocol::AnthropicMessages ? detail::ContentFormat::Anthropic
+                                                             : detail::ContentFormat::Ollama;
+            history.push_back(
+                {{"role", role}, {"content", detail::content_for(content, format, role)}});
+        }
     }
     return history;
 }
@@ -231,7 +256,12 @@ void append(std::string& text, const std::string& delta) {
         throw Error("ResponseTooLarge", "API answer exceeds limit");
 }
 } // namespace
-ApiProvider::ApiProvider(ApiOptions options) : options_(std::move(options)) {
+ApiProvider::ApiProvider(ApiOptions options)
+    : Provider(options.protocol == ApiProtocol::OpenAIResponses     ? "openai"
+               : options.protocol == ApiProtocol::AnthropicMessages ? "anthropic"
+               : options.protocol == ApiProtocol::Ollama            ? "ollama"
+                                                                    : "openrouter"),
+      options_(std::move(options)) {
     if (options_.base_url.empty())
         switch (options_.protocol) {
         case ApiProtocol::OpenAIResponses:
@@ -256,7 +286,17 @@ ApiProvider::ApiProvider(ApiOptions options) : options_(std::move(options)) {
         throw Error("InvalidOptions", "Invalid API options");
 }
 ProviderCapabilities ApiProvider::capabilities() const {
-    return {true, false, static_cast<bool>(options_.tools), true, false};
+    bool chat = options_.protocol == ApiProtocol::OpenRouter;
+    return {true,
+            false,
+            static_cast<bool>(options_.tools),
+            true,
+            true,
+            true,
+            chat,
+            options_.protocol == ApiProtocol::OpenAIResponses ||
+                options_.protocol == ApiProtocol::AnthropicMessages,
+            false};
 }
 void ApiProvider::connect(const CallContext& input) {
     auto context = input;

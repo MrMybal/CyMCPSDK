@@ -37,7 +37,11 @@ void no_host_tools(const ProviderConfig& config) {
 ProviderRegistry::ProviderRegistry(bool builtins) {
     if (!builtins)
         return;
-    add({"codex", "Codex", "app-server-stdio", "native-account", {true, true, true, true, false}},
+    add({"codex",
+         "Codex",
+         "app-server-stdio",
+         "native-account",
+         {true, true, true, true, true, true, false, false, true}},
         [](const ProviderConfig& config) {
             CodexOptions options;
             options.process = process_for(config, "codex");
@@ -57,7 +61,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
          "Claude Code",
          "cli-stream-json",
          "native-account",
-         {true, true, true, false, false}},
+         {true, true, true, false, true, true, false, true, true}},
         [](const ProviderConfig& config) {
             no_host_tools(config);
             ClaudeOptions options;
@@ -68,6 +72,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
             options.allowed_tools =
                 config.settings.value("allowed_tools", std::vector<std::string>());
             options.allow_all_actions = config.settings.value("allow_all_actions", false);
+            options.persistent = config.settings.value("persistent", true);
             return std::make_shared<ClaudeProvider>(std::move(options));
         });
     for (auto protocol : {AgentCliProtocol::OpenCode, AgentCliProtocol::Antigravity,
@@ -78,7 +83,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
         std::string id = agy       ? "antigravity"
                          : command ? "command-code"
                          : buddy   ? "codebuddy"
-                                   : "opencode";
+                                   : "opencode-cli";
         add({id,
              agy       ? "Antigravity"
              : command ? "Command Code"
@@ -89,7 +94,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
              : buddy   ? "cli-stream-json"
                        : "cli-jsonl-v1",
              "native-account-unverified-until-generation",
-             {true, true, true, !buddy, false}},
+             {true, true, true, !buddy, false, false, false, false, agy}},
             [protocol, agy, command, buddy](const ProviderConfig& config) {
                 no_host_tools(config);
                 AgentCliOptions options;
@@ -101,6 +106,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                 options.connect_timeout = duration(config.settings, "connect_timeout_ms", 15000);
                 options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
                 options.allow_all_actions = config.settings.value("allow_all_actions", false);
+                options.persistent = config.settings.value("persistent", agy);
                 options.native_settings = config.settings.value("native_settings", Json::object());
                 auto mcp_file = config.settings.value("mcp_config_file", std::string());
                 options.mcp_config_file =
@@ -110,16 +116,29 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                 return std::make_shared<AgentCliProvider>(std::move(options));
             });
     }
-    for (const std::string id : {"devin", "acp"}) {
+    for (const std::string id : {"devin", "acp", "opencode", "gemini", "qwen-code", "kimi", "goose",
+                                 "command-code-acp", "codebuddy-acp"}) {
         add({id,
-             id == "devin" ? "Devin (Cognition)" : "Agent Client Protocol",
+             id == "devin"              ? "Devin (Cognition)"
+             : id == "opencode"         ? "OpenCode (ACP)"
+             : id == "gemini"           ? "Gemini CLI"
+             : id == "qwen-code"        ? "Qwen Code"
+             : id == "kimi"             ? "Kimi Code"
+             : id == "goose"            ? "goose"
+             : id == "command-code-acp" ? "Command Code (ACP)"
+             : id == "codebuddy-acp"    ? "CodeBuddy (ACP)"
+                                        : "Agent Client Protocol",
              "acp-v1-stdio",
              "native-account-unverified-until-session",
-             {true, true, true, true, false}},
+             {true, true, true, true, true, true, true, true, true}},
             [id](const ProviderConfig& config) {
                 no_host_tools(config);
                 AcpOptions options;
-                auto process = process_for(config, id == "devin" ? "devin" : "");
+                auto process = process_for(config, id == "acp"                ? ""
+                                                   : id == "qwen-code"        ? "qwen"
+                                                   : id == "command-code-acp" ? "command-code"
+                                                   : id == "codebuddy-acp"    ? "codebuddy"
+                                                                              : id.c_str());
                 options.process = process;
                 options.connect_timeout = duration(config.settings, "connect_timeout_ms", 15000);
                 options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
@@ -127,6 +146,9 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                 options.approvals = allow ? Policy::allow_all() : config.approvals;
                 options.mode = config.settings.value("mode", std::string());
                 options.mcp_servers = config.settings.value("mcp_servers", Json::array());
+                options.client_capabilities =
+                    config.settings.value("client_capabilities", Json::object());
+                options.request_handler = config.request_handler;
                 std::vector<std::string> arguments;
                 if (id == "devin") {
                     options.process.arguments.insert(
@@ -134,8 +156,13 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                         {"--permission-mode", allow ? "dangerous" : "normal",
                          "--respect-workspace-trust", allow ? "false" : "true"});
                     arguments = {"acp"};
-                } else
-                    arguments = config.settings.value("acp_arguments", std::vector<std::string>());
+                } else {
+                    auto defaults = id == "acp" ? std::vector<std::string>()
+                                    : id == "gemini" || id == "qwen-code" || id == "codebuddy-acp"
+                                        ? std::vector<std::string>{"--acp"}
+                                        : std::vector<std::string>{"acp"};
+                    arguments = config.settings.value("acp_arguments", defaults);
+                }
                 options.process.arguments.insert(options.process.arguments.end(), arguments.begin(),
                                                  arguments.end());
                 auto models = config.settings.value(
@@ -168,7 +195,10 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
              name,
              transport,
              protocol == ApiProtocol::Ollama ? "optional-api-key" : "api-key",
-             {true, false, true, true, false}},
+             {true, false, true, true, true, true, protocol == ApiProtocol::OpenRouter,
+              protocol == ApiProtocol::OpenAIResponses ||
+                  protocol == ApiProtocol::AnthropicMessages,
+              false}},
             [protocol](const ProviderConfig& config) {
                 ApiOptions options;
                 options.protocol = protocol;
@@ -188,7 +218,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                                 : "Compatible Chat Completions",
              "chat-completions-sse",
              "optional-api-key",
-             {true, false, true, true, true}},
+             {true, false, true, true, true, true, true, false, false}},
             [id](const ProviderConfig& config) {
                 HttpChatOptions options;
                 options.base_url = config.settings.value(
@@ -229,7 +259,11 @@ Json ProviderRegistry::describe() const {
                           {"resume", c.resume},
                           {"tools", c.tools},
                           {"model_catalogue", c.model_catalogue},
-                          {"multimodal", c.multimodal}}}});
+                          {"multimodal", c.multimodal},
+                          {"image_input", c.image_input},
+                          {"audio_input", c.audio_input},
+                          {"file_input", c.file_input},
+                          {"persistent_process", c.persistent_process}}}});
     }
     return rows;
 }
@@ -250,6 +284,7 @@ std::shared_ptr<Provider> ProviderRegistry::create(const std::string& id,
         auto provider = factory(config);
         if (!provider)
             throw Error("InvalidProvider", "Provider factory returned null");
+        provider->identity_ = id;
         return provider;
     } catch (const Json::exception&) {
         throw Error("InvalidOptions", "Invalid provider setting type");

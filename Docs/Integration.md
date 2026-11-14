@@ -109,7 +109,8 @@ auto result = conversation.send_async(workers, "Export the current document", co
 
 Une seule opération active ou planifiée par conversation. Chaque conversation native possède son connecteur.
 Conserver l'executor, la file et les objets capturés jusqu'à la fin du futur. `history()` retourne un snapshot
-de données ; le stockage durable et le chiffrement éventuel relèvent de l'application hôte.
+de données. Le [guide des conversations](Conversations.md) décrit `ConversationStore`, les checkpoints,
+les pièces jointes et la reconnexion. Le stockage est facultatif ; sa conservation et son chiffrement sont choisis par l'hôte.
 
 Événements : `TurnStarted`, `TextDelta`, `ThinkingDelta` lorsque disponible, `ToolStarted`, `ToolCompleted`,
 `UsageUpdated`, `TurnCompleted`, `TurnCancelled`, `TurnFailed`. Les deltas et le texte final sont des présentations
@@ -124,13 +125,13 @@ Un host qui choisit explicitement l'accès complet peut sélectionner `danger-fu
 
 Pour Claude, renseigner `ClaudeOptions.process.executable`. L'adaptateur utilise `auth status`, puis
 `-p --output-format stream-json --verbose --include-partial-messages`. Il reprend l'ID exact avec `--resume`.
-Le processus est recréé à chaque message ; la conversation native est reprise. Le mode persistant bidirectionnel
-Claude n'est pas implémenté. `mcp_servers` permet de connecter le serveur de l'application ; `allowed_tools`
+Le mode par défaut ajoute `--input-format stream-json` et conserve stdin ouvert entre les tours.
+`persistent=false` garde le mode par tour. `mcp_servers` permet de connecter le serveur de l'application ; `allowed_tools`
 sélectionne les outils natifs. `allow_all_actions=true` sélectionne explicitement le mode permissif du fournisseur.
 
 Les scripts `.cmd` et `.ps1` ne sont pas exécutés par un shell. Si nécessaire, fournir `node.exe` comme exécutable
-avec le script d'entrée comme premier argument. Les prompts Claude/Antigravity passent par stdin ; OpenCode
-les reçoit comme argument individuel après `--`. L'installation, la connexion au
+avec le script d'entrée comme premier argument. Les prompts Claude/Antigravity/ACP passent par stdin ; le profil
+historique `opencode-cli` les reçoit comme argument individuel après `--`. L'installation, la connexion au
 compte et la disponibilité du modèle sont trois états distincts. Le SDK ne crée pas de compte et n'effectue pas
 de génération facturée pendant ses tests hors ligne.
 
@@ -138,7 +139,8 @@ Le connecteur HTTP utilise `/models` et `/chat/completions`, le streaming SSE, l
 et une limite de tours d'outils. Il préserve les résultats d'outils dans l'historique après une erreur afin que
 l'application puisse inspecter ce qui s'est déjà exécuté. Aucune relance automatique d'une action n'est effectuée.
 Le transport peut transmettre des blocs multimodaux ; leur prise en charge dépend de l'endpoint et du modèle.
-Les adaptateurs CLI livrés prennent actuellement du texte. Les clés sont fournies en mémoire par l'hôte,
+Les capacités multimodales varient selon le transport et le modèle : voir [Conversations.md](Conversations.md).
+Les clés sont fournies en mémoire par l'hôte,
 par exemple depuis son coffre système ; aucun fichier de secrets ni journal brut de protocole n'est créé.
 
 ## Moteur local

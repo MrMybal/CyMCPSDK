@@ -5,12 +5,23 @@ struct CodexProvider::Impl {
     CodexOptions options;
     std::unique_ptr<Process> process;
     std::mutex mutex;
+    std::mutex cancellation_mutex;
+    Cancellation active;
     std::int64_t counter = 0;
     std::deque<Json> pending;
     std::size_t pending_bytes = 0;
     std::map<std::string, std::string> tool_names;
     std::string active_session;
     explicit Impl(CodexOptions config) : options(std::move(config)) {}
+    CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
+        auto context = input;
+        context.cancellation = input.cancellation.child();
+        context.cancellation.deadline =
+            std::min(context.cancellation.deadline, Clock::now() + timeout);
+        std::lock_guard lock(cancellation_mutex);
+        active = context.cancellation;
+        return context;
+    }
     Json read(const Cancellation& cancel) {
         ProcessLine line;
         while (process->next(line, cancel)) {
@@ -106,17 +117,16 @@ struct CodexProvider::Impl {
     }
 };
 CodexProvider::CodexProvider(CodexOptions options)
-    : impl_(std::make_unique<Impl>(std::move(options))) {}
+    : Provider("codex"), impl_(std::make_unique<Impl>(std::move(options))) {}
 CodexProvider::~CodexProvider() = default;
 ProviderCapabilities CodexProvider::capabilities() const {
-    return {true, true, static_cast<bool>(impl_->options.tools), true, false};
+    return {true,  true, static_cast<bool>(impl_->options.tools), true, true, true, false,
+            false, true};
 }
 void CodexProvider::connect(const CallContext& input) {
-    auto context = input;
-    context.cancellation.deadline =
-        std::min(context.cancellation.deadline, Clock::now() + impl_->options.connect_timeout);
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.connect_timeout);
     if (p.process)
         throw Error("InvalidState", "Codex already connected");
     auto config = p.options.process;
@@ -125,6 +135,7 @@ void CodexProvider::connect(const CallContext& input) {
     p.pending_bytes = 0;
     try {
         p.process = std::make_unique<Process>(config);
+        context.emit("ProcessStarted", {{"transport", "codex-app-server"}});
         p.rpc("initialize",
               {{"clientInfo", {{"name", "cymcp_sdk"}, {"version", version}}},
                {"capabilities", {{"experimentalApi", static_cast<bool>(p.options.tools)}}}},
@@ -139,11 +150,9 @@ void CodexProvider::connect(const CallContext& input) {
     }
 }
 Json CodexProvider::list_models(const CallContext& input) {
-    auto context = input;
-    context.cancellation.deadline =
-        std::min(context.cancellation.deadline, Clock::now() + impl_->options.connect_timeout);
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.connect_timeout);
     if (!p.process)
         throw Error("InvalidState", "Connect Codex first");
     Json models = Json::array(), params = Json::object();
@@ -167,11 +176,9 @@ Json CodexProvider::list_models(const CallContext& input) {
 }
 Session CodexProvider::start_session(std::string model, std::string resume,
                                      const CallContext& input, std::string system) {
-    auto context = input;
-    context.cancellation.deadline =
-        std::min(context.cancellation.deadline, Clock::now() + impl_->options.connect_timeout);
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.connect_timeout);
     if (!p.process)
         throw Error("InvalidState", "Connect Codex first");
     Json params = {{"approvalPolicy", p.options.approval_policy}, {"sandbox", p.options.sandbox}};
@@ -212,15 +219,14 @@ Session CodexProvider::start_session(std::string model, std::string resume,
     return {native, actual_model};
 }
 ChatResult CodexProvider::send(Session& session, Json& messages, const CallContext& input) {
-    auto context = input;
-    context.cancellation.deadline =
-        std::min(context.cancellation.deadline, Clock::now() + impl_->options.turn_timeout);
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
+    auto context = p.begin(input, p.options.turn_timeout);
     if (!p.process || session.id.empty())
         throw Error("InvalidState", "Connect and start a Codex session first");
-    if (messages.empty() || !messages.back()["content"].is_string())
-        throw Error("Unsupported", "Codex connector currently accepts text input");
+    if (messages.empty())
+        throw Error("InvalidParameters", "Messages required");
+    auto content = detail::content_for(messages.back().at("content"), detail::ContentFormat::Codex);
     std::string turn_id;
     p.active_session = session.id;
     struct SessionCleanup {
@@ -234,12 +240,11 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
     std::vector<std::string> order;
     std::map<std::string, std::string> final_items;
     try {
-        auto turn = p.rpc(
-            "turn/start",
-            {{"threadId", session.id},
-             {"input", Json::array({{{"type", "text"}, {"text", messages.back()["content"]}}})},
-             {"approvalPolicy", p.options.approval_policy}},
-            context);
+        auto turn = p.rpc("turn/start",
+                          {{"threadId", session.id},
+                           {"input", content},
+                           {"approvalPolicy", p.options.approval_policy}},
+                          context);
         turn_id = turn.at("turn").at("id").get<std::string>();
         while (true) {
             context.cancellation.check();
@@ -278,8 +283,41 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
                 context.emit("UsageUpdated", result.usage);
             } else if (method == "turn/completed" && params.at("turn").at("id") == turn_id) {
                 auto final = params.at("turn");
-                if (final.value("status", std::string()) != "completed")
-                    throw Error("ProviderError", "Codex turn did not complete successfully");
+                if (final.value("status", std::string()) != "completed") {
+                    auto error = final.value("error", Json());
+                    auto info = error.is_object() ? error.value("codexErrorInfo", Json()) : Json();
+                    std::string category = "other";
+                    int status = 0;
+                    if (info.is_string())
+                        category = info.get<std::string>();
+                    else if (info.is_object() && info.size() == 1) {
+                        category = info.begin().key();
+                        auto details = info.begin().value();
+                        if (details.is_object() &&
+                            details.value("httpStatusCode", Json()).is_number_integer())
+                            status = details.at("httpStatusCode").get<int>();
+                    }
+                    // Only protocol identifiers and numeric HTTP status leave the transport.
+                    if (category.size() > 80 ||
+                        category.find_first_not_of(
+                            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
+                            std::string::npos)
+                        category = "other";
+                    std::string code = category == "unauthorized" || status == 401 || status == 403
+                                           ? "AuthenticationRequired"
+                                       : category == "rateLimitExceeded" ||
+                                               category == "usageLimitExceeded" || status == 429
+                                           ? "RateLimited"
+                                       : category == "contextWindowExceeded" ? "ContextTooLarge"
+                                       : final.value("status", std::string()) == "interrupted"
+                                           ? "Cancelled"
+                                           : "ProviderError";
+                    context.emit(
+                        "ProviderError",
+                        {{"code", code}, {"native_code", category}, {"http_status", status}});
+                    throw Error(code, "Codex turn failed: " + category +
+                                          (status ? " (HTTP " + std::to_string(status) + ")" : ""));
+                }
                 for (const auto& id : order)
                     result.text += final_items[id];
                 if (order.empty())
@@ -294,13 +332,14 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
     } catch (const Error& e) {
         if ((e.code == "Cancelled" || e.code == "Timeout") && !turn_id.empty()) {
             try {
+                Cancellation cleanup;
+                cleanup.deadline = Clock::now() + std::chrono::seconds(2);
                 p.process->write(Json({{"id", ++p.counter},
                                        {"method", "turn/interrupt"},
                                        {"params", {{"threadId", session.id}, {"turnId", turn_id}}}})
-                                     .dump() +
-                                 "\n");
-                Cancellation cleanup;
-                cleanup.deadline = Clock::now() + std::chrono::seconds(2);
+                                         .dump() +
+                                     "\n",
+                                 cleanup);
                 while (true) {
                     auto v = p.next(cleanup);
                     if (v.contains("method") && v.contains("id")) {
@@ -328,6 +367,10 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
     }
 }
 void CodexProvider::disconnect() noexcept {
+    {
+        std::lock_guard lock(impl_->cancellation_mutex);
+        impl_->active.cancel();
+    }
     std::lock_guard lock(impl_->mutex);
     impl_->process.reset();
     impl_->pending.clear();

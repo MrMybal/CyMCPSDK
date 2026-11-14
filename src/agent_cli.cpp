@@ -30,7 +30,12 @@ void native_id(Session& session, const Json& value, const char* key) {
     session.id = std::move(id);
 }
 } // namespace
-AgentCliProvider::AgentCliProvider(AgentCliOptions options) : options_(std::move(options)) {
+AgentCliProvider::AgentCliProvider(AgentCliOptions options)
+    : Provider(options.protocol == AgentCliProtocol::OpenCode      ? "opencode-cli"
+               : options.protocol == AgentCliProtocol::Antigravity ? "antigravity"
+               : options.protocol == AgentCliProtocol::CommandCode ? "command-code"
+                                                                   : "codebuddy"),
+      options_(std::move(options)) {
     if (!options_.native_settings.is_object() || options_.connect_timeout.count() <= 0 ||
         options_.turn_timeout.count() <= 0 || options_.connect_timeout > std::chrono::hours(24) ||
         options_.turn_timeout > std::chrono::hours(24))
@@ -41,13 +46,25 @@ AgentCliProvider::AgentCliProvider(AgentCliOptions options) : options_(std::move
     if (options_.protocol == AgentCliProtocol::CommandCode && !options_.native_settings.empty())
         throw Error("Unsupported",
                     "Use an explicit Command Code argument prefix for native configuration");
+    if (options_.persistent && options_.protocol != AgentCliProtocol::Antigravity)
+        throw Error("Unsupported",
+                    "Persistent stream input is implemented for Antigravity; use ACP for OpenCode");
+}
+AgentCliProvider::~AgentCliProvider() {
+    disconnect();
 }
 ProviderCapabilities AgentCliProvider::capabilities() const {
     bool buddy = options_.protocol == AgentCliProtocol::CodeBuddy;
-    return {true, true,
+    return {true,
+            true,
             !buddy || options_.allow_all_actions || !options_.mcp_config_file.empty() ||
                 !options_.allowed_tools.empty(),
-            !buddy, false};
+            !buddy,
+            false,
+            false,
+            false,
+            false,
+            options_.persistent};
 }
 CallContext AgentCliProvider::begin(const CallContext& input, std::chrono::milliseconds timeout) {
     auto context = input;
@@ -131,9 +148,9 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
     if (!connected_)
         throw Error("InvalidState", "Connect CLI first");
     auto context = begin(input, options_.turn_timeout);
-    if (!messages.is_array() || messages.empty() || !messages.back().at("content").is_string())
-        throw Error("Unsupported", "This CLI adapter accepts text messages");
-    auto prompt = messages.back().at("content").get<std::string>();
+    if (!messages.is_array() || messages.empty())
+        throw Error("InvalidParameters", "Messages required");
+    auto prompt = detail::content_text(messages.back().at("content"));
     // These CLIs have no portable system-role flag. Supply first-turn context as text.
     if (session.id.empty()) {
         std::string instructions;
@@ -208,7 +225,26 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
         args.insert(args.end(), {"--model", session.model});
     if (!agy && !command && !buddy)
         args.insert(args.end(), {"--", prompt});
-    Process process(config);
+    if (process_ && active_session_ != session.id)
+        throw Error("SessionInvalid", "Persistent CLI session mismatch");
+    bool launched = !process_;
+    if (!process_) {
+        process_ = std::make_unique<Process>(config);
+        active_session_ = session.id;
+    }
+    auto& process = *process_;
+    struct Cleanup {
+        AgentCliProvider& owner;
+        bool keep = false;
+        ~Cleanup() {
+            if (!keep) {
+                owner.process_.reset();
+                owner.active_session_.clear();
+            }
+        }
+    } cleanup{*this};
+    if (launched)
+        context.emit("ProcessStarted", {{"transport", agy ? "agy-stream-input" : "cli-jsonl"}});
     if (agy)
         process.write(Json({{"event", "user"}, {"message", {{"content", prompt}}}}).dump() + "\n",
                       context.cancellation);
@@ -222,7 +258,8 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
                       context.cancellation);
     else if (command)
         process.write(prompt, context.cancellation);
-    process.close_input();
+    if (!options_.persistent)
+        process.close_input();
     ChatResult result;
     bool completed = false;
     std::map<std::string, std::string> snapshots;
@@ -348,13 +385,17 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
                 throw Error("ResponseTooLarge", "CLI answer exceeds limit");
             context.emit("TextDelta", {{"text", text}});
         }
+        if (completed && options_.persistent)
+            break;
     }
-    if (process.wait(context.cancellation) != 0)
+    if ((!options_.persistent || !process.running()) && process.wait(context.cancellation) != 0)
         throw Error("ProcessCrash", "CLI exited with an error");
     if (!completed)
         throw Error("UnexpectedEOF", "CLI stream ended before its final result");
     if (session.id.empty())
         throw Error("ProtocolError", "Missing native CLI session ID");
+    active_session_ = session.id;
+    cleanup.keep = options_.persistent;
     result.finish_reason = "stop";
     messages.push_back({{"role", "assistant"}, {"content", result.text}});
     context.emit("UsageUpdated", result.usage);
@@ -367,6 +408,8 @@ void AgentCliProvider::disconnect() noexcept {
         active_.cancel();
     }
     std::lock_guard lock(mutex_);
+    process_.reset();
+    active_session_.clear();
     connected_ = false;
 }
 } // namespace cymcp

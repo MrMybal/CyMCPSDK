@@ -1,6 +1,6 @@
-# Connecteurs IA — 0.3.0
+# Connecteurs IA — 0.4.0
 
-Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et quinze profils intégrés.
+Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et 22 profils intégrés.
 Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux SDK Python des fournisseurs,
 à CyUI ou à un moteur GPU. Ajouter un fournisseur ne nécessite pas de modifier le service `Conversation`.
 
@@ -9,13 +9,16 @@ Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux S
 | ID du registre | Transport implémenté | Catalogue | Reprise |
 |---|---|---|---|
 | `codex` | App Server persistant, JSON-RPC stdio | Natif, paginé | Thread natif exact |
-| `claude-code` | CLI `stream-json`, processus par tour | `Unsupported` ; ID manuel | Session native exacte |
-| `opencode` | CLI **1.x** `run --format json` | `opencode models` | `--session ID` |
-| `antigravity` | CLI `agy`, stdin/stdout `stream-json` | `agy models`, JSON ou tabulé | `--conversation ID` |
+| `claude-code` | CLI `stream-json` persistant par défaut | `Unsupported` ; ID manuel | Session native exacte |
+| `opencode` | ACP v1 persistant, OpenCode actuel | Options de session annoncées | `session/load` si annoncé |
+| `opencode-cli` | CLI historique **1.x** `run --format json` | `opencode models` | `--session ID` |
+| `antigravity` | CLI `agy`, stdin/stdout `stream-json` persistant par défaut | `agy models`, JSON ou tabulé | `--conversation ID` |
 | `command-code` | CLI NDJSON `AgentEvent` + résultat final | JSON de `--list-models`, sinon `Unsupported` | `--resume ID` |
 | `codebuddy` | CLI Tencent `stream-json`, processus par tour | `Unsupported` ; ID manuel | `--resume ID` |
 | `devin` | CLI Cognition `acp`, JSON-RPC persistant | Commande JSON native puis options de session ACP | `session/load` si annoncé |
 | `acp` | Agent Client Protocol **v1** sur stdio | Options de session annoncées ou commande JSON configurée | Selon capacités négociées |
+| `gemini`, `qwen-code`, `kimi`, `goose` | Profils ACP v1 persistants | Options de session annoncées | Selon capacités négociées |
+| `command-code-acp`, `codebuddy-acp` | Variantes ACP v1 persistantes des CLI | Options de session annoncées | Selon capacités négociées |
 | `openai` | API **Responses**, HTTPS/SSE | `/v1/models` | Historique de l'hôte |
 | `anthropic` | Claude API **Messages**, HTTPS/SSE | `/v1/models`, pagination | Historique de l'hôte |
 | `openrouter` | API Chat Completions, HTTPS/SSE | `/models`, authentification `/key` | Historique de l'hôte |
@@ -28,16 +31,18 @@ Les trois derniers profils réutilisent le même adaptateur compatible. Leurs ca
 serveur et du modèle. Le profil `llama.cpp` ne lance pas le moteur : utiliser `LocalEngine`, puis fournir
 `engine.base_url()` et `engine.token()`. Ollama est un service distinct, installé et lancé séparément.
 
-Les adaptateurs API natifs et les CLI acceptent actuellement du texte. Les appels d'outils fonctionnent dans
+Les entrées multimodales sont traduites selon chaque transport et ses capacités ; consulter le
+[guide des conversations](Conversations.md) pour la matrice et le format des pièces jointes. Les appels d'outils fonctionnent dans
 les adaptateurs API, via `Registry` et ses politiques ; Codex dispose aussi des outils dynamiques.
-Claude Code et CodeBuddy utilisent une configuration MCP native. OpenCode/Antigravity/Command Code utilisent leurs outils/configurations
+Claude Code et CodeBuddy utilisent une configuration MCP native. OpenCode CLI 1.x/Antigravity/Command Code utilisent leurs outils/configurations
 natives ; leur envoyer `ProviderConfig.tools` retourne `Unsupported`, pour éviter une connexion d'outils fictive.
 Les agents ACP reçoivent `settings.mcp_servers`, un tableau au format ACP. Ils ne reçoivent pas directement
 `ProviderConfig.tools` : exposer le registre via un serveur MCP, puis fournir ses paramètres de connexion.
 Les blocs multimodaux restent possibles avec `HttpChatProvider` si l'endpoint les accepte.
 
-Le protocole OpenCode 2 a changé, notamment les permissions : cet adaptateur refuse une version majeure
-autre que 1 avec `UnsupportedVersion`. Le port 2.x/ACP/serveur HTTP est une extension distincte à valider.
+Le profil `opencode` utilise la commande ACP documentée par OpenCode actuel, dont 2.x. Le profil
+`opencode-cli` conserve le parseur JSONL 1.x et refuse les autres versions avec `UnsupportedVersion`.
+Les nouveaux profils partagent un transport de protocole testé ; leurs versions fournisseurs restent à valider réellement.
 Command Code, CodeBuddy et Devin ont été portés depuis les intégrations de CyAIOrchestrator, au-delà
 des fiches encore non implémentées de Connector Lab. Leur état de validation C++ est documenté séparément.
 
@@ -108,7 +113,7 @@ Valeurs par défaut et réglage permissif explicite :
 |---|---|---|
 | Codex via registre | `read-only`, requêtes d'approbation refusées | `danger-full-access`, approbations natives autorisées |
 | Claude Code | `dontAsk`, outils intégrés sélectionnés explicitement | `--dangerously-skip-permissions` |
-| OpenCode 1.x | `permission.*=deny` dans la configuration du processus | `permission.*=allow` |
+| OpenCode CLI 1.x (`opencode-cli`) | `permission.*=deny` dans la configuration du processus | `permission.*=allow` |
 | Antigravity | `--mode plan --sandbox` | `--dangerously-skip-permissions` |
 | Command Code | `--plan` | `--yolo` |
 | CodeBuddy | `dontAsk`, liste d'outils explicite | `bypassPermissions` et `--dangerously-skip-permissions` |
@@ -119,7 +124,7 @@ Les politiques d'outils de l'app restent indépendantes. Fournir `Policy::allow_
 veut autoriser tous ses handlers. Le mode plan d'Antigravity permet des lectures ; ce n'est pas une sandbox
 créée par le SDK. Les restrictions natives, de compte et d'organisation peuvent toujours s'appliquer.
 
-Pour Claude : `settings.mcp_servers` et `settings.allowed_tools`. Pour OpenCode : `settings.native_settings`
+Pour Claude : `settings.mcp_servers` et `settings.allowed_tools`. Pour OpenCode CLI 1.x : `settings.native_settings`
 est sa configuration JSON 1.x, dont `mcp` si nécessaire. Pour Antigravity : cet objet passe à `--settings`.
 Les réglages de permissions générés par l'adaptateur prennent priorité sur les réglages contradictoires de ce même objet.
 Les fichiers de configuration/plugins natifs du fournisseur restent sous la responsabilité de l'hôte.
@@ -171,8 +176,9 @@ le même exécutable/préfixe, sans le sous-programme ACP. Devin fournit déjà 
 
 `settings.mode` sélectionne un mode natif exact lorsqu'il est annoncé. Une décision `ProviderConfig.approvals`
 contrôle les requêtes `session/request_permission` ; un accord ponctuel est préféré à un accord permanent.
-Le SDK n'annonce ni accès au système de fichiers client ni terminal client, et refuse ces requêtes si l'agent
-les envoie malgré la négociation. Les outils exécutés par l'agent lui-même restent régis par sa politique native.
+Par défaut le SDK n'annonce ni système de fichiers client ni terminal client. Un hôte peut fournir
+`settings.client_capabilities` et `request_handler` ; ces requêtes sont aussi soumises à sa politique
+et à la vérification de session. Voir [Conversations.md](Conversations.md). Les outils exécutés par l'agent lui-même restent régis par sa politique native.
 Le mode `normal` de Devin n'est pas un mode lecture seule. Les instructions système ACP sont fournies comme
 contexte textuel au premier prompt, car ACP v1 ne définit pas un rôle système portable.
 
@@ -224,7 +230,8 @@ relance automatique de requête de génération ou d'action.
 Les sorties natives nécessaires aux tours suivants sont conservées dans `_cymcp_native`, notamment les
 éléments de raisonnement chiffrés Responses et les blocs/signatures Anthropic. Ce sont des données privées de
 conversation : leur stockage/chiffrement éventuel appartient à l'hôte. Les APIs n'annoncent pas de reprise
-par ID natif ; restaurer les messages explicitement avec l'interface bas niveau si l'hôte persiste l'historique.
+par ID natif ; `Conversation::checkpoint/restore` préserve leur historique applicatif, et `reconnect`
+recrée la connexion sans relancer une génération. Un stockage privé facultatif est fourni par `ConversationStore`.
 
 ## Exemple exécutable
 

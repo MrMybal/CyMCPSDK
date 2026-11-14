@@ -7,3 +7,4 @@ AllowShortLoopsOnASingleLine: false
 BreakBeforeBraces: Attach
 PointerAlignment: Left
 SortIncludes: CaseSensitive
+LineEnding: LF

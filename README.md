@@ -1,7 +1,7 @@
 # CyMCPSDK
 
 Bibliothèque C++20 modulaire sous **MIT**, pour exposer les opérations d'une application aux IA,
-intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.3.0**.
+intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.4.0**.
 
 Le SDK est natif : aucune dépendance Python à l'exécution. Aucune interface, aucun modèle,
 moteur d'inférence, runtime GPU ou pilote n'est embarqué. L'interface CyUI est hors périmètre.
@@ -87,12 +87,17 @@ Puis `find_package(CyMCPSDK CONFIG REQUIRED)` et les mêmes cibles `CyMCP::*`.
 Lire [le guide d'intégration](Docs/Integration.md) pour les droits, les conversations,
 les autres applications et les moteurs locaux. Les exemples restent indépendants de toute interface graphique.
 
-Le [guide des fournisseurs](Docs/Providers.md) décrit les **quinze profils intégrés**, leurs capacités et l'ajout
+Le [guide des fournisseurs](Docs/Providers.md) décrit les **22 profils intégrés**, leurs capacités et l'ajout
 de nouveaux connecteurs par factory. `cymcp_chat providers` imprime le catalogue ; `cymcp_chat models CONFIG.json`
 découvre les modèles et `cymcp_chat CONFIG.json` dialogue par événements JSONL.
-OpenCode cible actuellement son protocole CLI 1.x. Les générations avec comptes réels restent à valider.
-Les agents intégrés comprennent Codex, Claude Code, OpenCode, Antigravity, Command Code, CodeBuddy et Devin.
-Un adaptateur ACP v1 générique accepte aussi la commande d'autres agents compatibles, sans nouveau parseur.
+OpenCode utilise désormais ACP persistant ; le CLI 1.x reste disponible sous `opencode-cli`.
+Les agents intégrés comprennent aussi Gemini CLI, Qwen Code, Kimi et goose. Command Code et CodeBuddy
+possèdent chacun un profil ACP persistant supplémentaire. Les capacités sont négociées avec chaque agent.
+Claude Code et Antigravity gardent leur processus de conversation ouvert par défaut dans le registre.
+Le [guide des conversations](Docs/Conversations.md) couvre les pièces jointes portables, la sauvegarde privée
+optionnelle, la reprise exacte après déconnexion et les mesures du premier token et des tours chauds.
+`cymcp_chat benchmark CONFIG.json` mesure un fournisseur configuré avec de vrais échanges ; il ne lance
+aucune installation. Les essais cloud de cette machine n'ont pas encore produit de génération réussie.
 
 ## Licence
 

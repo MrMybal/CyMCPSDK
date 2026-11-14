@@ -20,7 +20,7 @@ using Json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 Json parse_json(const std::string&, std::size_t max_bytes = 1024 * 1024, int max_depth = 64);
 std::string path_utf8(const std::filesystem::path&);
-inline constexpr const char* version = "0.3.0";
+inline constexpr const char* version = "0.4.0";
 class Error : public std::runtime_error {
   public:
     std::string code;

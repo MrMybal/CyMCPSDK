@@ -1,4 +1,5 @@
 #pragma once
+#include "content.hpp"
 #include "http.hpp"
 #include "process.hpp"
 namespace cymcp {
@@ -8,14 +9,26 @@ struct Session {
 struct ChatResult {
     std::string text, finish_reason;
     Json usage = Json::object();
+    Json metrics = Json::object(); // timings in milliseconds; no prompt or credential data
 };
 struct ProviderCapabilities {
     bool streaming = false, resume = false, tools = false, model_catalogue = false,
          multimodal = false;
+    bool image_input = false, audio_input = false, file_input = false, persistent_process = false;
 };
 class Provider {
+    friend class ProviderRegistry;
+    std::string identity_;
+
   public:
+    explicit Provider(std::string identity = "custom") : identity_(std::move(identity)) {}
+    const std::string& identity() const noexcept {
+        return identity_;
+    }
     virtual ~Provider() = default;
+    virtual bool uses_host_history() const noexcept {
+        return false;
+    }
     virtual ProviderCapabilities capabilities() const = 0;
     virtual void connect(const CallContext& = {}) = 0;
     virtual Json list_models(const CallContext& = {}) {
@@ -38,6 +51,9 @@ class HttpChatProvider final : public Provider {
 
   public:
     explicit HttpChatProvider(HttpChatOptions);
+    bool uses_host_history() const noexcept override {
+        return true;
+    }
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
     Json list_models(const CallContext& = {}) override;
@@ -78,19 +94,21 @@ struct ClaudeOptions {
     Json mcp_servers = Json::object();
     std::vector<std::string> allowed_tools; // empty means no built-in tools
     bool allow_all_actions = false;         // maps explicitly to the provider's bypass mode
+    bool persistent = true;
 };
 class ClaudeProvider final : public Provider {
-    ClaudeOptions options_;
-    std::mutex mutex_;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 
   public:
     explicit ClaudeProvider(ClaudeOptions);
+    ~ClaudeProvider();
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
     Session start_session(std::string, std::string = {}, const CallContext& = {},
                           std::string = {}) override;
     ChatResult send(Session&, Json&, const CallContext&) override;
-    void disconnect() noexcept override {}
+    void disconnect() noexcept override;
 };
 // API protocols have different authentication, request and streaming formats.
 enum class ApiProtocol { OpenAIResponses, AnthropicMessages, Ollama, OpenRouter };
@@ -107,6 +125,9 @@ class ApiProvider final : public Provider {
 
   public:
     explicit ApiProvider(ApiOptions);
+    bool uses_host_history() const noexcept override {
+        return true;
+    }
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
     Json list_models(const CallContext& = {}) override;
@@ -121,6 +142,7 @@ struct AgentCliOptions {
     ProcessOptions process;
     std::chrono::milliseconds connect_timeout{15000}, turn_timeout{600000};
     bool allow_all_actions = false;
+    bool persistent = false; // supported by Antigravity stream input
     // OpenCode v1 config, or Antigravity/CodeBuddy --settings; policy flags take precedence.
     Json native_settings = Json::object();
     std::filesystem::path mcp_config_file;  // optional CodeBuddy MCP file supplied by the host
@@ -132,10 +154,13 @@ class AgentCliProvider final : public Provider {
     std::mutex cancellation_mutex_;
     Cancellation active_;
     bool connected_ = false;
+    std::unique_ptr<Process> process_;
+    std::string active_session_;
     CallContext begin(const CallContext&, std::chrono::milliseconds);
 
   public:
     explicit AgentCliProvider(AgentCliOptions);
+    ~AgentCliProvider();
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
     Json list_models(const CallContext& = {}) override;
@@ -151,6 +176,8 @@ struct AcpOptions {
     Json mcp_servers = Json::array(); // ACP stdio/HTTP server objects, not Claude's keyed map
     Policy approvals; // denies agent permission requests until explicitly configured
     std::string mode; // optional exact native mode/config value
+    Json client_capabilities = Json::object(); // optional fs/terminal services supplied by the host
+    ProviderRequestHandler request_handler;
     // Optional independent non-generating command, including any wrapper/script prefix.
     ProcessOptions models_process;
 };
@@ -205,7 +232,25 @@ class Conversation {
     ChatResult send(Json user_content, const CallContext& = {});
     std::future<ChatResult> send_async(Executor&, Json user_content, CallContext = {});
     void cancel() noexcept;
+    void disconnect() noexcept;
+    // Reconnect the exact native session, or restore host history for stateless APIs.
+    // Never retries a submitted generation or an executed tool.
+    void reconnect(const CallContext& = {});
+    Json checkpoint() const;
+    void restore(const Json&, const CallContext& = {});
+    Json status() const;
     Json history() const;
     Session session() const;
+};
+// Optional private, atomic on-disk storage. Keys/configuration are never included.
+// Conversation contents (including embedded attachments) remain private user data.
+class ConversationStore {
+    std::filesystem::path directory_;
+
+  public:
+    explicit ConversationStore(std::filesystem::path);
+    void save(const std::string& id, const Conversation&) const;
+    Json load(const std::string& id) const;
+    void erase(const std::string& id) const;
 };
 } // namespace cymcp

@@ -53,7 +53,8 @@ std::string latest_text(const Json& messages) {
     return messages.back()["content"].get<std::string>();
 }
 } // namespace
-HttpChatProvider::HttpChatProvider(HttpChatOptions opts) : options_(std::move(opts)) {
+HttpChatProvider::HttpChatProvider(HttpChatOptions opts)
+    : Provider("openai-compatible"), options_(std::move(opts)) {
     while (!options_.base_url.empty() && options_.base_url.back() == '/')
         options_.base_url.pop_back();
     parse_url(options_.base_url);
@@ -63,7 +64,7 @@ HttpChatProvider::HttpChatProvider(HttpChatOptions opts) : options_(std::move(op
         throw Error("InvalidOptions", "Invalid tool round budget");
 }
 ProviderCapabilities HttpChatProvider::capabilities() const {
-    return {true, false, static_cast<bool>(options_.tools), true, true};
+    return {true, false, static_cast<bool>(options_.tools), true, true, true, true, false, false};
 }
 void HttpChatProvider::connect(const CallContext& context) {
     context.cancellation.check();
@@ -108,8 +109,12 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
         request.method = "POST";
         request.headers["Accept"] = "text/event-stream";
         auto wire_messages = messages;
-        for (auto& message : wire_messages)
+        for (auto& message : wire_messages) {
             message.erase("_cymcp_native");
+            message["content"] =
+                detail::content_for(message.at("content"), detail::ContentFormat::ChatCompletions,
+                                    message.at("role").get<std::string>());
+        }
         Json payload = {{"model", session.model},
                         {"messages", wire_messages},
                         {"stream", true},
@@ -268,7 +273,10 @@ struct Conversation::State {
     std::string model;
     Session session;
     bool connected = false;
+    std::string phase = "disconnected", last_error;
+    Json metrics = Json::object();
     std::atomic_bool reserved{false};
+    std::atomic_bool disconnect_requested{false};
     Json messages = Json::array();
     std::mutex turn, history, cancellation_mutex;
     Cancellation active;
@@ -296,18 +304,40 @@ void Conversation::connect(std::string resume, const CallContext& input) {
     if (!turn.owns_lock())
         throw Error("Busy", "Conversation busy");
     context.cancellation.check();
-    s.provider->connect(context);
-    std::string system;
+    s.disconnect_requested.store(false);
     {
         std::lock_guard history(s.history);
-        for (const auto& message : s.messages)
-            if (message.value("role", std::string()) == "system" && message["content"].is_string())
-                system += message["content"].get<std::string>() + "\n";
+        s.connected = false;
+        s.phase = "connecting";
     }
-    auto session = s.provider->start_session(s.model, std::move(resume), context, system);
-    std::lock_guard lock(s.history);
-    s.session = std::move(session);
-    s.connected = true;
+    auto started = Clock::now();
+    try {
+        s.provider->connect(context);
+        std::string system;
+        {
+            std::lock_guard history(s.history);
+            for (const auto& message : s.messages)
+                if (message.value("role", std::string()) == "system" &&
+                    message["content"].is_string())
+                    system += message["content"].get<std::string>() + "\n";
+        }
+        auto session = s.provider->start_session(s.model, std::move(resume), context, system);
+        std::lock_guard lock(s.history);
+        context.cancellation.check();
+        if (s.disconnect_requested.load())
+            throw Error("Cancelled", "Conversation was disconnected during connection");
+        s.session = std::move(session);
+        s.connected = true;
+        s.phase = "ready";
+        s.last_error.clear();
+        s.metrics["connect_ms"] =
+            std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+    } catch (...) {
+        s.provider->disconnect();
+        std::lock_guard history(s.history);
+        s.phase = "disconnected";
+        throw;
+    }
 }
 CallContext Conversation::reserve(const CallContext& original) {
     if (state_->reserved.exchange(true))
@@ -334,6 +364,7 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
     std::unique_lock turn(s.turn, std::try_to_lock);
     if (!turn.owns_lock())
         throw Error("Busy", "Conversation busy");
+    context.cancellation.check();
     Json messages;
     Session session;
     {
@@ -343,8 +374,7 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
         messages = s.messages;
         session = s.session;
     }
-    if (!content.is_string() && !content.is_array())
-        throw Error("InvalidParameters", "Content must be text or typed content blocks");
+    validate_content(content);
     messages.push_back({{"role", "user"}, {"content", std::move(content)}});
     if (messages.dump().size() > 8 * 1024 * 1024)
         throw Error("ContextTooLarge", "Conversation exceeds memory budget");
@@ -353,20 +383,63 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
         s.messages = messages;
         s.session = session;
     };
+    const auto started = Clock::now();
+    double first_token = -1;
+    std::size_t event_count = 0;
+    CallContext measured = context;
+    measured.events = [&](const Event& event) {
+        ++event_count;
+        if (first_token < 0 && event.type == "TextDelta" &&
+            !event.data.value("text", std::string()).empty())
+            first_token = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+        context.emit(event.type, event.data);
+    };
+    auto metrics = [&] {
+        return Json{
+            {"first_token_ms", first_token < 0 ? Json() : Json(first_token)},
+            {"total_ms", std::chrono::duration<double, std::milli>(Clock::now() - started).count()},
+            {"events", event_count}};
+    };
+    {
+        std::lock_guard lock(s.history);
+        s.phase = "busy";
+        s.last_error.clear();
+    }
     try {
-        context.emit("TurnStarted", {{"sessionId", session.id}});
-        auto result = s.provider->send(session, messages, context);
+        measured.emit("TurnStarted", {{"sessionId", session.id}});
+        auto result = s.provider->send(session, messages, measured);
         context.cancellation.check();
         commit();
+        result.metrics = metrics();
+        {
+            std::lock_guard lock(s.history);
+            s.metrics = result.metrics;
+            s.phase = s.disconnect_requested.load() ? "disconnected" : "ready";
+        }
+        context.emit("TurnMetrics", result.metrics);
         return result;
     } catch (const Error& e) {
         commit();
+        {
+            std::lock_guard lock(s.history);
+            s.metrics = metrics();
+            s.last_error = e.code;
+            s.phase = s.disconnect_requested.load() ? "disconnected"
+                      : e.code == "Cancelled"       ? "interrupted"
+                                                    : "failed";
+        }
         if (context.events)
             context.events(
                 {e.code == "Cancelled" ? "TurnCancelled" : "TurnFailed", {{"code", e.code}}});
         throw;
     } catch (...) {
         commit();
+        {
+            std::lock_guard lock(s.history);
+            s.metrics = metrics();
+            s.last_error = "ProviderError";
+            s.phase = s.disconnect_requested.load() ? "disconnected" : "failed";
+        }
         if (context.events)
             context.events({"TurnFailed", {{"code", "ProviderError"}}});
         throw;
@@ -400,5 +473,127 @@ Json Conversation::history() const {
 Session Conversation::session() const {
     std::lock_guard lock(state_->history);
     return state_->session;
+}
+void Conversation::disconnect() noexcept {
+    state_->disconnect_requested.store(true);
+    cancel();
+    // Provider disconnect is cancellation-aware, including silent subprocesses.
+    state_->provider->disconnect();
+    std::lock_guard lock(state_->history);
+    state_->connected = false;
+    state_->phase = "disconnected";
+}
+Json Conversation::status() const {
+    std::lock_guard lock(state_->history);
+    return {
+        {"state", state_->phase}, {"last_error", state_->last_error}, {"metrics", state_->metrics}};
+}
+Json Conversation::checkpoint() const {
+    auto& s = *state_;
+    std::lock_guard lock(s.history);
+    if (s.reserved.load())
+        throw Error("Busy", "Cannot snapshot a scheduled or active turn");
+    return {{"format", "cymcp-conversation"},
+            {"version", 1},
+            {"provider", s.provider->identity()},
+            {"history_mode", s.provider->uses_host_history() ? "host" : "native"},
+            {"session", {{"id", s.session.id}, {"model", s.session.model}}},
+            {"model", s.model},
+            {"messages", s.messages},
+            {"last_error", s.last_error},
+            {"metrics", s.metrics}};
+}
+void Conversation::restore(const Json& snapshot, const CallContext& input) {
+    auto context = reserve(input);
+    auto& s = *state_;
+    struct Release {
+        State& s;
+        ~Release() {
+            s.reserved.store(false);
+        }
+    } release{s};
+    std::unique_lock turn(s.turn, std::try_to_lock);
+    if (!turn.owns_lock())
+        throw Error("Busy", "Conversation busy");
+    Json messages;
+    std::string id, model, native_model, system, previous_error;
+    try {
+        if (snapshot.dump().size() > 16 * 1024 * 1024)
+            throw Error("ContextTooLarge", "Checkpoint exceeds limit");
+        if (snapshot.at("format") != "cymcp-conversation" || snapshot.at("version") != 1)
+            throw Error("UnsupportedVersion", "Unsupported conversation checkpoint");
+        if (snapshot.at("provider") != s.provider->identity() ||
+            snapshot.at("history_mode") != (s.provider->uses_host_history() ? "host" : "native"))
+            throw Error("SessionInvalid", "Checkpoint belongs to a different provider/transport");
+        messages = snapshot.at("messages");
+        if (snapshot.contains("metrics") && !snapshot.at("metrics").is_object())
+            throw Error("InvalidCheckpoint", "Invalid checkpoint metrics");
+        if (!messages.is_array() || messages.size() > 100000)
+            throw Error("InvalidCheckpoint", "Invalid message history");
+        for (const auto& message : messages) {
+            auto role = message.at("role").get<std::string>();
+            if (role != "system" && role != "user" && role != "assistant" && role != "tool")
+                throw Error("InvalidCheckpoint", "Invalid message role");
+            validate_content(message.at("content"));
+            if (role == "system")
+                system += detail::content_text(message.at("content")) + "\n";
+            if (role == "tool")
+                message.at("tool_call_id").get<std::string>();
+        }
+        model = snapshot.at("model").get<std::string>();
+        native_model = snapshot.at("session").at("model").get<std::string>();
+        id = snapshot.at("session").at("id").get<std::string>();
+        previous_error = snapshot.value("last_error", std::string());
+        if (!s.model.empty() && s.model != model)
+            throw Error("SessionInvalid", "Checkpoint model differs from requested model");
+        if (!s.provider->uses_host_history() && id.empty())
+            throw Error("SessionInvalid", "Native checkpoint has no exact session ID");
+    } catch (const Json::exception&) {
+        throw Error("InvalidCheckpoint", "Invalid conversation checkpoint");
+    }
+    s.disconnect_requested.store(false);
+    {
+        std::lock_guard history(s.history);
+        s.connected = false;
+        s.phase = "connecting";
+    }
+    s.provider->disconnect();
+    try {
+        context.cancellation.check();
+        s.provider->connect(context);
+        if (!s.provider->uses_host_history() && !s.provider->capabilities().resume)
+            throw Error("Unsupported", "Provider cannot reload this exact native session");
+        auto session =
+            s.provider->start_session(native_model.empty() ? model : native_model,
+                                      s.provider->uses_host_history() ? "" : id, context, system);
+        if (!s.provider->uses_host_history() && session.id != id)
+            throw Error("SessionInvalid", "Provider replaced the native session");
+        if (s.provider->uses_host_history())
+            session.id = id.empty() ? session.id : id;
+        {
+            std::lock_guard history(s.history);
+            context.cancellation.check();
+            if (s.disconnect_requested.load())
+                throw Error("Cancelled", "Conversation was disconnected during restore");
+            s.model = model;
+            s.session = std::move(session);
+            s.messages = std::move(messages);
+            s.metrics = snapshot.value("metrics", Json::object());
+            s.connected = true;
+            s.phase = "ready";
+            s.last_error = previous_error;
+        }
+        context.emit("ConversationRestored",
+                     {{"sessionId", s.session.id}, {"previous_error", previous_error}});
+    } catch (...) {
+        s.provider->disconnect();
+        std::lock_guard history(s.history);
+        s.connected = false;
+        s.phase = "needs_reconnect";
+        throw;
+    }
+}
+void Conversation::reconnect(const CallContext& context) {
+    restore(checkpoint(), context);
 }
 } // namespace cymcp

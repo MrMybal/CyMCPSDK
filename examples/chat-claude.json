@@ -1,0 +1,10 @@
+{
+  "provider": "claude-code",
+  "model": "",
+  "settings": {
+    "persistent": true,
+    "allow_all_actions": false,
+    "allowed_tools": [],
+    "mcp_servers": {}
+  }
+}

@@ -44,6 +44,7 @@ struct AcpProvider::Impl {
     bool first_prompt = true;
     Json config_options = Json::array(), models = Json::array(), legacy_models = Json::object();
     Json modes = Json::object();
+    Json prompt_capabilities = Json::object();
     explicit Impl(AcpOptions config) : options(std::move(config)) {}
     CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
         auto context = input;
@@ -57,6 +58,7 @@ struct AcpProvider::Impl {
     void reset() noexcept {
         process.reset();
         initialized = load_session = false;
+        prompt_capabilities = Json::object();
         session_id.clear();
         models = Json::array();
     }
@@ -133,6 +135,44 @@ struct AcpProvider::Impl {
         if (models.empty() && legacy_models.contains("availableModels"))
             models = model_rows(legacy_models.at("availableModels"));
     }
+    void client_request(const Json& message, const CallContext& context) {
+        auto method = message.at("method").get<std::string>();
+        auto params = message.at("params");
+        Json response = {{"jsonrpc", "2.0"}, {"id", message.at("id")}};
+        auto fs = options.client_capabilities.value("fs", Json::object());
+        bool supported = method == "fs/read_text_file" ? fs.value("readTextFile", false)
+                         : method == "fs/write_text_file"
+                             ? fs.value("writeTextFile", false)
+                             : (method == "terminal/create" || method == "terminal/output" ||
+                                method == "terminal/release" ||
+                                method == "terminal/wait_for_exit" || method == "terminal/kill") &&
+                                   options.client_capabilities.value("terminal", false);
+        if (!supported || !options.request_handler)
+            response["error"] = {{"code", -32601}, {"message", "Client capability not provided"}};
+        else if (session_id.empty() || params.value("sessionId", std::string()) != session_id)
+            response["error"] = {{"code", -32602},
+                                 {"message", "Request belongs to another session"}};
+        else {
+            try {
+                context.cancellation.check();
+                if (!options.approvals.allows(context, method, params))
+                    throw Error("AccessDenied", "Client service denied by host policy");
+                auto result = options.request_handler(method, params, context);
+                context.cancellation.check();
+                if (!result.is_object() || result.dump().size() > 4 * 1024 * 1024)
+                    throw Error("InvalidResult", "Invalid ACP client service result");
+                response["result"] = std::move(result);
+            } catch (const Error& error) {
+                if (error.code == "Cancelled" || error.code == "Timeout")
+                    throw;
+                response["error"] = {{"code", -32603},
+                                     {"message", "Host client service failed or was denied"}};
+            } catch (...) {
+                response["error"] = {{"code", -32603}, {"message", "Host client service failed"}};
+            }
+        }
+        process->write(response.dump() + "\n", context.cancellation);
+    }
     void update(const Json& params, const CallContext& context, ChatResult* result) {
         if (params.value("sessionId", std::string()) != session_id || session_id.empty())
             return;
@@ -184,14 +224,7 @@ struct AcpProvider::Impl {
                     if (name == "session/request_permission")
                         permission(message, context);
                     else
-                        process->write(Json({{"jsonrpc", "2.0"},
-                                             {"id", message.at("id")},
-                                             {"error",
-                                              {{"code", -32601},
-                                               {"message", "Client capability not provided"}}}})
-                                               .dump() +
-                                           "\n",
-                                       context.cancellation);
+                        client_request(message, context);
                 } else if (name == "session/update")
                     update(message.at("params"), context, result);
                 continue;
@@ -253,12 +286,31 @@ struct AcpProvider::Impl {
             throw Error("Unsupported", "ACP agent does not expose the requested session selection");
     }
 };
-AcpProvider::AcpProvider(AcpOptions options) : impl_(std::make_unique<Impl>(std::move(options))) {
+AcpProvider::AcpProvider(AcpOptions options)
+    : Provider("acp"), impl_(std::make_unique<Impl>(std::move(options))) {
     const auto& opts = impl_->options;
     if (!opts.mcp_servers.is_array() || opts.mcp_servers.dump().size() > 1024 * 1024 ||
         opts.connect_timeout.count() <= 0 || opts.turn_timeout.count() <= 0 ||
         opts.connect_timeout > std::chrono::hours(24) || opts.turn_timeout > std::chrono::hours(24))
         throw Error("InvalidOptions", "Invalid ACP options");
+    Json boolean_schema = {{"type", "boolean"}};
+    Json fs_schema = {
+        {"type", "object"},
+        {"additionalProperties", false},
+        {"properties", {{"readTextFile", boolean_schema}, {"writeTextFile", boolean_schema}}}};
+    Json capability_schema = {{"type", "object"},
+                              {"additionalProperties", false},
+                              {"properties", {{"terminal", boolean_schema}, {"fs", fs_schema}}}};
+    try {
+        validate(opts.client_capabilities, capability_schema);
+    } catch (const Error&) {
+        throw Error("InvalidOptions", "Invalid ACP client capabilities");
+    }
+    auto fs = opts.client_capabilities.value("fs", Json::object());
+    if ((opts.client_capabilities.value("terminal", false) || fs.value("readTextFile", false) ||
+         fs.value("writeTextFile", false)) &&
+        !opts.request_handler)
+        throw Error("InvalidOptions", "Advertised ACP client services require a host handler");
 }
 AcpProvider::~AcpProvider() {
     disconnect();
@@ -266,8 +318,18 @@ AcpProvider::~AcpProvider() {
 ProviderCapabilities AcpProvider::capabilities() const {
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
-    return {true, p.load_session, true,
-            !p.models.empty() || !p.options.models_process.executable.empty(), false};
+    bool image = p.prompt_capabilities.value("image", false),
+         audio = p.prompt_capabilities.value("audio", false),
+         embedded = p.prompt_capabilities.value("embeddedContext", false);
+    return {true,
+            p.load_session,
+            true,
+            !p.models.empty() || !p.options.models_process.executable.empty(),
+            image || audio || embedded,
+            image,
+            audio,
+            embedded,
+            true};
 }
 void AcpProvider::connect(const CallContext& input) {
     auto& p = *impl_;
@@ -278,17 +340,20 @@ void AcpProvider::connect(const CallContext& input) {
         return;
     try {
         p.process = std::make_unique<Process>(p.options.process);
-        auto result = p.rpc(
-            "initialize",
-            {{"protocolVersion", 1},
-             {"clientCapabilities",
-              {{"fs", {{"readTextFile", false}, {"writeTextFile", false}}}, {"terminal", false}}},
-             {"clientInfo", {{"name", "cymcp"}, {"version", version}}}},
-            context);
+        Json client_capabilities = {{"fs", {{"readTextFile", false}, {"writeTextFile", false}}},
+                                    {"terminal", false}};
+        client_capabilities.merge_patch(p.options.client_capabilities);
+        auto result = p.rpc("initialize",
+                            {{"protocolVersion", 1},
+                             {"clientCapabilities", client_capabilities},
+                             {"clientInfo", {{"name", "cymcp"}, {"version", version}}}},
+                            context);
         if (result.at("protocolVersion") != 1)
             throw Error("UnsupportedVersion", "Only ACP protocol version 1 is implemented");
         p.load_session =
             result.value("agentCapabilities", Json::object()).value("loadSession", false);
+        p.prompt_capabilities = result.value("agentCapabilities", Json::object())
+                                    .value("promptCapabilities", Json::object());
         p.initialized = true;
         context.emit("ProviderReady", {{"authentication", "unverified"}, {"protocol", "acp-v1"}});
     } catch (...) {
@@ -347,7 +412,7 @@ Session AcpProvider::start_session(std::string model, std::string resume, const 
         p.select("mode", p.options.mode, context);
         p.select("model", model, context);
         p.system = std::move(system);
-        p.first_prompt = true;
+        p.first_prompt = resume.empty();
         return {id, p.current_model()};
     } catch (const Error& error) {
         if (error.code == "Cancelled" || error.code == "Timeout" || error.code == "UnexpectedEOF" ||
@@ -369,18 +434,25 @@ ChatResult AcpProvider::send(Session& session, Json& messages, const CallContext
         throw Error("InvalidState", "Reconnect ACP after disconnect or interruption");
     if (session.id.empty() || session.id != p.session_id)
         throw Error("SessionInvalid", "ACP session is not active");
-    if (!messages.is_array() || messages.empty() || !messages.back().at("content").is_string())
-        throw Error("Unsupported", "ACP adapter currently accepts text input");
-    auto text = messages.back().at("content").get<std::string>();
+    if (!messages.is_array() || messages.empty())
+        throw Error("InvalidParameters", "Messages required");
+    auto prompt = detail::content_for(messages.back().at("content"), detail::ContentFormat::Acp);
+    for (const auto& block : prompt) {
+        auto type = block.at("type").get<std::string>();
+        auto capability = type == "image" ? "image" : type == "audio" ? "audio" : "embeddedContext";
+        if (type != "text" &&
+            (type == "image_url" || !p.prompt_capabilities.value(capability, false)))
+            throw Error("UnsupportedContent",
+                        "ACP agent did not negotiate this prompt content type");
+    }
     // ACP v1 has no portable system role. It is first-turn application context.
     if (p.first_prompt && !p.system.empty())
-        text = "Application instructions:\n" + p.system + "\nUser message:\n" + text;
+        prompt.insert(prompt.begin(),
+                      text_block("Application instructions:\n" + p.system + "\nUser message:\n"));
     p.first_prompt = false; // submitted turns must never be resent implicitly
     ChatResult result;
     try {
-        auto response = p.rpc("session/prompt",
-                              {{"sessionId", session.id},
-                               {"prompt", Json::array({{{"type", "text"}, {"text", text}}})}},
+        auto response = p.rpc("session/prompt", {{"sessionId", session.id}, {"prompt", prompt}},
                               context, &result);
         auto reason = response.at("stopReason").get<std::string>();
         if (reason == "cancelled")

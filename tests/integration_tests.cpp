@@ -202,6 +202,7 @@ int main(int argc, char** argv) {
         {
             ClaudeOptions options;
             options.process = {fixture, {"--claude-fixture"}};
+            options.persistent = false;
             auto provider = std::make_shared<ClaudeProvider>(options);
             Conversation chat(provider, "fixture-model");
             chat.connect();
@@ -212,6 +213,7 @@ int main(int argc, char** argv) {
         {
             ClaudeOptions options;
             options.process = {fixture, {"--claude-fixture", "--fixture-fail"}};
+            options.persistent = false;
             auto provider = std::make_shared<ClaudeProvider>(options);
             Conversation chat(provider, "fixture-model");
             chat.connect();
@@ -220,6 +222,7 @@ int main(int argc, char** argv) {
         {
             ClaudeOptions options;
             options.process = {fixture, {"--claude-fixture", "--fixture-crash"}};
+            options.persistent = false;
             auto provider = std::make_shared<ClaudeProvider>(options);
             Conversation chat(provider, "fixture-model");
             chat.connect();

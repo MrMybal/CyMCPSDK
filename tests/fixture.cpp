@@ -57,6 +57,14 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (acp) {
+            for (const std::string preset : {"opencode", "gemini", "qwen-code", "kimi", "goose",
+                                             "command-code-acp", "codebuddy-acp"})
+                if (has("--fixture-preset-" + preset) &&
+                    args.back() !=
+                        (preset == "gemini" || preset == "qwen-code" || preset == "codebuddy-acp"
+                             ? "--acp"
+                             : "acp"))
+                    return 69;
             if (has("--devin-fixture") && (argument("--permission-mode") !=
                                                (has("--fixture-allow") ? "dangerous" : "normal") ||
                                            argument("--respect-workspace-trust") !=
@@ -88,6 +96,14 @@ int main(int argc, char** argv) {
             Json pending;
             for (std::string input; std::getline(std::cin, input);) {
                 auto message = parse_json(input);
+                if (message.value("id", Json()) == "host-service-1" &&
+                    !message.contains("method")) {
+                    send({{"jsonrpc", "2.0"},
+                          {"id", pending},
+                          {"result",
+                           {{"stopReason", "end_turn"}, {"usage", {{"host_response", message}}}}}});
+                    continue;
+                }
                 if (message.contains("result") && message.at("id") == "permission-1") {
                     auto outcome = message.at("result").at("outcome");
                     auto chosen = outcome.value("optionId", std::string());
@@ -127,11 +143,15 @@ int main(int argc, char** argv) {
                         return 0;
                     }
                     if (params.at("protocolVersion") != 1 ||
-                        params.at("clientCapabilities").at("terminal") != false)
+                        params.at("clientCapabilities").at("terminal") !=
+                            has("--fixture-client-terminal"))
                         return 52;
-                    result = {
-                        {"protocolVersion", has("--fixture-version2") ? 2 : 1},
-                        {"agentCapabilities", {{"loadSession", !has("--fixture-no-resume")}}}};
+                    result["protocolVersion"] = has("--fixture-version2") ? 2 : 1;
+                    result["agentCapabilities"]["loadSession"] = !has("--fixture-no-resume");
+                    result["agentCapabilities"]["promptCapabilities"] = {
+                        {"image", has("--fixture-multimodal")},
+                        {"audio", has("--fixture-multimodal")},
+                        {"embeddedContext", has("--fixture-multimodal")}};
                 } else if (method == "session/new" || method == "session/load") {
                     if (has("--fixture-auth")) {
                         send({{"jsonrpc", "2.0"},
@@ -218,6 +238,19 @@ int main(int argc, char** argv) {
                                 {"content", "blocked"}}}});
                         continue;
                     }
+                    if (has("--fixture-client-service")) {
+                        pending = message.at("id");
+                        send({{"jsonrpc", "2.0"},
+                              {"id", "host-service-1"},
+                              {"method", has("--fixture-client-terminal") ? "terminal/output"
+                                                                          : "fs/read_text_file"},
+                              {"params",
+                               {{"sessionId",
+                                 has("--fixture-foreign-service") ? "other-session" : sid},
+                                {"path", "/fixture.txt"},
+                                {"terminalId", "host-terminal"}}}});
+                        continue;
+                    }
                     if (has("--fixture-fail")) {
                         send({{"jsonrpc", "2.0"},
                               {"id", message.at("id")},
@@ -227,6 +260,8 @@ int main(int argc, char** argv) {
                     result["stopReason"] = has("--fixture-max-turns") ? "max_turn_requests"
                                            : has("--fixture-refusal") ? "refusal"
                                                                       : "end_turn";
+                    if (has("--fixture-multimodal"))
+                        result["usage"]["received"] = params.at("prompt");
                 }
                 send({{"jsonrpc", "2.0"},
                       {"id", has("--fixture-wrong-rpc") ? Json(9999) : message.at("id")},
@@ -382,6 +417,69 @@ int main(int argc, char** argv) {
         return server.listen("127.0.0.1", std::stoi(option("--port"))) ? 0 : 9;
     }
 #endif
+    if (has("--conversation-fixture")) {
+        if (has("auth")) {
+            send({{"loggedIn", true}});
+            return 0;
+        }
+        if (has("--version")) {
+            std::cout << "1.5.9\n";
+            return 0;
+        }
+        bool agy = has("--agy");
+        auto argument = [&](const std::string& key) {
+            auto found = std::find(args.begin(), args.end(), key);
+            return found == args.end() || ++found == args.end() ? std::string() : *found;
+        };
+        auto resume = argument(agy ? "--conversation" : "--resume");
+        if (!resume.empty() && resume != "conversation-session")
+            return 64;
+        if (argument("--input-format") != "stream-json")
+            return 65;
+        std::string instance = random_token(16), remembered, line;
+        int turns = 0;
+        while (std::getline(std::cin, line)) {
+            auto value = parse_json(line, 8 * 1024 * 1024);
+            auto content = value.at("message").at("content");
+            std::string text = content.is_string() ? content.get<std::string>()
+                                                   : content.at(0).at("text").get<std::string>();
+            if (text == "__silent")
+                continue;
+            if (text == "__crash")
+                return 9;
+            ++turns;
+            if (text == "recall")
+                text = remembered;
+            else
+                remembered = text;
+            if (text == "Reply exactly with CYMCP_OK. Do not use tools.")
+                text = "CYMCP_OK";
+            Json usage = {{"instance", instance}, {"turn", turns}, {"received", content}};
+            if (agy) {
+                if (turns == 1)
+                    send({{"event", "init"},
+                          {"init", {{"conversation_id", "conversation-session"}}}});
+                send({{"event", "step_update"}, {"step_update", {{"text_delta", text}}}});
+                send({{"event", "result"},
+                      {"result",
+                       {{"conversation_id", "conversation-session"},
+                        {"status", has("--fixture-fail") ? "ERROR" : "SUCCESS"},
+                        {"response", text},
+                        {"usage", usage}}}});
+            } else {
+                send({{"type", "system"},
+                      {"session_id",
+                       has("--fixture-wrong-session") ? "wrong" : "conversation-session"}});
+                send({{"type", "stream_event"},
+                      {"event", {{"delta", {{"type", "text_delta"}, {"text", text}}}}}});
+                send({{"type", "result"},
+                      {"subtype", has("--fixture-fail") ? "error_during_execution" : "success"},
+                      {"result", text},
+                      {"usage", usage}});
+            }
+        }
+        return 0;
+    }
     if (has("--claude-fixture")) {
         if (has("auth")) {
             send({{"loggedIn", true}});
@@ -445,6 +543,22 @@ int main(int argc, char** argv) {
                 active = "turn-" + std::to_string(++turn);
                 send({{"id", id}, {"result", {{"turn", {{"id", active}}}}}});
                 auto prompt = value["params"]["input"][0]["text"].get<std::string>();
+                if (has("--fixture-check-image")) {
+                    auto image = value.at("params").at("input").at(1);
+                    if (image.at("type") != "image" ||
+                        image.at("url") != "data:image/png;base64,aGVsbG8=")
+                        return 72;
+                }
+                if (prompt == "native-failure") {
+                    send({{"method", "turn/completed"},
+                          {"params",
+                           {{"threadId", "fixture-thread"},
+                            {"turn",
+                             {{"id", active},
+                              {"status", "failed"},
+                              {"error", {{"codexErrorInfo", "rateLimitExceeded"}}}}}}}});
+                    continue;
+                }
                 if (prompt == "silent")
                     continue;
                 if (prompt == "tool") {

@@ -1,4 +1,4 @@
-# Validation 0.3.0
+# Validation 0.4.0
 
 Validation locale le **14 novembre 2026**, Windows x64, Visual Studio 2022 / MSVC 19.40,
 CMake 3.31 et Ninja, configuration Release. Il s'agit d'une première base native de développement.
@@ -8,7 +8,8 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
 
 - Compilation de tous les modules et des exemples natifs d'application et de conversation.
 - Suite CTest : validation des schémas, droits, annulation, workers, JSON borné et clés dupliquées.
-  Dernière exécution : **26 contrôles du cœur, 50 d'intégration, 90 de fournisseurs et 67 d'extensions**, tous réussis.
+  Dernière exécution : **26 contrôles du cœur, 50 d'intégration, 98 de fournisseurs, 67 d'extensions et 142 de conversations**,
+  soit **383 contrôles**, tous réussis.
 - Sous-processus réels : arguments sans shell, processus silencieux, blocage sur stdin, dépassement de ligne/file.
 - Serveur HTTP réel sur loopback : authentification, rejet d'Origin, propagation de l'annulation à la fermeture du client.
 - MCP HTTP réel entre client et serveur C++ : découverte, invocation, erreurs et délégation d'une app vers une autre.
@@ -33,7 +34,7 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
   annulation pendant une demande d'autorisation et rejet préalable des demandes d'une autre session,
   requêtes de fichiers refusées, événements d'outils/usage, session étrangère ignorée, refus et limites natifs,
   EOF/erreurs après du texte partiel, version/ID RPC invalides, authentification requise, timeout et annulation.
-- Registre : quinze profils créés, extension externe exécutée, doublons/IDs inconnus/factories nulles refusés,
+- Registre : 22 profils créés, extension externe exécutée, doublons/IDs inconnus/factories nulles refusés,
   catalogue sans clé, séparation des secrets, validation des paramètres et factory réentrante hors verrou.
 - Profils compatibles llama.cpp/LM Studio : dialogue avec un endpoint simulé configuré explicitement.
 - Fixture de moteur local dans un vrai processus : démarrage, secret privé, disponibilité authentifiée,
@@ -42,10 +43,28 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
   SHA-256, cache, altération, nettoyage d'échec, chemins interdits et refus par politique hôte.
 - Compilation minimale sans réseau, MCP, processus natifs, IA ni moteur local ; tests du cœur.
 - Installation CMake, compilation et exécution d'un projet consommateur séparé avec `find_package`.
+- Conversations Claude/Antigravity persistantes : deux tours avec le même identifiant d'instance de processus,
+  mémoire entre les tours, un seul démarrage, arrêt, reprise exacte, annulation silencieuse puis reconnexion.
+- Profils ACP OpenCode/Gemini/Qwen/Kimi/goose/Command Code/CodeBuddy : arguments de lancement contrôlés
+  par la fixture, capacités négociées, texte/images/audio/ressources transmis, session exacte après reconnexion.
+- Services client ACP fichiers/terminal : service annoncé explicitement, callback obligatoire, politique permissive
+  ou refus, contrôle de session étrangère avant callback et réponse RPC corrélée. Aucun vrai fichier ni terminal
+  n'est créé par ces callbacks de test.
+- Pièces jointes : fichier local borné, MIME/base64 validés, ressources texte/PDF, conversion des corps HTTP
+  Responses, Messages, Ollama et Chat Completions/OpenRouter ; images Codex vérifiées sur son protocole natif.
+- Historique : remplacement atomique privé, aller-retour sur disque, suppression, IDs de chemins refusés,
+  restauration depuis une nouvelle instance, fournisseur/version/modèle/structure contrôlés, clés absentes.
+  Raisonnement natif et résultats d'outils conservés après échec ; aucune génération/action rejouée par `restore`.
+- Diagnostic : premier delta et durée totale, événement de métriques, benchmark froid/chaud de l'exemple
+  exécuté sur fixture persistante. Annulation et reconnexion Codex après déconnexion directe du fournisseur.
 
 Les exécutables des fixtures ne font pas d'inférence. Aucun modèle, CUDA ou pilote n'a été téléchargé/installé.
-Les comptes fournisseurs n'ont pas été utilisés pour générer une réponse. Les interfaces ont été confrontées
-à la documentation officielle et aux schémas du Codex CLI installé **0.155.0** ; Claude installé : **2.1.276**.
+Les interfaces ont été confrontées à la documentation officielle et aux schémas du Codex CLI installé
+**0.155.0** ; Claude installé : **2.1.276**. Des essais réels supplémentaires de la 0.4 ont été effectués
+avec le CLI de tchat/benchmark C++ : Claude retourne `AuthenticationRequired` avant génération ; Codex
+établit la connexion native et crée la session, puis son tour se termine en échec (`codexErrorInfo=other`).
+Aucune réponse cloud réussie ni mesure de latence réelle de modèle n'est donc revendiquée. Les détails de
+compte et les messages privés de diagnostic ne sont pas exportés. Aucun réglage d'authentification n'a été modifié.
 Antigravity **1.5.9** répond réellement à `--version` et expose les flags utilisés dans son aide ; sa commande
 `models` retourne un échec dans ce contexte. Le connecteur C++ remonte cet échec sans annoncer une authentification.
 Le paquet local OpenCode porte la version **1.18.30**, mais son exécutable échoue sur son répertoire de configuration
@@ -56,13 +75,16 @@ cette session. Les échanges C++ correspondants sont testés avec des exécutabl
 réelle ni compatibilité avec une version installée de ces trois CLI n'est revendiquée. Le protocole ACP v1
 et le sous-programme `devin acp` ont été confrontés à leur documentation officielle. Les adaptations de
 Command Code/CodeBuddy ont aussi été confrontées aux sources de CyAIOrchestrator.
+Les nouveaux profils Gemini/Qwen/Kimi/goose et les variantes ACP sont testés sur le protocole simulé et leurs
+commandes documentées ; aucune installation ni conformité réelle de ces produits n'est revendiquée.
 
 ## Mesures initiales
 
 Sur cette machine, avant toute comparaison matérielle ou optimisation spécifique :
 
 - Exemple CLI/MCP/HTTP Release : environ **618 ko** (octets décimaux, hors runtime C++ système).
-- Exemple de conversation avec catalogue/factories : environ **642 ko**, sans modèle ni runtime fournisseur.
+- Exemple de conversation 0.4 avec catalogue/factories, pièces jointes et stockage : taille enregistrée
+  dans `out/validation-windows-x64.json`, sans modèle ni runtime fournisseur.
 - Microbenchmark : environ **5 à 10 microsecondes par appel** selon la charge de la machine sur 100 000 appels natifs avec politique et
   validation entrée/sortie. Ce test ne mesure ni réseau, ni interface, ni génération de tokens.
 - Les archives statiques `.lib` de développement contiennent des instanciations de templates et des sections
@@ -84,16 +106,18 @@ de vitesse équivalente à un client fournisseur. Aucune performance d'inférenc
 
 ## Limites du périmètre livré
 
-Pas d'interface, Android, réseau public, OAuth multi-utilisateur, coffre de secrets, historique durable,
+Pas d'interface, Android, réseau public, OAuth multi-utilisateur, coffre de secrets,
 jobs persistants, sandbox OS propre au SDK, téléchargement automatique de catalogues GPU,
-extraction d'archives ou reprise HTTP Range. Le mode natif Claude persistant n'est pas implémenté.
-Les CLI OpenCode, Antigravity, Command Code et CodeBuddy utilisent un processus par tour avec reprise native.
-Le profil OpenCode intégré cible son CLI JSONL 1.x. ACP v1 dispose d'un adaptateur générique persistant et
-d'un profil Devin. Les autres agents qui annoncent ACP ne sont pas automatiquement validés par ce profil générique.
-ACP v2, la délégation d'un système de fichiers/terminal client à l'agent ACP, le transport historique Devin texte/ATIF
-et les tâches CodeBuddy survivant au tour ne sont pas implémentés. Après annulation ACP, la connexion doit être recréée.
+extraction d'archives ou reprise HTTP Range. Claude Code et Antigravity disposent de processus persistants.
+Les CLI historiques OpenCode 1.x, Command Code et CodeBuddy restent par tour ; OpenCode, Command Code et
+CodeBuddy possèdent désormais des profils ACP persistants. Les nouveaux profils ne prouvent pas automatiquement
+la conformité de toutes leurs versions. Les services client fichiers/terminal sont des callbacks facultatifs fournis par l'hôte.
+ACP v2, le transport historique Devin texte/ATIF
+et les tâches CodeBuddy survivant au tour ne sont pas implémentés. Après annulation ACP, la connexion doit être recréée
+avec `Conversation::reconnect` et l'ID exact si l'agent sait le charger.
 Les souscriptions MCP persistantes, ressources/prompts et notifications de progression MCP ne sont pas annoncées.
 Le profil de schéma est documenté dans Integration.md ; les mots-clés inconnus ne sont pas ignorés.
+Le format multimodal, ses limites par transport et le stockage facultatif sont documentés dans Conversations.md.
 
 La compatibilité source C++ est en développement. Utiliser des headers et bibliothèques de la même version,
 avec un compilateur et une bibliothèque standard compatibles. Aucun ABI C++ stable entre compilateurs n'est promis.

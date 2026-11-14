@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
         std::string fixture = argv[1];
         ProviderRegistry registry;
         auto catalogue = registry.describe();
-        check(catalogue.size() == 15, "Built-in catalogue has fifteen implemented profiles");
+        check(catalogue.size() == 22, "Built-in catalogue has twenty-two implemented profiles");
         expect_error("UnknownProvider", [&] { registry.create("unregistered"); });
         expect_error("DuplicateProvider", [&] {
             registry.add({"openai", "Duplicate", "http", "", {}},
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
         ProviderRegistry empty(false);
         check(empty.describe().empty(), "Host can select only its required providers");
         for (bool agy : {false, true}) {
-            auto id = agy ? "antigravity" : "opencode";
+            auto id = agy ? "antigravity" : "opencode-cli";
             auto config_for = [&](std::string flag = "", bool allow = false) {
                 ProviderConfig config;
                 config.process = {fixture, {"--agent-fixture"}};
@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
                 if (allow)
                     config.process.arguments.push_back("--fixture-allow");
                 config.settings["allow_all_actions"] = allow;
+                config.settings["persistent"] = false; // legacy one-shot regression fixtures
                 return config;
             };
             auto provider = registry.create(id, config_for());
@@ -395,6 +396,14 @@ int main(int argc, char** argv) {
             check(limited.history().back().at("content").get<std::string>().find("AccessDenied") !=
                       std::string::npos,
                   "API tools honor host policy and retain the denied result");
+            auto snapshot = limited.checkpoint();
+            Conversation restored(registry.create(id, config), "fixture-model");
+            auto before_restore = requests.load();
+            restored.restore(snapshot);
+            check(restored.history() == limited.history(),
+                  "Restore preserves native reasoning and executed tool results after failure");
+            check(requests.load() == before_restore,
+                  "Restoring a failed tool round does not repeat its generation or action");
         }
         mode = 6;
         ProviderConfig anthropic;
