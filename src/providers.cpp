@@ -1,5 +1,6 @@
 #include <cymcp/ai.hpp>
 namespace cymcp {
+ProviderDiscoveryHints builtin_discovery(const std::string&);
 namespace {
 std::chrono::milliseconds duration(const Json& settings, const char* key, long long fallback) {
     auto value = settings.value(key, fallback);
@@ -8,24 +9,7 @@ std::chrono::milliseconds duration(const Json& settings, const char* key, long l
     return std::chrono::milliseconds(value);
 }
 ProcessOptions process_for(const ProviderConfig& config, const char* name) {
-    auto process = config.process;
-    if (!process.executable.empty())
-        return process;
-    std::vector<std::string> names{name};
-    if (std::string(name) == "command-code")
-        names.push_back("cmdc");
-    if (std::string(name) == "codebuddy")
-        names.push_back("cbc");
-    for (const auto& candidate : names) {
-        try {
-            process.executable = find_executable(candidate);
-            return process;
-        } catch (const Error& error) {
-            if (error.code != "ExecutableMissing")
-                throw;
-        }
-    }
-    throw Error("ExecutableMissing", "Native CLI not found; configure its executable path");
+    return resolve_provider_process(builtin_discovery(name), config.process);
 }
 void no_host_tools(const ProviderConfig& config) {
     if (config.tools)
@@ -37,45 +21,52 @@ void no_host_tools(const ProviderConfig& config) {
 ProviderRegistry::ProviderRegistry(bool builtins) {
     if (!builtins)
         return;
-    add({"codex",
-         "Codex",
-         "app-server-stdio",
-         "native-account",
-         {true, true, true, true, true, true, false, false, true}},
-        [](const ProviderConfig& config) {
-            CodexOptions options;
-            options.process = process_for(config, "codex");
-            options.connect_timeout = duration(config.settings, "connect_timeout_ms", 30000);
-            options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
-            bool allow = config.settings.value("allow_all_actions", false);
-            options.sandbox = config.settings.value(
-                "sandbox", std::string(allow ? "danger-full-access" : "read-only"));
-            options.approval_policy =
-                config.settings.value("approval_policy", std::string("never"));
-            options.tools = config.tools;
-            options.approvals = allow ? Policy::allow_all() : config.approvals;
-            options.request_handler = config.request_handler;
-            return std::make_shared<CodexProvider>(std::move(options));
-        });
-    add({"claude-code",
-         "Claude Code",
-         "cli-stream-json",
-         "native-account",
-         {true, true, true, false, true, true, false, true, true}},
-        [](const ProviderConfig& config) {
-            no_host_tools(config);
-            ClaudeOptions options;
-            options.process = process_for(config, "claude");
-            options.connect_timeout = duration(config.settings, "connect_timeout_ms", 15000);
-            options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
-            options.mcp_servers = config.settings.value("mcp_servers", Json::object());
-            options.allowed_tools =
-                config.settings.value("allowed_tools", std::vector<std::string>());
-            options.allow_all_actions = config.settings.value("allow_all_actions", false);
-            options.persistent = config.settings.value("persistent", true);
-            options.setting_sources = config.settings.value("setting_sources", std::string("user"));
-            return std::make_shared<ClaudeProvider>(std::move(options));
-        });
+    auto add_builtin = [this](ProviderDescriptor descriptor, ProviderFactory factory) {
+        descriptor.discovery = builtin_discovery(descriptor.id);
+        add(std::move(descriptor), std::move(factory));
+    };
+    add_builtin({"codex",
+                 "Codex",
+                 "app-server-stdio",
+                 "native-account",
+                 {true, true, true, true, true, true, false, false, true}},
+                [](const ProviderConfig& config) {
+                    CodexOptions options;
+                    options.process = process_for(config, "codex");
+                    options.connect_timeout =
+                        duration(config.settings, "connect_timeout_ms", 30000);
+                    options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
+                    bool allow = config.settings.value("allow_all_actions", false);
+                    options.sandbox = config.settings.value(
+                        "sandbox", std::string(allow ? "danger-full-access" : "read-only"));
+                    options.approval_policy =
+                        config.settings.value("approval_policy", std::string("never"));
+                    options.tools = config.tools;
+                    options.approvals = allow ? Policy::allow_all() : config.approvals;
+                    options.request_handler = config.request_handler;
+                    return std::make_shared<CodexProvider>(std::move(options));
+                });
+    add_builtin({"claude-code",
+                 "Claude Code",
+                 "cli-stream-json",
+                 "native-account",
+                 {true, true, true, false, true, true, false, true, true}},
+                [](const ProviderConfig& config) {
+                    no_host_tools(config);
+                    ClaudeOptions options;
+                    options.process = process_for(config, "claude");
+                    options.connect_timeout =
+                        duration(config.settings, "connect_timeout_ms", 15000);
+                    options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
+                    options.mcp_servers = config.settings.value("mcp_servers", Json::object());
+                    options.allowed_tools =
+                        config.settings.value("allowed_tools", std::vector<std::string>());
+                    options.allow_all_actions = config.settings.value("allow_all_actions", false);
+                    options.persistent = config.settings.value("persistent", true);
+                    options.setting_sources =
+                        config.settings.value("setting_sources", std::string("user"));
+                    return std::make_shared<ClaudeProvider>(std::move(options));
+                });
     for (auto protocol : {AgentCliProtocol::OpenCode, AgentCliProtocol::Antigravity,
                           AgentCliProtocol::CommandCode, AgentCliProtocol::CodeBuddy}) {
         bool agy = protocol == AgentCliProtocol::Antigravity;
@@ -85,7 +76,8 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                          : command ? "command-code"
                          : buddy   ? "codebuddy"
                                    : "opencode-cli";
-        add({id,
+        add_builtin(
+            {id,
              agy       ? "Antigravity"
              : command ? "Command Code"
              : buddy   ? "CodeBuddy (Tencent)"
@@ -119,7 +111,8 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
     }
     for (const std::string id : {"devin", "acp", "opencode", "gemini", "qwen-code", "kimi", "goose",
                                  "command-code-acp", "codebuddy-acp"}) {
-        add({id,
+        add_builtin(
+            {id,
              id == "devin"              ? "Devin (Cognition)"
              : id == "opencode"         ? "OpenCode (ACP)"
              : id == "gemini"           ? "Gemini CLI"
@@ -192,45 +185,48 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                                 : protocol == ApiProtocol::AnthropicMessages ? "messages-sse"
                                 : protocol == ApiProtocol::OpenRouter ? "chat-completions-sse"
                                                                       : "chat-ndjson";
-        add({id,
-             name,
-             transport,
-             protocol == ApiProtocol::Ollama ? "optional-api-key" : "api-key",
-             {true, false, true, true, true, true, protocol == ApiProtocol::OpenRouter,
-              protocol == ApiProtocol::OpenAIResponses ||
-                  protocol == ApiProtocol::AnthropicMessages,
-              false}},
-            [protocol](const ProviderConfig& config) {
-                ApiOptions options;
-                options.protocol = protocol;
-                options.base_url = config.settings.value("base_url", std::string());
-                options.api_key = config.api_key;
-                options.tools = config.tools;
-                options.max_tool_rounds = config.settings.value("max_tool_rounds", std::size_t(8));
-                options.max_output_tokens = config.settings.value("max_output_tokens", 4096);
-                options.timeout = duration(config.settings, "timeout_ms", 120000);
-                return std::make_shared<ApiProvider>(std::move(options));
-            });
+        add_builtin({id,
+                     name,
+                     transport,
+                     protocol == ApiProtocol::Ollama ? "optional-api-key" : "api-key",
+                     {true, false, true, true, true, true, protocol == ApiProtocol::OpenRouter,
+                      protocol == ApiProtocol::OpenAIResponses ||
+                          protocol == ApiProtocol::AnthropicMessages,
+                      false}},
+                    [protocol](const ProviderConfig& config) {
+                        ApiOptions options;
+                        options.protocol = protocol;
+                        options.base_url = config.settings.value("base_url", std::string());
+                        options.api_key = config.api_key;
+                        options.tools = config.tools;
+                        options.max_tool_rounds =
+                            config.settings.value("max_tool_rounds", std::size_t(8));
+                        options.max_output_tokens =
+                            config.settings.value("max_output_tokens", 4096);
+                        options.timeout = duration(config.settings, "timeout_ms", 120000);
+                        return std::make_shared<ApiProvider>(std::move(options));
+                    });
     }
     for (const std::string id : {"openai-compatible", "llama.cpp", "lmstudio"}) {
-        add({id,
-             id == "llama.cpp"  ? "llama.cpp server"
-             : id == "lmstudio" ? "LM Studio"
-                                : "Compatible Chat Completions",
-             "chat-completions-sse",
-             "optional-api-key",
-             {true, false, true, true, true, true, true, false, false}},
-            [id](const ProviderConfig& config) {
-                HttpChatOptions options;
-                options.base_url = config.settings.value(
-                    "base_url", std::string(id == "lmstudio" ? "http://127.0.0.1:1234/v1"
-                                                             : "http://127.0.0.1:9931/v1"));
-                options.api_key = config.api_key;
-                options.tools = config.tools;
-                options.max_tool_rounds = config.settings.value("max_tool_rounds", std::size_t(8));
-                options.timeout = duration(config.settings, "timeout_ms", 120000);
-                return std::make_shared<HttpChatProvider>(std::move(options));
-            });
+        add_builtin({id,
+                     id == "llama.cpp"  ? "llama.cpp server"
+                     : id == "lmstudio" ? "LM Studio"
+                                        : "Compatible Chat Completions",
+                     "chat-completions-sse",
+                     "optional-api-key",
+                     {true, false, true, true, true, true, true, false, false}},
+                    [id](const ProviderConfig& config) {
+                        HttpChatOptions options;
+                        options.base_url = config.settings.value(
+                            "base_url", std::string(id == "lmstudio" ? "http://127.0.0.1:1234/v1"
+                                                                     : "http://127.0.0.1:9931/v1"));
+                        options.api_key = config.api_key;
+                        options.tools = config.tools;
+                        options.max_tool_rounds =
+                            config.settings.value("max_tool_rounds", std::size_t(8));
+                        options.timeout = duration(config.settings, "timeout_ms", 120000);
+                        return std::make_shared<HttpChatProvider>(std::move(options));
+                    });
     }
 }
 void ProviderRegistry::add(ProviderDescriptor descriptor, ProviderFactory factory) {

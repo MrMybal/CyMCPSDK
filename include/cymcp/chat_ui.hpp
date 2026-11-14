@@ -13,6 +13,7 @@ struct ChatConnection {
     std::filesystem::path history_directory;
     std::string history_id;
     bool restore = false;
+    bool automatic_model = false;
 };
 struct ChatMessage {
     std::uint64_t id = 0;

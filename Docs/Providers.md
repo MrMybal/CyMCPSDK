@@ -1,4 +1,41 @@
-# Connecteurs IA — 0.4.1
+# Connecteurs IA — 0.5.3
+
+## Détection automatique
+
+`ProviderRegistry::discover(options, context)` retourne un résultat pour chaque profil,
+avec `provider_id`, `state`, `source`, `config`, `api_key_env` et le catalogue des services locaux.
+Exécuter cette fonction sur un worker : la recherche de fichiers et les requêtes locales sont bloquantes,
+bornées et annulables. La détection ne lance aucune génération, ne lit aucun fichier d'identifiants
+et ne contacte aucune API distante. `available` indique une installation ou une configuration trouvée,
+pas une authentification ni une génération déjà validée.
+
+```cpp
+ProviderRegistry registry;
+DiscoveryOptions options;
+options.executable_directories.push_back(app_private_bin);
+options.npm_roots.push_back(app_private_node_modules);
+auto candidates = registry.discover(options, context); // worker
+// L'hôte choisit un candidat disponible, puis fournit la clé depuis son coffre
+// ou la variable candidate.api_key_env, séparément de ses paramètres publics.
+```
+
+Les recettes intégrées couvrent tous les CLI nommés du registre : PATH, emplacements
+natifs courants et paquets npm déclarés. Les entrées npm sont lues dans `package.json` ;
+le SDK préfère un binaire natif et utilise sinon `node` avec le script comme argument,
+sans exécuter de wrapper `.cmd`/`.ps1`. Un chemin explicite invalide reste une erreur.
+La recherche de paquets ne parcourt pas récursivement le disque.
+
+Un fournisseur ajouté par l'hôte peut renseigner `ProviderDescriptor.discovery`
+(`executables`, `npm_packages`, `api_key_env`, `endpoint_env`, `default_endpoint`).
+Le profil générique `acp` nécessite une recette ou un exécutable explicite.
+`DiscoveryOptions.configured` conserve les chemins et adresses choisis par l'hôte ;
+`use_environment = false` isole la détection pour les tests.
+
+Le CLI `cymcp_chat discover` affiche les états sans exporter les clés ou les chemins privés.
+Le contrôleur accepte `ChatConnection.automatic_model = true` : les CLI gardent leur
+modèle natif, les API sélectionnent un modèle texte du catalogue réel et la liste retourne
+dans `ChatViewState.models`. Sans interface, `Conversation::connect({}, context, true, &models)`
+fournit le même choix automatique. Une erreur ne rejoue pas la génération et ne change pas de fournisseur.
 
 Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et 22 profils intégrés.
 Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux SDK Python des fournisseurs,

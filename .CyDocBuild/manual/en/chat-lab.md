@@ -5,14 +5,30 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 1
+revision: 2
 ---
 
 ## Connect {#connect}
 
-Select a provider, then its model. **Refresh model catalogue** asks the provider for
-its actual models; otherwise enter an exact model ID manually. Model and connection
-changes apply to the next **Connect / New chat**. A provider can reject unavailable models.
+**Automatic connection** is enabled at startup. Chat Lab detects installed native CLIs,
+user npm installations, running Ollama/LM Studio/compatible services at their known local
+addresses, and API keys supplied through environment variables. It opens the first available
+connection without sending a message. Click another available connection to use it directly.
+
+Native CLIs retain their own default model and account. API connections select a text model
+from the actual catalogue. The model dropdown offers returned IDs; a changed selection takes
+effect when you click **Connect**. Availability can still depend on your account and provider.
+
+**Detect again** repeats the scan. **Other providers / setup** explains missing installations,
+credentials, endpoints or local models. No provider is installed or authenticated by the scan.
+API keys remain in memory. Cloud APIs are contacted only when their connection is selected.
+
+Disable **Automatic connection** to open the optional manual form. **Refresh model catalogue**
+retrieves real model IDs. Model and connection changes apply to the next **Connect / New chat**.
+
+```image
+{"id":"automatic-connection","src":"assets/chat-auto-en.png","alt":"Automatic detection of installed CLIs and a real streamed Codex reply","controls":"minimal"}
+```
 
 Expand **Executable** for a native CLI path, JSON argument array and working directory.
 Use the actual `.exe`, or `node.exe` and its script arguments; shell wrappers are not launched.

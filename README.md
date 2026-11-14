@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.2</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.3</strong></a><br><strong>IN DEVELOPMENT</strong></p>
       <p><sub>Build from source · Windows x64 example</sub></p>
     </td>
   </tr>
@@ -23,12 +23,12 @@ A modular C++20 library for application developers who want AI agents to use the
 conversations inside the app, and connections to other applications' tools. It provides
 native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
-> **IN DEVELOPMENT · 0.5.2**
+> **IN DEVELOPMENT · 0.5.3**
 >
 > The Windows example is available as a source build. Linux/macOS distribution and dependency
 > installation work remain in progress. Read the [version notes and known issues](VERSION.md).
 
-[![Chat Lab in English, showing a streamed local Markdown demonstration](assets/screenshots/chat-lab-en.png)](assets/screenshots/chat-lab-en.png)
+[![Chat Lab automatically detects installed connections and streams a Codex response](assets/screenshots/chat-auto-en.png)](assets/screenshots/chat-auto-en.png)
 
 ## What you can build
 
@@ -67,14 +67,18 @@ or driver is bundled. Android is deferred.
 
 ## Installation
 
-No GitHub binary release is published for 0.5.2. Build from source with access to this repository.
+No GitHub binary release is published for 0.5.3. Build from source with access to this repository.
 For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 runtime and DX11
 (WARP fallback available). Keep `Documentation/`, `licenses/` and notices beside the executable.
 
 1. Build the Windows example with the commands below.
 2. Run `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
-3. Choose **Demo / Markdown (no AI)**, **Connect / New chat**, then send a message with **Ctrl+Enter**.
-4. Select a real provider and model to use its installed CLI, API account or local service.
+3. Keep **Automatic connection** enabled. Installed CLIs, running local services and environment API keys
+   are detected; the first available connection opens without sending a message.
+4. Click another detected connection if needed, then send with **Ctrl+Enter**. Actual models appear in a dropdown.
+
+Manual settings remain available by disabling **Automatic connection**. To try without an AI account,
+select **Demo / Markdown (no AI)** in manual mode and choose **Connect / New chat**.
 
 Open [Documentation/Documentation.html](Documentation/Documentation.html#/en/quickstart)
 from a local checkout or package. Download the complete documentation folder; GitHub's HTML

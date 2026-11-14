@@ -274,6 +274,37 @@ int main(int argc, char** argv) {
         }
         ModelServer model;
         Json report = Json::array();
+        {
+            const auto before = model.requests.load();
+            Run run(argv[1], output / "automatic-local",
+                    {{"provider", "openai-compatible"},
+                     {"automatic", true},
+                     {"discovery_environment", false},
+                     {"api_key_env", "CYMCP_TEST_API_KEY"},
+                     {"settings", {{"base_url", model.base + "/v1"}, {"timeout_ms", 10000}}}},
+                    Json::array({{{"action", "automatic-connect"},
+                                  {"provider", "openai-compatible"},
+                                  {"model", "fixture-model"}},
+                                 {{"action", "wait"}, {"messages", 0}}}));
+            report.push_back(run.finish());
+            check(model.requests == before,
+                  "Automatic discovery and connection submit zero generations");
+        }
+        {
+            Run run(argv[1], output / "automatic-native",
+                    {{"provider", "codex"},
+                     {"automatic", true},
+                     {"discovery_environment", false},
+                     {"process",
+                      {{"executable", argv[2]},
+                       {"arguments", Json::array({"--codex-fixture", "--fixture-app-delay"})}}}},
+                    Json::array({{{"action", "automatic-connect"}, {"provider", "codex"}},
+                                 {{"action", "send"},
+                                  {"text", "automatic"},
+                                  {"reply", "Hello fixture"},
+                                  {"streaming", true}}}));
+            report.push_back(run.finish());
+        }
         for (const std::string id :
              {"openai-compatible", "openai", "anthropic", "openrouter", "ollama"}) {
             int before = model.requests;

@@ -30,7 +30,15 @@ cmake --build build-chat --config Release --parallel 4
 ctest --test-dir build-chat -C Release --output-on-failure
 ```
 
-L'application démarre sans connexion. Sélectionner **Demo / Markdown (no AI)** puis
+L'application démarre en **Automatic connection** : une recherche en arrière-plan
+détecte les CLI natifs et npm installés, les clés API d'environnement et les services
+locaux démarrés. La première connexion disponible s'ouvre sans envoyer de message.
+Choisir une autre connexion dans la liste pour changer de fournisseur. Les CLI gardent
+leurs modèles natifs ; les API choisissent un modèle texte du catalogue réel.
+**Other providers / setup** indique les prérequis manquants, sans lire les secrets
+des fichiers privés. Une erreur ne déclenche pas de changement silencieux de fournisseur.
+
+Désactiver le mode automatique, sélectionner **Demo / Markdown (no AI)** puis
 **Connect / New chat** et envoyer un message permet de vérifier le rendu sans compte.
 Cette démonstration produit du texte déterministe ; elle ne mesure pas un modèle.
 Les 22 profils du registre sont aussi accessibles, avec leurs exigences réelles de
@@ -38,7 +46,9 @@ CLI installé, de compte, d'API ou de service local. Les modèles ne sont pas in
 le catalogue provient du fournisseur connecté, et un ID peut être saisi manuellement.
 Le modèle choisi s'applique à la prochaine connexion.
 
-Les CLIs installés via npm peuvent être des wrappers `.cmd`/`.ps1`. Sélectionner
+Les CLIs installés via npm peuvent être des wrappers `.cmd`/`.ps1`. Le SDK résout
+automatiquement le binaire natif ou le point d'entrée Node du paquet installé.
+Pour une installation inhabituelle, sélectionner
 leur exécutable natif dans **Executable**, ou `node.exe` avec le script dans le
 tableau d'arguments. Le SDK lance des arguments structurés, jamais un shell.
 `--config PATH.json` charge les exemples JSON du SDK ; la connexion reste manuelle.

@@ -5,7 +5,7 @@ description: Select a CLI, native API or local endpoint and supply its real mode
 section: Guides
 parent: chat-lab
 order: 1
-revision: 1
+revision: 2
 ---
 
 ## Built-in profiles {#profiles}
@@ -24,9 +24,20 @@ determine actual capabilities. ACP v1 negotiates session loading, models, modes 
 
 ## Configure a connection {#configure}
 
-Native CLIs use their existing environment and account. Select the native executable when a
-package manager exposes only a shell wrapper. Provider-specific arguments are structured strings;
-the SDK does not run them through a shell. `process.environment` passes child-only environment values.
+Use **Automatic connection** first: installed CLIs and supported npm packages are resolved
+without entering paths or arguments. Native CLIs reuse their existing environment and account.
+Detection covers every named CLI profile above; the generic `acp` profile requires a host recipe.
+An installation is not proof of successful authentication or generation.
+
+For an unusual installation, switch to manual settings. A host application can add executable
+directories, private npm roots and discovery recipes for its own providers. Provider-specific
+arguments are structured strings; the SDK never runs them through a shell.
+`process.environment` passes child-only environment values.
+
+Cloud discovery recognizes `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY`.
+Endpoint overrides use `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENROUTER_BASE_URL` or
+`OLLAMA_HOST`. Running local servers are queried for their models; a stopped service or an
+empty model catalogue is shown explicitly. Private configuration files are not searched for secrets.
 
 API credentials come from a named environment variable or Chat Lab's masked memory field.
 For example, the CLI and GUI can load this non-secret configuration with `--config`:
@@ -39,7 +50,8 @@ For example, the CLI and GUI can load this non-secret configuration with `--conf
 }
 ```
 
-Enter a model returned by your provider before sending. Do not put a real key in a JSON file.
+In automatic mode, choose a returned model in the dropdown or keep the provider default.
+Manual mode also accepts an exact model ID. Do not put a real key in a JSON file.
 Use `settings.base_url` for an endpoint override. The Ollama profile expects its native
 API base, whereas compatible servers commonly use a base ending in `/v1`.
 
@@ -49,6 +61,7 @@ The headless example exposes:
 
 ```sh
 cymcp_chat providers
+cymcp_chat discover
 cymcp_chat models examples/chat-ollama.json
 ```
 

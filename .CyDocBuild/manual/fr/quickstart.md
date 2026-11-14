@@ -5,7 +5,7 @@ description: Compiler et ouvrir l'exemple Windows, puis essayer la démonstratio
 section: Guides
 parent: overview
 order: 1
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Compiler l'exemple {#build}
@@ -27,7 +27,7 @@ avec repli WARP.
 ## Essayer sans compte {#demo}
 
 1. Lancer l'application. **L'anglais** est la langue par défaut.
-2. Conserver **Demo / Markdown (no AI)** et choisir **Connect / New chat**.
+2. Désactiver **Automatic connection**, choisir **Demo / Markdown (no AI)** puis **Connect / New chat**.
 3. Saisir un message et choisir **Send**, ou appuyer sur **Ctrl+Entrée**.
 4. Lire le Markdown pendant son affichage progressif, sélectionner du texte ou copier un message.
 

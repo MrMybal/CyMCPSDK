@@ -197,10 +197,17 @@ class AcpProvider final : public Provider {
     ChatResult send(Session&, Json&, const CallContext&) override;
     void disconnect() noexcept override;
 };
+struct ProviderDiscoveryHints {
+    // Optional host-extensible discovery recipe. No shell commands or credentials.
+    std::vector<std::string> executables, npm_packages;
+    std::string api_key_env, endpoint_env, default_endpoint;
+    bool local_service = false;
+};
 struct ProviderDescriptor {
     std::string id, name, transport, authentication;
     // Available features; instance capabilities reflect the supplied configuration.
     ProviderCapabilities capabilities;
+    ProviderDiscoveryHints discovery;
 };
 struct ProviderConfig {
     ProcessOptions process;
@@ -211,6 +218,26 @@ struct ProviderConfig {
     ProviderRequestHandler request_handler;
 };
 using ProviderFactory = std::function<std::shared_ptr<Provider>(const ProviderConfig&)>;
+struct DiscoveryOptions {
+    bool use_environment = true, probe_local_services = true;
+    std::chrono::milliseconds probe_timeout{600};
+    // Additional installation locations; never searched recursively.
+    std::vector<std::filesystem::path> executable_directories, npm_roots;
+    std::map<std::string, ProviderConfig> configured;
+};
+struct DiscoveredConnection {
+    std::string provider_id, name, state, source, api_key_env, error_code;
+    ProviderConfig config; // secrets stay separate and in memory
+    Json models = Json::array();
+    bool available() const noexcept {
+        return state == "available";
+    }
+};
+// A configured executable is authoritative: an invalid one never falls back.
+ProcessOptions resolve_provider_process(const ProviderDiscoveryHints&, ProcessOptions = {},
+                                        const DiscoveryOptions& = {});
+// Select only from actual catalogue entries. Empty means use the native default.
+std::string default_model(const Json&);
 class ProviderRegistry {
     mutable std::mutex mutex_;
     std::map<std::string, std::pair<ProviderDescriptor, ProviderFactory>> entries_;
@@ -219,6 +246,10 @@ class ProviderRegistry {
     explicit ProviderRegistry(bool builtins = true);
     void add(ProviderDescriptor, ProviderFactory);
     Json describe() const;
+    // Blocking, cancellable discovery. Run on a host worker, never the UI thread.
+    // Inspects installations/environment and probes only local HTTP model catalogues.
+    std::vector<DiscoveredConnection> discover(const DiscoveryOptions& = {},
+                                               const CallContext& = {}) const;
     std::shared_ptr<Provider> create(const std::string&, const ProviderConfig& = {}) const;
 };
 class Conversation {
@@ -229,7 +260,8 @@ class Conversation {
 
   public:
     Conversation(std::shared_ptr<Provider>, std::string model, std::string system_prompt = {});
-    void connect(std::string resume_id = {}, const CallContext& = {});
+    void connect(std::string resume_id = {}, const CallContext& = {}, bool automatic_model = false,
+                 Json* models = nullptr);
     ChatResult send(Json user_content, const CallContext& = {});
     std::future<ChatResult> send_async(Executor&, Json user_content, CallContext = {});
     void cancel() noexcept;

@@ -5,7 +5,7 @@ description: Sélectionner CLI, API native ou service local avec ses vrais modè
 section: Guides
 parent: chat-lab
 order: 1
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Profils intégrés {#profiles}
@@ -25,10 +25,22 @@ actuel utilise `opencode` avec ACP.
 
 ## Configurer une connexion {#configure}
 
-Les CLI natifs utilisent leur environnement et leur compte existants. Sélectionner le vrai
-exécutable si le gestionnaire de paquets ne fournit qu'un wrapper shell. Les arguments sont
-des chaînes structurées ; le SDK ne les passe pas à un shell. `process.environment` transmet
-des variables uniquement au processus enfant.
+Utiliser d'abord **Connexion automatique** : les CLI installés et les paquets npm pris en
+charge sont résolus sans saisir de chemins ni d'arguments. Les CLI réutilisent leur compte
+et leur environnement. La détection couvre chaque profil CLI nommé ci-dessus ; le profil
+générique `acp` nécessite une recette fournie par l'hôte. Une installation ne prouve pas
+que l'authentification ou la génération réussira.
+
+Pour une installation particulière, passer aux paramètres manuels. L'application hôte peut
+ajouter ses dossiers d'exécutables, ses racines npm privées et ses recettes de détection.
+Les arguments sont des chaînes structurées ; le SDK ne les passe jamais à un shell.
+`process.environment` transmet des variables uniquement au processus enfant.
+
+La détection reconnaît `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` et `OPENROUTER_API_KEY`.
+Les adresses peuvent venir de `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`,
+`OPENROUTER_BASE_URL` ou `OLLAMA_HOST`. Les services locaux démarrés sont interrogés
+pour leurs modèles ; un service arrêté ou sans modèles est signalé explicitement.
+La recherche n'inspecte pas les fichiers privés pour y chercher des secrets.
 
 Les identifiants API viennent d'une variable d'environnement nommée ou du champ masqué en mémoire
 de Chat Lab. Le CLI et l'interface peuvent charger cette configuration sans secret avec `--config` :
@@ -41,7 +53,8 @@ de Chat Lab. Le CLI et l'interface peuvent charger cette configuration sans secr
 }
 ```
 
-Saisir un modèle retourné par le fournisseur avant d'envoyer un message. Ne pas mettre de vraie
+En mode automatique, choisir un modèle retourné dans la liste ou conserver le réglage natif.
+Le mode manuel accepte aussi un identifiant exact. Ne pas mettre de vraie
 clé dans un fichier JSON. `settings.base_url` remplace l'adresse du service. Le profil Ollama
 attend la base de son API native ; les serveurs compatibles utilisent généralement une base `/v1`.
 
@@ -51,6 +64,7 @@ L'exemple sans interface propose :
 
 ```sh
 cymcp_chat providers
+cymcp_chat discover
 cymcp_chat models examples/chat-ollama.json
 ```
 

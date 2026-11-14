@@ -1,6 +1,6 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.5.2 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.5.3 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 
@@ -18,6 +18,10 @@ directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
   app operation policies are distinct; unrestricted behavior is explicit.
 - Keep UI work nonblocking. Providers run on the controller worker; CyUI rendering
   stays on the host UI thread. English is the default, with complete French labels.
+- Chat Lab defaults to automatic discovery and opens a detected connection without
+  sending a message. ProviderRegistry::discover is reusable without CyUI; extensions
+  declare discovery recipes and host-private installation locations. Manual settings
+  remain available. Never change providers automatically after a connection failure.
 - Inspect `Docs/Integration.md`, `Docs/Providers.md`, `Docs/Conversations.md` and
   `Docs/ChatUI.md` in the source checkout for detailed developer contracts.
 

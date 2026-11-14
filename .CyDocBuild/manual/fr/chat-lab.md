@@ -5,15 +5,34 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Se connecter {#connect}
 
-Sélectionner un fournisseur, puis son modèle. **Actualiser le catalogue** demande les vrais
-modèles au fournisseur ; sinon saisir manuellement un identifiant exact. Les changements
-de modèle ou de connexion s'appliquent à **Connecter / Nouveau tchat**.
-Un fournisseur peut refuser un modèle indisponible.
+La **Connexion automatique** est activée au démarrage. Chat Lab détecte les CLI natifs,
+les installations npm de l'utilisateur, les services Ollama/LM Studio/compatibles démarrés
+à leurs adresses locales connues et les clés API des variables d'environnement. Il ouvre
+la première connexion disponible sans envoyer de message. Cliquer sur une autre connexion
+disponible pour l'utiliser directement.
+
+Les CLI conservent leur compte et leur modèle par défaut. Les connexions API choisissent
+un modèle texte du catalogue réel. La liste de modèles propose les identifiants retournés ;
+un changement prend effet au prochain clic sur **Connecter**. La disponibilité dépend
+toujours du compte et du fournisseur.
+
+**Relancer la détection** recommence la recherche. **Autres fournisseurs / configuration**
+explique les installations, identifiants, adresses ou modèles locaux manquants. La recherche
+n'installe aucun fournisseur et ne connecte aucun compte. Les clés restent en mémoire.
+Une API distante n'est contactée qu'à la sélection de sa connexion.
+
+Désactiver **Connexion automatique** pour ouvrir le formulaire manuel facultatif.
+**Actualiser le catalogue** récupère les vrais modèles. Les modifications s'appliquent
+à la prochaine action **Connecter / Nouveau tchat**.
+
+```image
+{"id":"automatic-connection","src":"assets/chat-auto-fr.png","alt":"Chat Lab en français après détection et connexion automatiques, sans message envoyé","controls":"minimal"}
+```
 
 Déplier **Exécutable** pour le chemin du CLI natif, le tableau JSON d'arguments et le dossier
 de travail. Utiliser le vrai `.exe`, ou `node.exe` accompagné des arguments de son script ;

@@ -18,10 +18,23 @@ int main(int argc, char** argv) {
             std::cout << providers.describe().dump(2) << '\n';
             return 0;
         }
+        if (args.size() == 1 && args.front() == "discover") {
+            Json rows = Json::array();
+            for (const auto& row : providers.discover())
+                rows.push_back({{"provider", row.provider_id},
+                                {"name", row.name},
+                                {"state", row.state},
+                                {"source", row.source},
+                                {"error", row.error_code},
+                                {"models", row.models}});
+            std::cout << rows.dump(2) << '\n';
+            return 0;
+        }
         bool models = args.size() == 2 && args.front() == "models";
         bool benchmark = args.size() == 2 && args.front() == "benchmark";
         if (args.size() != 1 && !models && !benchmark) {
-            std::cerr << "Usage: cymcp_chat providers | models CONFIG.json | benchmark CONFIG.json "
+            std::cerr << "Usage: cymcp_chat providers | discover | models CONFIG.json | benchmark "
+                         "CONFIG.json "
                          "| CONFIG.json\n"
                          "Then one JSON user message per stdin line: {\"text\":\"Hello\"}\n";
             return 2;

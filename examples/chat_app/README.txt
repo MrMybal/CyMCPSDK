@@ -1,15 +1,21 @@
-CyMCPSDK Chat Lab 0.5.2 - Windows x64
+CyMCPSDK Chat Lab 0.5.3 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
 English is the default, including the local Markdown demonstration.
 Help (F1) opens the supplied offline manual in the selected language.
 Keep the complete Documentation/ directory beside the executable.
+Automatic connection is enabled at startup. Installed native CLIs and supported
+npm packages, environment API keys and running local model services are detected
+in the background. The first available connection opens without sending a message.
+Click another detected connection to use it. CLI accounts and default models are
+reused; API text models come from the actual catalogue. No manual paths are needed
+for detected installations. Missing prerequisites are listed under Other providers.
+Disable Automatic connection for the optional manual settings below.
 Demo / Markdown uses deterministic local text and needs no AI account or model.
-Select a provider, enter a model ID when required, then Connect / New chat.
 Refresh model catalogue queries the connected provider. A selected model applies
 to the next connection. Enter inserts a line; Ctrl+Enter sends a message.
 
-Native CLIs use their existing environment/account. If not found on PATH, expand
+Native CLIs use their existing environment/account. For an unusual installation, expand
 Executable and choose the actual .exe (or node.exe with its script as a JSON
 argument). Shell wrappers such as .cmd and .ps1 are not launched by this SDK.
 API keys can come from an environment variable or the masked memory-only field.
@@ -31,7 +37,8 @@ The demonstration commands only access the counter, with no file or system acces
 All three app_commands configuration options are false by default.
 
 Optional arguments:
-  --config PATH.json             Load an SDK chat configuration; connect manually.
+  --config PATH.json             Load an SDK chat configuration (manual by default).
+                                 Set "automatic": true to enable discovery.
   --language fr                  Start with French UI (default: en).
   --theme navy                   Select a CyUI theme.
   --smoke --capture PATH.png      Hidden local demo test, then quit.

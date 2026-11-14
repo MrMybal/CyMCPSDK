@@ -211,7 +211,8 @@ void ChatController::open(ChatConnection options) {
         if (s.connection.restore)
             s.chat->restore(s.store->load(s.connection.history_id), context);
         else
-            s.chat->connect(s.connection.resume_id, context);
+            s.chat->connect(s.connection.resume_id, context, s.connection.automatic_model,
+                            s.connection.automatic_model ? &result.models : nullptr);
         result.history = s.chat->history();
     });
 }

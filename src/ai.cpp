@@ -291,7 +291,8 @@ Conversation::Conversation(std::shared_ptr<Provider> provider, std::string model
     if (!system.empty())
         state_->messages.push_back({{"role", "system"}, {"content", std::move(system)}});
 }
-void Conversation::connect(std::string resume, const CallContext& input) {
+void Conversation::connect(std::string resume, const CallContext& input, bool automatic_model,
+                           Json* models) {
     auto& s = *state_;
     auto context = reserve(input);
     struct Release {
@@ -313,6 +314,13 @@ void Conversation::connect(std::string resume, const CallContext& input) {
     auto started = Clock::now();
     try {
         s.provider->connect(context);
+        Json catalogue = Json::array();
+        if (automatic_model && s.provider->uses_host_history() && s.model.empty()) {
+            catalogue = s.provider->list_models(context);
+            s.model = default_model(catalogue);
+            if (s.model.empty())
+                throw Error("UnknownModel", "No models are available on this service");
+        }
         std::string system;
         {
             std::lock_guard history(s.history);
@@ -322,6 +330,17 @@ void Conversation::connect(std::string resume, const CallContext& input) {
                     system += message["content"].get<std::string>() + "\n";
         }
         auto session = s.provider->start_session(s.model, std::move(resume), context, system);
+        if (models) {
+            if (catalogue.empty() && s.provider->capabilities().model_catalogue) {
+                try {
+                    catalogue = s.provider->list_models(context);
+                } catch (const Error& error) {
+                    if (error.code != "Unsupported")
+                        throw;
+                }
+            }
+            *models = std::move(catalogue);
+        }
         std::lock_guard lock(s.history);
         context.cancellation.check();
         if (s.disconnect_requested.load())

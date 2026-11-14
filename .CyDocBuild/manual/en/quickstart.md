@@ -5,7 +5,7 @@ description: Build and open the Windows example, then try its local Markdown dem
 section: Guides
 parent: overview
 order: 1
-revision: 1
+revision: 2
 ---
 
 ## Build the example {#build}
@@ -26,7 +26,7 @@ The Microsoft Visual C++ 2015–2022 x64 runtime is required. DX11 is used, with
 ## Try without an account {#demo}
 
 1. Start the application. **English** is the default language.
-2. Keep **Demo / Markdown (no AI)** selected and choose **Connect / New chat**.
+2. Disable **Automatic connection**, choose **Demo / Markdown (no AI)** and **Connect / New chat**.
 3. Type a message and choose **Send**, or press **Ctrl+Enter**.
 4. Read the streamed Markdown, select text or copy a message.
 

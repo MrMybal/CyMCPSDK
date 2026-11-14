@@ -2,7 +2,18 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
-## 0.5.2 — In development
+## 0.5.3 — In development
+
+- Chat Lab starts in automatic mode: installed native CLIs, supported npm installations,
+  environment API keys and running local model services are detected in the background.
+- Available connections open without executable paths, launch arguments or manually typed model IDs.
+  Native providers retain their defaults; API text models come from their actual catalogues.
+- Missing installations, keys, endpoints and local models have distinct setup states.
+  Detection does not submit messages, install runtimes or read private credential files.
+- Discovery is part of the AI SDK and accepts host-defined provider recipes and search locations.
+  Manual connection settings remain available.
+
+## 0.5.2
 
 - English remains the application's default language. The local Markdown demonstration
   now follows the selected English or French language too.

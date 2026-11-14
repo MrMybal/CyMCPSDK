@@ -54,7 +54,10 @@ struct Exercise {
             streamed = false;
             step_started = cymcp::Clock::now();
             try {
-                if (action == "connect")
+                if (action == "automatic-connect") {
+                    app.automatic = true;
+                    app.detect_connections(true);
+                } else if (action == "connect")
                     app.connect(step.value("restore", false));
                 else if (action == "send") {
                     std::vector<std::filesystem::path> paths;
@@ -79,7 +82,7 @@ struct Exercise {
                 failure = "InvalidOptions";
             }
         }
-        if (app.chat.state().busy) {
+        if (app.chat.state().busy || app.discovery_task.valid()) {
             if (step.contains("cancel_after_ms") &&
                 cymcp::Clock::now() - step_started >
                     std::chrono::milliseconds(step.at("cancel_after_ms").template get<int>()))
@@ -87,6 +90,7 @@ struct Exercise {
             if (cymcp::Clock::now() - step_started >
                 std::chrono::milliseconds(step.value("timeout_ms", 45000))) {
                 app.chat.cancel();
+                app.discovery_cancel.cancel();
                 failure = "ValidationTimeout";
             } else
                 return;
@@ -99,6 +103,12 @@ struct Exercise {
         const auto& state = app.chat.state();
         std::string code = failure.empty() ? state.error_code : failure;
         bool ok = code == step.value("error", std::string());
+        if (step.contains("provider"))
+            ok &= state.provider_id == step.at("provider").template get<std::string>();
+        if (step.contains("model"))
+            ok &= state.model == step.at("model").template get<std::string>();
+        if (action == "automatic-connect" && code.empty())
+            ok &= state.connected;
         std::string reply;
         if (!state.messages.empty() && state.messages.back().role == "assistant")
             reply = state.messages.back().markdown;
