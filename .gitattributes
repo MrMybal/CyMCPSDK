@@ -4,6 +4,9 @@
 *.md text eol=lf
 *.json text eol=lf
 *.yml text eol=lf
+*.ps1 text eol=lf
 *.cmake text eol=lf
+*.in text eol=lf
 CMakeLists.txt text eol=lf
 .clang-format text eol=lf
+.gitattributes text eol=lf

@@ -13,6 +13,12 @@ https://github.com/okdshin/PicoSHA2.
 
 Windows networking and cryptography use system APIs. Linux/macOS HTTPS uses the
 host's libcurl, under its own permissive curl license and TLS backend notices.
-No Python runtime, GUI, model weights, inference engine, GPU runtime or driver
-is shipped in the SDK. External providers, engines and downloaded packages retain
+No Python runtime, model weights, inference engine, GPU runtime or driver
+is shipped in the SDK. The optional ChatUI module uses the host's CyUI (MIT),
+Dear ImGui (MIT), MD4C (MIT), Lexilla/Scintilla's permissive lexer libraries and
+CyUI's embedded JetBrains Mono font (SIL OFL 1.1). The Windows example statically
+links the selected CyUI modules; its distribution includes their upstream notices.
+CyUI source is supplied by the host and is not vendored into this repository.
+The base SDK does not acquire any GUI dependency.
+External providers, engines and downloaded packages retain
 their own terms; their licenses are not changed by this project.

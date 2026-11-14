@@ -1,4 +1,4 @@
-# Validation 0.4.1
+# Validation 0.5.0
 
 Validation locale le **14 novembre 2026**, Windows x64, Visual Studio 2022 / MSVC 19.40,
 CMake 3.31 et Ninja, configuration Release. Il s'agit d'une première base native de développement.
@@ -9,7 +9,16 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
 - Compilation de tous les modules et des exemples natifs d'application et de conversation.
 - Suite CTest : validation des schémas, droits, annulation, workers, JSON borné et clés dupliquées.
   Dernière exécution : **26 contrôles du cœur, 50 d'intégration, 98 de fournisseurs, 67 d'extensions et 156 de conversations**,
-  soit **397 contrôles**, tous réussis.
+  plus **42 contrôles du module ChatUI**, soit **439 contrôles**, tous réussis.
+- Application Windows Chat Lab : compilation et lancement Win32/DX11, génération déterministe de démonstration
+  avec streaming, capture PNG native et sortie réussie. **7 suites CTest réussies**, dont le smoke test graphique.
+  Le mode démo ne contacte aucun fournisseur IA.
+- ChatUI : worker non bloquant, résultat final sans doublons, annulation silencieuse, reprise et fermeture,
+  catalogue, pièces jointes lues sur worker, sauvegarde/reprise privée sans clé API, erreur disque distincte,
+  connexion annulée sans reprendre les métadonnées précédentes, files et affichage bornés.
+- Rendu du panneau dans les **5 thèmes CyUI et 2 langues** ; captures natives françaises des 5 thèmes.
+  Consommateur CMake installé avec `COMPONENTS ChatUI` compilé et exécuté ; consommateur ordinaire du SDK
+  compilé et exécuté sans dépendance CyUI. Script PowerShell de compilation/distribution testé sans Python.
 - Sous-processus réels : arguments sans shell, processus silencieux, blocage sur stdin, dépassement de ligne/file.
 - Serveur HTTP réel sur loopback : authentification, rejet d'Origin, propagation de l'annulation à la fermeture du client.
 - MCP HTTP réel entre client et serveur C++ : découverte, invocation, erreurs et délégation d'une app vers une autre.
@@ -113,7 +122,7 @@ de vitesse équivalente à un client fournisseur. Aucune performance d'inférenc
 
 ## Limites du périmètre livré
 
-Pas d'interface, Android, réseau public, OAuth multi-utilisateur, coffre de secrets,
+Android, réseau public, OAuth multi-utilisateur, coffre de secrets,
 jobs persistants, sandbox OS propre au SDK, téléchargement automatique de catalogues GPU,
 extraction d'archives ou reprise HTTP Range. Claude Code et Antigravity disposent de processus persistants.
 Les CLI historiques OpenCode 1.x, Command Code et CodeBuddy restent par tour ; OpenCode, Command Code et

@@ -1,10 +1,11 @@
 # CyMCPSDK
 
 Bibliothèque C++20 modulaire sous **MIT**, pour exposer les opérations d'une application aux IA,
-intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.4.1**.
+intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.5.0**.
 
-Le SDK est natif : aucune dépendance Python à l'exécution. Aucune interface, aucun modèle,
-moteur d'inférence, runtime GPU ou pilote n'est embarqué. L'interface CyUI est hors périmètre.
+Le SDK est natif : aucune dépendance Python à l'exécution. Un module de tchat **CyUI optionnel**
+et une petite application Windows de test sont disponibles. Aucun modèle, moteur d'inférence,
+runtime GPU ou pilote n'est embarqué.
 Android est reporté. Windows et Linux constituent les cibles initiales ; macOS est prévu par les adaptateurs.
 Voir [les preuves de validation et les limites](Docs/Validation.md) avant d'intégrer.
 
@@ -18,11 +19,26 @@ Voir [les preuves de validation et les limites](Docs/Validation.md) avant d'int�
 | `CyMCP::MCP` | Serveur et client MCP : stdio, HTTP JSON, découverte et appels d'outils |
 | `CyMCP::AI` | Conversations, registre extensible, agents CLI/ACP et API natives, streaming et outils |
 | `CyMCP::Local` | Supervision d'un moteur local et installation de composants vérifiés depuis l'app |
-| `CyMCP::SDK` | Agrégat des modules activés à la compilation |
+| `CyMCP::ChatUI` | Module optionnel : contrôleur asynchrone et panneau de tchat natif CyUI/Markdown |
+| `CyMCP::SDK` | Agrégat des modules du SDK, sans dépendance graphique |
 
 Les modules lourds se désactivent avec `CYMCP_BUILD_HTTP`, `CYMCP_BUILD_MCP`, `CYMCP_BUILD_AI`
 et `CYMCP_BUILD_LOCAL`. Le processus natif a son option `CYMCP_BUILD_PLATFORM`.
 Les dépendances entre modules sont contrôlées par CMake. Le preset `core-only` compile uniquement le socle.
+`CYMCP_BUILD_CHAT_UI` et `CYMCP_BUILD_CHAT_APP` sont désactivés par défaut ; CyUI est fourni par l'hôte.
+
+## Tester le tchat Windows
+
+```powershell
+./tools/build-chat.ps1 -CyUISource ../CyUI
+./out/ChatLab-windows-x64/cymcp_chat_app.exe --language fr
+```
+
+Le [guide du module ChatUI](Docs/ChatUI.md) décrit l'intégration dans une autre app.
+L'exemple propose les 22 profils de fournisseurs, un catalogue de modèles réel ou une saisie manuelle,
+streaming Markdown, pièces jointes, arrêt, reconnexion et historique facultatif.
+Le mode **Demo / Markdown (no AI)** vérifie l'interface sans compte ; il produit du texte déterministe.
+L'interface est en anglais par défaut, avec français et cinq thèmes CyUI disponibles.
 
 ## Compiler
 
@@ -85,7 +101,8 @@ cmake --install build --config Release --prefix install
 
 Puis `find_package(CyMCPSDK CONFIG REQUIRED)` et les mêmes cibles `CyMCP::*`.
 Lire [le guide d'intégration](Docs/Integration.md) pour les droits, les conversations,
-les autres applications et les moteurs locaux. Les exemples restent indépendants de toute interface graphique.
+les autres applications et les moteurs locaux. Les exemples en ligne de commande restent indépendants
+de toute interface graphique ; l'application Windows utilise le module optionnel ChatUI.
 
 Le [guide des fournisseurs](Docs/Providers.md) décrit les **22 profils intégrés**, leurs capacités et l'ajout
 de nouveaux connecteurs par factory. `cymcp_chat providers` imprime le catalogue ; `cymcp_chat models CONFIG.json`
