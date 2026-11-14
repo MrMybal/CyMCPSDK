@@ -3,6 +3,7 @@
   "model": "",
   "settings": {
     "persistent": true,
+    "setting_sources": "user",
     "allow_all_actions": false,
     "allowed_tools": [],
     "mcp_servers": {}

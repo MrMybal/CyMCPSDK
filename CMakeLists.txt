@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(CyMCPSDK VERSION 0.4.0 LANGUAGES CXX)
+project(CyMCPSDK VERSION 0.4.1 LANGUAGES CXX)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 option(CYMCP_BUILD_HTTP "Build HTTP and HTTPS transport" ON)

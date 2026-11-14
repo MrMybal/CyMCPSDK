@@ -95,6 +95,7 @@ struct ClaudeOptions {
     std::vector<std::string> allowed_tools; // empty means no built-in tools
     bool allow_all_actions = false;         // maps explicitly to the provider's bypass mode
     bool persistent = true;
+    std::string setting_sources = "user"; // preserve the native user's provider/auth configuration
 };
 class ClaudeProvider final : public Provider {
     struct Impl;

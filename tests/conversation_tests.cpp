@@ -79,6 +79,59 @@ int main(int argc, char** argv) {
         check(attachment_from_file(directory / "spec.txt").at("resource").at("text") ==
                   "hello spec",
               "Text attachment embeds content");
+        {
+            ProviderConfig config;
+            config.process = {
+                fixture,
+                {"--conversation-fixture", "--fixture-no-auth", "--fixture-user-settings"}};
+            auto provider = registry.create("claude-code", config);
+            Conversation chat(provider, "fixture-model");
+            std::string auth;
+            CallContext context;
+            context.events = [&](const Event& event) {
+                if (event.type == "ProviderReady")
+                    auth = event.data.at("authentication").get<std::string>();
+            };
+            chat.connect("", context);
+            check(auth == "unverified",
+                  "Claude connect does not claim verified authentication from a runtime check");
+            check(chat.send("native context").text == "native context",
+                  "Claude can use native provider context without a blocking login probe");
+            for (const std::string sources : {"", "user,project,local"}) {
+                auto explicit_sources = config;
+                explicit_sources.process.arguments = {
+                    "--conversation-fixture",
+                    sources.empty() ? "--fixture-no-settings" : "--fixture-project-settings"};
+                explicit_sources.settings["setting_sources"] = sources;
+                Conversation selected(registry.create("claude-code", explicit_sources),
+                                      "fixture-model");
+                selected.connect();
+                check(selected.send("selected settings").text == "selected settings",
+                      "Host can select or disable native setting sources explicitly");
+            }
+            for (const std::string sources :
+                 {"unknown", "user,user", "user,", ",user", "user, project"}) {
+                auto invalid_sources = config;
+                invalid_sources.settings["setting_sources"] = sources;
+                expect_error("InvalidOptions",
+                             [&] { registry.create("claude-code", invalid_sources); });
+            }
+            auto unavailable = config;
+            unavailable.process.arguments = {"--conversation-fixture", "--fixture-version-failure"};
+            expect_error("ConnectionFailed",
+                         [&] { registry.create("claude-code", unavailable)->connect(); });
+            for (const auto& [flag, code] : std::vector<std::pair<std::string, std::string>>{
+                     {"--fixture-auth-failure", "AuthenticationRequired"},
+                     {"--fixture-rate-limit", "RateLimited"}}) {
+                auto failed = config;
+                failed.process.arguments = {"--conversation-fixture", flag};
+                Conversation rejected(registry.create("claude-code", failed), "fixture-model");
+                rejected.connect();
+                expect_error(code, [&] { rejected.send("native failure"); });
+                check(rejected.status().at("last_error") == code,
+                      "Native Claude error categories survive in conversation diagnostics");
+            }
+        }
         for (bool agy : {false, true}) {
             ProviderConfig config;
             config.process = {fixture, {"--conversation-fixture"}};

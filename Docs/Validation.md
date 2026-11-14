@@ -1,4 +1,4 @@
-# Validation 0.4.0
+# Validation 0.4.1
 
 Validation locale le **14 novembre 2026**, Windows x64, Visual Studio 2022 / MSVC 19.40,
 CMake 3.31 et Ninja, configuration Release. Il s'agit d'une première base native de développement.
@@ -8,8 +8,8 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
 
 - Compilation de tous les modules et des exemples natifs d'application et de conversation.
 - Suite CTest : validation des schémas, droits, annulation, workers, JSON borné et clés dupliquées.
-  Dernière exécution : **26 contrôles du cœur, 50 d'intégration, 98 de fournisseurs, 67 d'extensions et 142 de conversations**,
-  soit **383 contrôles**, tous réussis.
+  Dernière exécution : **26 contrôles du cœur, 50 d'intégration, 98 de fournisseurs, 67 d'extensions et 156 de conversations**,
+  soit **397 contrôles**, tous réussis.
 - Sous-processus réels : arguments sans shell, processus silencieux, blocage sur stdin, dépassement de ligne/file.
 - Serveur HTTP réel sur loopback : authentification, rejet d'Origin, propagation de l'annulation à la fermeture du client.
 - MCP HTTP réel entre client et serveur C++ : découverte, invocation, erreurs et délégation d'une app vers une autre.
@@ -57,11 +57,18 @@ Une compilation réussie et des fixtures ne constituent pas un audit de sécurit
   Raisonnement natif et résultats d'outils conservés après échec ; aucune génération/action rejouée par `restore`.
 - Diagnostic : premier delta et durée totale, événement de métriques, benchmark froid/chaud de l'exemple
   exécuté sur fixture persistante. Annulation et reconnexion Codex après déconnexion directe du fournisseur.
+- Claude 0.4.1 : disponibilité du runtime séparée de l'authentification, absence de contrôle de login bloquant,
+  réglages utilisateur conservés par défaut, sélection explicite des sources, valeurs invalides refusées,
+  erreurs natives `authentication_failed` et `rate_limit` distinguées d'un échec du runtime.
 
 Les exécutables des fixtures ne font pas d'inférence. Aucun modèle, CUDA ou pilote n'a été téléchargé/installé.
 Les interfaces ont été confrontées à la documentation officielle et aux schémas du Codex CLI installé
 **0.155.0** ; Claude installé : **2.1.276**. Des essais réels supplémentaires de la 0.4 ont été effectués
-avec le CLI de tchat/benchmark C++ : Claude retourne `AuthenticationRequired` avant génération ; Codex
+avec le CLI de tchat/benchmark C++. En 0.4.0, le SDK bloquait Claude sur `auth status` avant tout message :
+ce diagnostic ne provenait pas d'une demande interactive du CLI. Ce blocage est supprimé en 0.4.1.
+Le nouvel essai atteint le tour natif, qui retourne la catégorie structurée `authentication_failed` dans
+le contexte du processus de test. Cela ne décrit pas la connexion d'un autre terminal ou lanceur utilisateur.
+Codex
 établit la connexion native et crée la session, puis son tour se termine en échec (`codexErrorInfo=other`).
 Aucune réponse cloud réussie ni mesure de latence réelle de modèle n'est donc revendiquée. Les détails de
 compte et les messages privés de diagnostic ne sont pas exportés. Aucun réglage d'authentification n'a été modifié.

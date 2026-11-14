@@ -1,7 +1,7 @@
 # CyMCPSDK
 
 Bibliothèque C++20 modulaire sous **MIT**, pour exposer les opérations d'une application aux IA,
-intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.4.0**.
+intégrer des conversations et appeler les outils d'autres applications. Version de développement **0.4.1**.
 
 Le SDK est natif : aucune dépendance Python à l'exécution. Aucune interface, aucun modèle,
 moteur d'inférence, runtime GPU ou pilote n'est embarqué. L'interface CyUI est hors périmètre.
@@ -94,6 +94,7 @@ OpenCode utilise désormais ACP persistant ; le CLI 1.x reste disponible sous `o
 Les agents intégrés comprennent aussi Gemini CLI, Qwen Code, Kimi et goose. Command Code et CodeBuddy
 possèdent chacun un profil ACP persistant supplémentaire. Les capacités sont négociées avec chaque agent.
 Claude Code et Antigravity gardent leur processus de conversation ouvert par défaut dans le registre.
+Claude conserve les réglages utilisateur natifs et ne bloque pas la connexion sur un contrôle de login préalable.
 Le [guide des conversations](Docs/Conversations.md) couvre les pièces jointes portables, la sauvegarde privée
 optionnelle, la reprise exacte après déconnexion et les mesures du premier token et des tours chauds.
 `cymcp_chat benchmark CONFIG.json` mesure un fournisseur configuré avec de vrais échanges ; il ne lance

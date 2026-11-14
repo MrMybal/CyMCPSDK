@@ -1,4 +1,4 @@
-# Connecteurs IA — 0.4.0
+# Connecteurs IA — 0.4.1
 
 Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et 22 profils intégrés.
 Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux SDK Python des fournisseurs,
@@ -81,8 +81,9 @@ Le SDK ne persiste ni clés ni profils. L'hôte charge les secrets depuis son co
 
 `connect()` des API natives effectue une requête de catalogue authentifiée, plus `/key` pour OpenRouter ;
 aucune génération n'est envoyée. La connexion compatible générique valide uniquement la configuration :
-appeler `list_models()` pour vérifier le service. OpenCode/Antigravity/Command Code/CodeBuddy vérifient l'exécutable avec `--version` ;
-l'état du compte reste **non vérifié** avant une génération réussie. Codex et Claude vérifient leur compte natif.
+appeler `list_models()` pour vérifier le service. Claude/OpenCode CLI/Antigravity/Command Code/CodeBuddy vérifient l'exécutable avec `--version` ;
+l'état du compte reste **non vérifié** avant une génération réussie. Codex vérifie son compte natif.
+Claude réutilise la configuration du CLI ; le SDK ne lance aucun login et n'impose pas `auth status` comme préalable.
 ACP négocie le protocole dans `initialize` ; une session peut ensuite signaler `AuthenticationRequired`.
 Le SDK n'ouvre pas de navigateur d'authentification automatiquement.
 
@@ -124,7 +125,11 @@ Les politiques d'outils de l'app restent indépendantes. Fournir `Policy::allow_
 veut autoriser tous ses handlers. Le mode plan d'Antigravity permet des lectures ; ce n'est pas une sandbox
 créée par le SDK. Les restrictions natives, de compte et d'organisation peuvent toujours s'appliquer.
 
-Pour Claude : `settings.mcp_servers` et `settings.allowed_tools`. Pour OpenCode CLI 1.x : `settings.native_settings`
+Pour Claude : `settings.mcp_servers` et `settings.allowed_tools`. `settings.setting_sources` vaut `"user"`
+par défaut pour conserver la configuration utilisateur du fournisseur et de son authentification ; `""` désactive
+explicitement ces sources, et `"user,project,local"` reprend aussi celles du projet. Les variables du processus
+et `CLAUDE_CONFIG_DIR` fournis par l'hôte restent hérités. Une erreur d'authentification n'est remontée que
+si le tour natif échoue avec une catégorie d'authentification structurée. Pour OpenCode CLI 1.x : `settings.native_settings`
 est sa configuration JSON 1.x, dont `mcp` si nécessaire. Pour Antigravity : cet objet passe à `--settings`.
 Les réglages de permissions générés par l'adaptateur prennent priorité sur les réglages contradictoires de ce même objet.
 Les fichiers de configuration/plugins natifs du fournisseur restent sous la responsabilité de l'hôte.

@@ -73,6 +73,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                 config.settings.value("allowed_tools", std::vector<std::string>());
             options.allow_all_actions = config.settings.value("allow_all_actions", false);
             options.persistent = config.settings.value("persistent", true);
+            options.setting_sources = config.settings.value("setting_sources", std::string("user"));
             return std::make_shared<ClaudeProvider>(std::move(options));
         });
     for (auto protocol : {AgentCliProtocol::OpenCode, AgentCliProtocol::Antigravity,

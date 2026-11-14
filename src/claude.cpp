@@ -1,4 +1,6 @@
 #include <cymcp/ai.hpp>
+#include <set>
+#include <sstream>
 namespace cymcp {
 struct ClaudeProvider::Impl {
     ClaudeOptions options;
@@ -25,9 +27,19 @@ struct ClaudeProvider::Impl {
 ClaudeProvider::ClaudeProvider(ClaudeOptions options)
     : Provider("claude-code"), impl_(std::make_unique<Impl>(std::move(options))) {
     if (!impl_->options.mcp_servers.is_object() || impl_->options.connect_timeout.count() <= 0 ||
+        impl_->options.connect_timeout > std::chrono::hours(24) ||
         impl_->options.turn_timeout.count() <= 0 ||
         impl_->options.turn_timeout > std::chrono::hours(24))
         throw Error("InvalidOptions", "Invalid Claude options");
+    const auto& sources = impl_->options.setting_sources;
+    std::set<std::string> seen;
+    std::istringstream input(sources);
+    for (std::string source; std::getline(input, source, ',');)
+        if ((source != "user" && source != "project" && source != "local") ||
+            !seen.insert(source).second)
+            throw Error("InvalidOptions", "Invalid Claude setting sources");
+    if (!sources.empty() && sources.back() == ',')
+        throw Error("InvalidOptions", "Invalid Claude setting sources");
 }
 ClaudeProvider::~ClaudeProvider() {
     disconnect();
@@ -49,7 +61,9 @@ void ClaudeProvider::connect(const CallContext& input) {
     std::lock_guard lock(p.mutex);
     auto context = p.begin(input, p.options.connect_timeout);
     auto config = p.options.process;
-    config.arguments.insert(config.arguments.end(), {"auth", "status"});
+    // Availability is separate from authentication. Let the native CLI resolve
+    // its account, environment, helper or provider when an actual turn is sent.
+    config.arguments.push_back("--version");
     Process probe(config);
     probe.close_input();
     std::string output;
@@ -58,15 +72,14 @@ void ClaudeProvider::connect(const CallContext& input) {
         if (!line.stderr_stream) {
             output += line.text;
             if (output.size() > 1024 * 1024)
-                throw Error("ResponseTooLarge", "Claude authentication response exceeds limit");
+                throw Error("ResponseTooLarge", "Claude version response exceeds limit");
         }
     auto code = probe.wait(context.cancellation);
-    try {
-        if (code || !parse_json(output).value("loggedIn", false))
-            throw Error("AuthenticationRequired", "Sign in using Claude's native login flow");
-    } catch (const Json::exception&) {
-        throw Error("ProtocolError", "Cannot read Claude authentication status");
-    }
+    if (code != 0)
+        throw Error("ConnectionFailed", "Claude runtime check failed");
+    if (output.empty())
+        throw Error("ProtocolError", "Claude runtime returned no version");
+    context.emit("ProviderReady", {{"authentication", "unverified"}});
 }
 Session ClaudeProvider::start_session(std::string model, std::string resume,
                                       const CallContext& context, std::string) {
@@ -89,11 +102,12 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
     try {
         if (!p.process) {
             auto config = p.options.process;
-            config.arguments.insert(
-                config.arguments.end(),
-                {"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-                 "--strict-mcp-config", "--mcp-config",
-                 Json({{"mcpServers", p.options.mcp_servers}}).dump(), "--setting-sources", ""});
+            config.arguments.insert(config.arguments.end(),
+                                    {"-p", "--output-format", "stream-json", "--verbose",
+                                     "--include-partial-messages", "--strict-mcp-config",
+                                     "--mcp-config",
+                                     Json({{"mcpServers", p.options.mcp_servers}}).dump(),
+                                     "--setting-sources", p.options.setting_sources});
             if (p.options.persistent)
                 config.arguments.insert(config.arguments.end(), {"--input-format", "stream-json"});
             if (p.options.allow_all_actions)
@@ -138,6 +152,7 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
             p.process->close_input();
         }
         ChatResult result;
+        std::string reported_error;
         ProcessLine line;
         bool completed = false;
         while (p.process->next(line, context.cancellation)) {
@@ -161,6 +176,20 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
                 p.session_id = native;
             }
             auto type = value.value("type", std::string());
+            if (type == "assistant" && value.contains("error") && value.at("error").is_string()) {
+                auto native = value.at("error").get<std::string>();
+                reported_error =
+                    native == "authentication_failed" || native == "cloud_credential_error"
+                        ? "AuthenticationRequired"
+                    : native == "rate_limit"    ? "RateLimited"
+                    : native == "billing_error" ? "BillingError"
+                    : native == "oauth_org_not_allowed" || native == "account_on_hold"
+                        ? "AccessDenied"
+                    : native == "model_not_found"   ? "UnknownModel"
+                    : native == "invalid_request"   ? "InvalidRequest"
+                    : native == "max_output_tokens" ? "TurnLimitExceeded"
+                                                    : "ProviderError";
+            }
             if (type == "system" && value.contains("model") && value.at("model").is_string())
                 session.model = value.at("model").get<std::string>();
             if (type == "control_request") {
@@ -182,7 +211,8 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
             } else if (type == "result") {
                 if (value.value("is_error", false) ||
                     value.value("subtype", std::string()) != "success")
-                    throw Error("ProviderError", "Claude turn failed");
+                    throw Error(reported_error.empty() ? "ProviderError" : reported_error,
+                                "Native Claude turn failed");
                 result.text = value.at("result").get<std::string>();
                 result.usage = value.value("usage", Json::object());
                 result.finish_reason = "stop";

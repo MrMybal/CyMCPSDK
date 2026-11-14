@@ -1,4 +1,4 @@
-# Conversations et compatibilité — 0.4.0
+# Conversations et compatibilité — 0.4.1
 
 Le service est indépendant de CyUI. Les callbacks s'exécutent sur le worker de l'appel ; l'application
 transfère les événements vers sa boucle UI. Utiliser `send_async` pour ne pas bloquer cette boucle.
@@ -10,6 +10,9 @@ dans la file de l'hôte. `Conversation::cancel()` peut être appelé directement
 Le registre utilise par défaut Claude Code en entrée/sortie `stream-json` et Antigravity en entrée
 `stream-json`, avec stdin ouvert entre deux tours. `settings.persistent=false` garde le mode par tour.
 Codex conserve son App Server. Chaque instance est réservée à une conversation active.
+Claude vérifie seulement la disponibilité du runtime lors de `connect`. Le SDK ne demande pas de reconnexion
+préalable et conserve les réglages utilisateur natifs (`setting_sources="user"` par défaut). Les catégories
+d'échec viennent des réponses structurées du CLI pendant le tour ; elles ne sont pas déduites d'un compte supposé absent.
 
 `opencode` utilise maintenant `opencode acp`, compatible avec le protocole ACP v1 documenté dans
 OpenCode actuel (dont 2.x). L'ancien adaptateur JSONL 1.x est nommé `opencode-cli` : changer cet ID

@@ -419,12 +419,12 @@ int main(int argc, char** argv) {
 #endif
     if (has("--conversation-fixture")) {
         if (has("auth")) {
-            send({{"loggedIn", true}});
-            return 0;
+            send({{"loggedIn", !has("--fixture-no-auth")}});
+            return has("--fixture-no-auth") ? 1 : 0;
         }
         if (has("--version")) {
             std::cout << "1.5.9\n";
-            return 0;
+            return has("--fixture-version-failure") ? 7 : 0;
         }
         bool agy = has("--agy");
         auto argument = [&](const std::string& key) {
@@ -436,6 +436,13 @@ int main(int argc, char** argv) {
             return 64;
         if (argument("--input-format") != "stream-json")
             return 65;
+        if (has("--fixture-user-settings") && argument("--setting-sources") != "user")
+            return 73;
+        if (has("--fixture-no-settings") && !argument("--setting-sources").empty())
+            return 74;
+        if (has("--fixture-project-settings") &&
+            argument("--setting-sources") != "user,project,local")
+            return 75;
         std::string instance = random_token(16), remembered, line;
         int turns = 0;
         while (std::getline(std::cin, line)) {
@@ -470,10 +477,21 @@ int main(int argc, char** argv) {
                 send({{"type", "system"},
                       {"session_id",
                        has("--fixture-wrong-session") ? "wrong" : "conversation-session"}});
+                if (has("--fixture-auth-failure") || has("--fixture-rate-limit"))
+                    send(
+                        {{"type", "assistant"},
+                         {"error",
+                          has("--fixture-auth-failure") ? "authentication_failed" : "rate_limit"},
+                         {"message",
+                          {{"content", Json::array({{{"type", "text"},
+                                                     {"text", "Private account diagnostic"}}})}}}});
                 send({{"type", "stream_event"},
                       {"event", {{"delta", {{"type", "text_delta"}, {"text", text}}}}}});
                 send({{"type", "result"},
-                      {"subtype", has("--fixture-fail") ? "error_during_execution" : "success"},
+                      {"subtype", has("--fixture-fail") || has("--fixture-auth-failure") ||
+                                          has("--fixture-rate-limit")
+                                      ? "error_during_execution"
+                                      : "success"},
                       {"result", text},
                       {"usage", usage}});
             }
@@ -481,6 +499,10 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (has("--claude-fixture")) {
+        if (has("--version")) {
+            std::cout << "2.1.276 (Claude Code)\n";
+            return 0;
+        }
         if (has("auth")) {
             send({{"loggedIn", true}});
             return 0;

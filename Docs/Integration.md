@@ -123,11 +123,13 @@ en identifiants stables. Les droits des handlers restent appliqués. Les demande
 ou routées par `approvals` et `request_handler`. `approval_policy` et `sandbox` contrôlent la politique du fournisseur.
 Un host qui choisit explicitement l'accès complet peut sélectionner `danger-full-access` et sa politique permissive.
 
-Pour Claude, renseigner `ClaudeOptions.process.executable`. L'adaptateur utilise `auth status`, puis
+Pour Claude, renseigner `ClaudeOptions.process.executable`. L'adaptateur vérifie `--version`, puis utilise
 `-p --output-format stream-json --verbose --include-partial-messages`. Il reprend l'ID exact avec `--resume`.
 Le mode par défaut ajoute `--input-format stream-json` et conserve stdin ouvert entre les tours.
 `persistent=false` garde le mode par tour. `mcp_servers` permet de connecter le serveur de l'application ; `allowed_tools`
 sélectionne les outils natifs. `allow_all_actions=true` sélectionne explicitement le mode permissif du fournisseur.
+`setting_sources="user"` conserve la configuration native de l'utilisateur ; cette source était désactivée
+dans les versions précédentes. L'authentification est résolue par Claude lors du tour, sans login imposé par le SDK.
 
 Les scripts `.cmd` et `.ps1` ne sont pas exécutés par un shell. Si nécessaire, fournir `node.exe` comme exécutable
 avec le script d'entrée comme premier argument. Les prompts Claude/Antigravity/ACP passent par stdin ; le profil
