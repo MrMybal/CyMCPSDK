@@ -15,6 +15,54 @@ const DiscoveredConnection& find(const std::vector<DiscoveredConnection>& rows,
             return row;
     throw std::runtime_error("Missing discovery profile");
 }
+struct ScopedEnv {
+    std::string name, saved;
+    bool had = false;
+    static void put(const std::string& name, const std::string& value) {
+#ifdef _WIN32
+        _putenv_s(name.c_str(), value.c_str());
+#else
+        if (value.empty())
+            unsetenv(name.c_str());
+        else
+            setenv(name.c_str(), value.c_str(), 1);
+#endif
+    }
+    ScopedEnv(std::string n, const std::string& value) : name(std::move(n)) {
+        if (auto previous = std::getenv(name.c_str()))
+            saved = previous;
+        put(name, value);
+    }
+    ~ScopedEnv() {
+        put(name, saved);
+    }
+};
+// A remote-catalogue provider: never local, catalogue order carries no recommendation.
+struct CloudFixture final : Provider {
+    bool failing_catalogue = false;
+    bool uses_host_history() const noexcept override {
+        return true;
+    }
+    ProviderCapabilities capabilities() const override {
+        return {true, false, false, true};
+    }
+    void connect(const CallContext&) override {}
+    Json list_models(const CallContext&) override {
+        if (failing_catalogue)
+            throw Error("ProviderError", "Catalogue temporarily unavailable");
+        return Json::array({{{"id", "arbitrary-first-paid-model"}}});
+    }
+    Session start_session(std::string model, std::string, const CallContext&,
+                          std::string) override {
+        if (model.empty())
+            throw Error("UnknownModel", "Select an exact model ID");
+        return {"session", std::move(model)};
+    }
+    ChatResult send(Session&, Json&, const CallContext&) override {
+        throw Error("Unsupported", "Fixture never generates");
+    }
+    void disconnect() noexcept override {}
+};
 struct Server {
     httplib::Server http;
     std::thread thread;
@@ -118,6 +166,30 @@ int main(int argc, char** argv) {
                   resolved.arguments.size() == 1 &&
                   std::filesystem::u8path(resolved.arguments.front()) == codex / "bin/codex.js",
               "npm script uses node with a literal argument instead of a shell shim");
+        {
+#if defined(_M_ARM64) || defined(__aarch64__)
+            const std::string arch = "aarch64";
+#else
+            const std::string arch = "x86_64";
+#endif
+#ifdef _WIN32
+            const std::string triple = arch + "-pc-windows-msvc";
+#elif defined(__APPLE__)
+            const std::string triple = arch + "-apple-darwin";
+#else
+            const std::string triple = arch + "-unknown-linux-musl";
+#endif
+            auto vendor = codex / "node_modules/@openai/codex-platform/vendor" / triple / "bin";
+            private_directory(vendor);
+            std::filesystem::copy_file(std::filesystem::u8path(argv[1]),
+                                       vendor / native_name("codex"));
+            auto vendored_rows = providers.discover(options);
+            const auto& vendored = find(vendored_rows, "codex").config.process;
+            check(vendored.executable == vendor / native_name("codex") &&
+                      vendored.arguments.empty(),
+                  "npm JS launcher is bypassed for its vendored native binary");
+            std::filesystem::remove_all(codex / "node_modules");
+        }
         write(codex / "package.json", {{"bin", {{"codex", "../../escape.js"}}}});
         check(!find(providers.discover(options), "codex").available(),
               "Package entry cannot escape the package with parent traversal");
@@ -172,6 +244,64 @@ int main(int argc, char** argv) {
               "Automatic text chat skips embedding-only catalogue entries");
         check(providers.describe().dump().find("api_key") == std::string::npos,
               "Provider catalogue contains no credentials");
+        {
+            Json described = Json::object();
+            for (const auto& row : providers.describe())
+                described[row.at("id").get<std::string>()] = row.at("defaults");
+            check(described.at("ollama").at("base_url") == "http://127.0.0.1:11434" &&
+                      described.at("llama.cpp").at("base_url") == "http://127.0.0.1:8080/v1" &&
+                      described.at("lmstudio").at("base_url") == "http://127.0.0.1:1234/v1",
+                  "Local services publish their conventional endpoints");
+            check(described.at("openai").at("credential_env") == "OPENAI_API_KEY" &&
+                      described.at("anthropic").at("credential_env") == "ANTHROPIC_API_KEY",
+                  "Cloud APIs publish the conventional credential variable name");
+            check(described.at("codex").at("settings").at("turn_timeout_ms") == 0 &&
+                      described.at("openai").at("settings").at("max_output_tokens") == 0 &&
+                      described.at("openai").at("settings").at("max_tool_rounds") == 0 &&
+                      described.at("claude-code").at("settings").at("setting_sources") == "user" &&
+                      described.at("gemini").at("settings").at("acp_arguments") ==
+                          Json::array({"--acp"}),
+                  "Every built-in profile publishes its default settings");
+            check(described.at("claude-code").at("executables") == Json::array({"claude"}),
+                  "CLI profiles publish the native executable names they detect");
+            check(described.at("claude-code").at("login_arguments") ==
+                          Json::array({"auth", "login"}) &&
+                      described.at("codex").at("login_arguments") == Json::array({"login"}) &&
+                      described.at("antigravity").at("login_arguments").empty(),
+                  "CLI profiles publish their own sign-in command for a host console");
+        }
+        {
+            auto cloud = std::make_shared<CloudFixture>();
+            Conversation automatic(cloud, "");
+            Json catalogue;
+            expect_error("UnknownModel", [&] { automatic.connect({}, {}, true, &catalogue); });
+            check(catalogue.size() == 1,
+                  "Remote API never opens on an arbitrary model but returns its catalogue");
+            cloud->failing_catalogue = true;
+            Conversation chosen(cloud, "explicit-model");
+            Json none = nullptr;
+            chosen.connect({}, {}, true, &none);
+            check(chosen.session().model == "explicit-model" && none.empty(),
+                  "A failing optional catalogue never fails a valid session");
+            chosen.disconnect();
+        }
+        {
+            DiscoveryOptions environment;
+            environment.probe_local_services = false;
+            ScopedEnv ollama("OLLAMA_HOST", "0.0.0.0");
+            ScopedEnv anthropic("ANTHROPIC_BASE_URL", "https://proxy.example.invalid/");
+            auto env_rows = providers.discover(environment);
+            check(find(env_rows, "ollama").config.settings.at("base_url") ==
+                      "http://127.0.0.1:11434",
+                  "OLLAMA_HOST bind-all address without port reaches the loopback default port");
+            check(find(env_rows, "anthropic").config.settings.at("base_url") ==
+                      "https://proxy.example.invalid/v1",
+                  "ANTHROPIC_BASE_URL follows the SDK convention without the version segment");
+            ScopedEnv remote("OLLAMA_HOST", "https://ollama.example.invalid");
+            check(find(providers.discover(environment), "ollama").config.settings.at("base_url") ==
+                      "https://ollama.example.invalid:443",
+                  "OLLAMA_HOST keeps an explicit scheme and its default port");
+        }
         {
             const char* name = "CYMCP_DISCOVERY_TEST_KEY";
             const auto previous = std::getenv(name);

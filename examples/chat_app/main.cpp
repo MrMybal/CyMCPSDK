@@ -148,6 +148,64 @@ std::vector<std::filesystem::path> choose_files(HWND owner, bool executable = fa
     }
     return paths;
 }
+// Windows argv quoting (CommandLineToArgvW rules); no shell is involved.
+std::wstring quote_argument(const std::wstring& value) {
+    if (!value.empty() && value.find_first_of(L" \t\n\v\"") == std::wstring::npos)
+        return value;
+    std::wstring result = L"\"";
+    for (std::size_t n = 0;; ++n) {
+        std::size_t slashes = 0;
+        while (n < value.size() && value[n] == L'\\') {
+            ++n;
+            ++slashes;
+        }
+        if (n == value.size()) {
+            result.append(slashes * 2, L'\\');
+            break;
+        }
+        if (value[n] == L'"')
+            result.append(slashes * 2 + 1, L'\\');
+        else
+            result.append(slashes, L'\\');
+        result += value[n];
+    }
+    return result + L"\"";
+}
+// Opens the provider's own sign-in in a visible console, on the user's explicit request.
+// The user completes it there; credentials never pass through this application.
+void open_console(const ProcessOptions& process) {
+    std::wstring command = quote_argument(process.executable.wstring());
+    for (const auto& argument : process.arguments)
+        command += L" " + quote_argument(std::filesystem::u8path(argument).wstring());
+    std::wstring environment;
+    if (!process.environment.empty()) {
+        std::map<std::wstring, std::wstring> merged;
+        if (auto native = GetEnvironmentStringsW()) {
+            for (auto at = native; *at; at += std::wcslen(at) + 1) {
+                std::wstring entry = at;
+                if (auto eq = entry.find(L'=', 1); eq != std::wstring::npos)
+                    merged[entry.substr(0, eq)] = entry.substr(eq + 1);
+            }
+            FreeEnvironmentStringsW(native);
+        }
+        for (const auto& [key, value] : process.environment)
+            merged[std::filesystem::u8path(key).wstring()] =
+                std::filesystem::u8path(value).wstring();
+        for (const auto& [key, value] : merged)
+            environment += key + L"=" + value + L'\0';
+        environment += L'\0';
+    }
+    STARTUPINFOW startup{sizeof(startup)};
+    PROCESS_INFORMATION info{};
+    auto cwd = process.cwd.wstring();
+    if (!CreateProcessW(process.executable.c_str(), command.data(), nullptr, nullptr, FALSE,
+                        CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT,
+                        environment.empty() ? nullptr : environment.data(),
+                        cwd.empty() ? nullptr : cwd.c_str(), &startup, &info))
+        throw Error("ProcessError", "Cannot open the provider sign-in console");
+    CloseHandle(info.hThread);
+    CloseHandle(info.hProcess);
+}
 template <std::size_t N> void assign(std::array<char, N>& field, const std::string& text) {
     if (text.size() >= N)
         throw Error("InvalidOptions", "Configuration field exceeds the example's limit");
@@ -217,6 +275,8 @@ void translations() {
             {"No chat model available", "Aucun modèle de conversation disponible"},
             {"Service unavailable — start it and detect again",
              "Service indisponible — démarrez-le puis relancez la détection"},
+            {"Installed but not running — start it and detect again",
+             "Installé mais arrêté — démarrez-le puis relancez la détection"},
             {"Manual configuration required", "Configuration manuelle requise"},
             {"No connection detected. Install a CLI, start a local server, or add an API key "
              "below.",
@@ -226,8 +286,13 @@ void translations() {
              "Détecté automatiquement. Aucun message n’est envoyé avant votre action."},
             {"Sign in with the provider's native CLI, then reconnect.",
              "Connectez-vous avec le CLI natif du fournisseur, puis reconnectez ici."},
+            {"Sign in", "Se connecter"},
+            {"A console opens: finish signing in there, then press Connect.",
+             "Une console s’ouvre : terminez la connexion, puis cliquez sur Connecter."},
             {"Selected model applies to the next connection.",
              "Le modèle choisi s’applique à la prochaine connexion."},
+            {"Choose a model from the catalogue, then connect.",
+             "Choisissez un modèle dans le catalogue, puis connectez-vous."},
         });
 }
 struct App {
@@ -394,20 +459,58 @@ struct App {
                 return r->discover(options, context);
             });
     }
-    void use_detected(const DiscoveredConnection& row, bool preserve_options = false) {
-        provider_id = row.provider_id;
-        if (!preserve_options) {
-            assign(model, "");
-            assign(resume, "");
+    // Fill every field with the provider's published conventions, then with the native
+    // installation or local service found by the last automatic detection.
+    void apply_defaults(const std::string& id) {
+        provider_id = id;
+        assign(model, id == "demo" ? "demo-markdown" : "");
+        assign(resume, "");
+        assign(key, "");
+        assign(executable, "");
+        assign(arguments, "[]");
+        process_environment.clear();
+        Json defaults = Json::object();
+        for (const auto& item : catalogue)
+            if (item.at("id") == id)
+                defaults = item.value("defaults", Json::object());
+        auto options = defaults.value("settings", Json::object());
+        options.erase("allow_all_actions"); // owned by the toggle
+        assign(settings, options.empty() ? std::string("{}") : options.dump(2));
+        assign(endpoint, defaults.value("base_url", std::string()));
+        assign(key_env, defaults.value("credential_env", std::string()));
+        for (const auto& row : detected)
+            if (row.provider_id == id && row.available())
+                apply_detected(row);
+        error.clear();
+    }
+    void apply_detected(const DiscoveredConnection& row) {
+        if (!row.config.process.executable.empty()) {
+            assign(executable, path_utf8(row.config.process.executable));
+            assign(arguments, Json(row.config.process.arguments).dump());
+            process_environment = row.config.process.environment;
         }
-        assign(endpoint, row.config.settings.value("base_url", std::string()));
-        assign(executable, path_utf8(row.config.process.executable));
-        assign(cwd, path_utf8(row.config.process.cwd));
-        assign(arguments, Json(row.config.process.arguments).dump());
-        assign(settings, row.config.settings.dump());
-        assign(key_env, row.api_key_env);
-        assign(key, row.config.api_key);
-        process_environment = row.config.process.environment;
+        if (!row.config.process.cwd.empty())
+            assign(cwd, path_utf8(row.config.process.cwd));
+        auto options = parse_json(settings.data());
+        for (const auto& [name, value] : row.config.settings.items())
+            if (name == "base_url")
+                assign(endpoint, value.get<std::string>());
+            else if (name != "allow_all_actions")
+                options[name] = value;
+        assign(settings, options.empty() ? std::string("{}") : options.dump(2));
+        if (!row.api_key_env.empty())
+            assign(key_env, row.api_key_env);
+        if (!row.config.api_key.empty())
+            assign(key, row.config.api_key);
+    }
+    void use_detected(const DiscoveredConnection& row, bool preserve_options = false) {
+        const std::string kept_model = model.data(), kept_resume = resume.data();
+        apply_defaults(row.provider_id);
+        apply_detected(row);
+        if (preserve_options) {
+            assign(model, kept_model);
+            assign(resume, kept_resume);
+        }
         error.clear();
     }
     void poll_discovery() {
@@ -450,6 +553,8 @@ struct App {
             return "Endpoint required";
         if (row.state == "no-models")
             return "No chat model available";
+        if (row.state == "not-running")
+            return "Installed but not running — start it and detect again";
         if (row.state == "unavailable")
             return "Service unavailable — start it and detect again";
         return "Manual configuration required";
@@ -505,9 +610,44 @@ struct App {
         ImGui::TextWrapped(
             "%s",
             cyui::tr("Detected automatically. No message is sent until you press Send.").c_str());
-        if (chat.state().error_code == "AuthenticationRequired")
-            ImGui::TextWrapped(
-                "%s", cyui::tr("Sign in with the provider's native CLI, then reconnect.").c_str());
+    }
+    Json provider_entry() const {
+        for (const auto& item : catalogue)
+            if (item.at("id") == provider_id)
+                return item;
+        return Json::object();
+    }
+    // The provider's own CLI (manual path first, else the detected installation) followed by
+    // its documented sign-in subcommand, or nothing for CLIs that sign in on first launch.
+    ProcessOptions sign_in_process() const {
+        ProcessOptions process;
+        for (const auto& row : detected)
+            if (row.provider_id == provider_id && !row.config.process.executable.empty())
+                process = row.config.process;
+        if (executable[0]) {
+            process = current_config().process;
+            process.executable = find_executable(executable.data());
+        }
+        if (process.executable.empty())
+            throw Error("ExecutableMissing", "Native CLI not detected; set its executable path");
+        const auto defaults = provider_entry().value("defaults", Json::object());
+        for (const auto& argument : defaults.value("login_arguments", Json::array()))
+            process.arguments.push_back(argument.get<std::string>());
+        return process;
+    }
+    void sign_in_panel() {
+        const auto authentication = provider_entry().value("authentication", std::string());
+        if (chat.state().error_code != "AuthenticationRequired" ||
+            authentication.rfind("native-account", 0) != 0)
+            return;
+        ImGui::TextWrapped(
+            "%s", cyui::tr("Sign in with the provider's native CLI, then reconnect.").c_str());
+        if (cyui::button(cyui::trLabel("Sign in").c_str(), cyui::Variant::secondary,
+                         cyui::dp(-1, 0)))
+            action([&] { open_console(sign_in_process()); });
+        cyui::textFaint(
+            "%s",
+            cyui::tr("A console opens: finish signing in there, then press Connect.").c_str());
     }
     void connection_panel() {
         cyui::heading(cyui::tr("Connection").c_str(), 2);
@@ -537,20 +677,7 @@ struct App {
                                 continue;
                             if (ImGui::Selectable((cyui::tr(label.c_str()) + "##" + id).c_str(),
                                                   id == provider_id)) {
-                                provider_id = id;
-                                assign(model, id == "demo" ? "demo-markdown" : "");
-                                assign(endpoint, "");
-                                assign(executable, "");
-                                assign(arguments, "[]");
-                                assign(settings, "{}");
-                                assign(key, "");
-                                assign(resume, "");
-                                process_environment.clear();
-                                assign(key_env, id == "anthropic"    ? "ANTHROPIC_API_KEY"
-                                                : id == "openrouter" ? "OPENROUTER_API_KEY"
-                                                : id == "openai" || id == "openai-compatible"
-                                                    ? "OPENAI_API_KEY"
-                                                    : "");
+                                action([&] { apply_defaults(id); });
                             }
                         }
                         ImGui::EndCombo();
@@ -642,6 +769,9 @@ struct App {
         if (!items.empty())
             ImGui::TextWrapped("%s",
                                cyui::tr("Selected model applies to the next connection.").c_str());
+        if (!items.empty() && !model[0] && chat.state().error_code == "UnknownModel")
+            cyui::callout(cyui::Tone::info,
+                          cyui::tr("Choose a model from the catalogue, then connect.").c_str());
         if (!automatic && provider_id == "demo")
             cyui::callout(cyui::Tone::info,
                           cyui::tr("Demo mode: deterministic local text, no AI request.").c_str());
@@ -677,6 +807,7 @@ struct App {
             "%s", cyui::tr("Native CLI accounts are reused. API keys remain in memory.").c_str());
         if (!error.empty())
             cyui::textColoured(cyui::palette().error, "%s", error.c_str());
+        sign_in_panel();
         ImGui::PopTextWrapPos();
         if (cyui::beginSection(cyui::trLabel("Appearance").c_str(), true)) {
             if (cyui::beginProperties("##appearance")) {

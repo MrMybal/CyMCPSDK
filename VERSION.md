@@ -12,6 +12,18 @@
   Detection does not submit messages, install runtimes or read private credential files.
 - Discovery is part of the AI SDK and accepts host-defined provider recipes and search locations.
   Manual connection settings remain available.
+- Agent-oriented defaults without arbitrary limits: model-maximum output, unlimited tool
+  rounds, no turn deadline (CLI and API); `timeout_ms` only detects a silent connection.
+  Remaining sizes are 256 MiB memory guards.
+- Every profile publishes its conventional settings in `describe()` (`defaults`); Chat Lab
+  pre-fills them in manual mode together with the detected installation.
+- Discovery: npm Codex launched through its native binary, parallel probes, installed-but-stopped
+  local services reported, `OLLAMA_HOST` and `ANTHROPIC_BASE_URL` normalised, llama.cpp on port
+  8080. Automatic model selection is limited to local services.
+- Fixes: an interrupted tool call is completed in history; a minimised UI no longer fails a turn;
+  ACP resets after any mid-turn error; exact connected state after a failed restore; MCP HTTP
+  legacy fallback; truncated OpenAI answers kept; MCP/settings secrets kept off the command line;
+  messages too long for the Windows command line reported explicitly.
 
 ## 0.5.2
 

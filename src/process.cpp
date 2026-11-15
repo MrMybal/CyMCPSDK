@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cymcp/process.hpp>
+#include <fstream>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -71,6 +72,25 @@ bool bad_text(const std::string& s) {
     return s.find('\0') != std::string::npos;
 }
 } // namespace
+PrivateFile::PrivateFile(const std::string& name, const std::string& content) {
+    if (name.empty() || name.find_first_of("/\\:") != std::string::npos)
+        throw Error("InvalidOptions", "Private file name must be a plain file name");
+    directory_ = std::filesystem::temp_directory_path() / ("cymcp-" + random_token(16));
+    private_directory(directory_); // owner-only ACL / 0700
+    path_ = directory_ / std::filesystem::u8path(name);
+    std::ofstream output(path_, std::ios::binary | std::ios::trunc);
+    output.write(content.data(), static_cast<std::streamsize>(content.size()));
+    output.flush();
+    if (!output) {
+        std::error_code ec;
+        std::filesystem::remove_all(directory_, ec);
+        throw Error("FileError", "Cannot write private configuration file");
+    }
+}
+PrivateFile::~PrivateFile() {
+    std::error_code ec;
+    std::filesystem::remove_all(directory_, ec);
+}
 std::filesystem::path find_executable(const std::string& name) {
     if (name.empty() || bad_text(name))
         throw Error("ExecutableMissing", "Executable not configured");
@@ -127,7 +147,7 @@ std::filesystem::path find_executable(const std::string& name) {
 struct Process::Impl {
     ProcessOptions options;
     std::mutex mutex, write_mutex, status_mutex;
-    std::condition_variable wake;
+    std::condition_variable wake, space;
     std::deque<ProcessLine> lines;
     std::size_t queued = 0;
     int closed_streams = 0;
@@ -145,6 +165,7 @@ struct Process::Impl {
     explicit Impl(ProcessOptions opts) : options(std::move(opts)) {}
     void stop() noexcept {
         stopping.store(true);
+        space.notify_all();
 #ifdef _WIN32
         if (job.value)
             TerminateJobObject(job.value, 130);
@@ -158,16 +179,23 @@ struct Process::Impl {
         wake.notify_all();
     }
     void push(bool err, std::string line) {
-        std::lock_guard lock(mutex);
+        std::unique_lock lock(mutex);
         if (!fault.empty())
             return;
         const auto cost = line.size() + sizeof(ProcessLine);
-        if (line.size() > options.max_line_bytes ||
-            cost > options.max_queue_bytes - std::min(queued, options.max_queue_bytes)) {
-            fault = "Process output exceeds configured limit";
+        if (line.size() > options.max_line_bytes) {
+            fault = "Process line exceeds configured limit";
             wake.notify_all();
             return;
         }
+        // Backpressure: wait for the consumer (the pipe then throttles the child) instead of
+        // failing a long or verbose agent turn. One oversized line is always admitted alone.
+        // stop() sets an atomic without the mutex: poll so its wakeup cannot be missed.
+        while (!(stopping.load() || !fault.empty() || queued == 0 ||
+                 cost <= options.max_queue_bytes - std::min(queued, options.max_queue_bytes)))
+            space.wait_for(lock, std::chrono::milliseconds(50));
+        if (stopping.load() || !fault.empty())
+            return;
         queued += cost;
         lines.push_back({err, std::move(line)});
         wake.notify_one();
@@ -320,6 +348,11 @@ Process::Process(const ProcessOptions& options) : impl_(std::make_unique<Impl>(o
     std::wstring cmd = quote(executable.wstring());
     for (const auto& arg : options.arguments)
         cmd += L" " + quote(wide(arg));
+    // CreateProcessW's hard limit; report it precisely instead of a generic launch failure.
+    if (cmd.size() >= 32767)
+        throw Error("CommandLineTooLong",
+                    "Arguments exceed the Windows 32 767-character command line; pass long "
+                    "content through stdin or a file");
     struct Less {
         bool operator()(const std::wstring& a, const std::wstring& b) const {
             return _wcsicmp(a.c_str(), b.c_str()) < 0;
@@ -628,6 +661,7 @@ bool Process::next(ProcessLine& line, const Cancellation& cancel) {
             line = std::move(p.lines.front());
             p.lines.pop_front();
             p.queued -= line.text.size() + sizeof(ProcessLine);
+            p.space.notify_all();
             return true;
         }
         if (p.closed_streams == 2)

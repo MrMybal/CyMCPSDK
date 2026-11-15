@@ -3,7 +3,11 @@
 
 namespace cymcp {
 namespace {
-constexpr std::size_t text_limit = 2 * 1024 * 1024, transcript_limit = 8 * 1024 * 1024;
+// Display window only. The conversation itself is never cut or cancelled by these values: older
+// rows leave the view and an oversized message is shown truncated.
+constexpr std::size_t text_limit = 16 * 1024 * 1024, transcript_limit = 64 * 1024 * 1024,
+                      row_limit = 4000;
+const std::string display_cut = "\n\n*[...display truncated; the full text stays in the conversation]*";
 std::string display_content(const Json& content) {
     if (content.is_string())
         return content.get<std::string>();
@@ -38,7 +42,35 @@ struct ChatController::Impl {
     std::shared_ptr<Provider> provider;
     std::shared_ptr<Conversation> chat;
     std::unique_ptr<ConversationStore> store;
-    EventQueue events{2048, 4 * 1024 * 1024};
+    // Producer-side coalescing: consecutive deltas merge, so a UI that stops polling (minimised
+    // window) never makes a generation fail. Memory grows only with the streamed text itself.
+    std::mutex events_mutex;
+    std::deque<Event> events;
+    void push_event(Event event) {
+        std::lock_guard lock(events_mutex);
+        const bool delta = event.type == "TextDelta" || event.type == "ThinkingDelta";
+        if (delta && !events.empty() && events.back().type == event.type) {
+            auto& text = events.back().data["text"].get_ref<std::string&>();
+            text += event.data.at("text").get<std::string>();
+            return;
+        }
+        if (!delta && events.size() >= 4096) {
+            // Keep the newest activity; the view lists at most 128 rows anyway.
+            for (auto it = events.begin(); it != events.end(); ++it)
+                if (it->type != "TextDelta" && it->type != "ThinkingDelta") {
+                    events.erase(it);
+                    break;
+                }
+        }
+        events.push_back(std::move(event));
+    }
+    std::vector<Event> drain_events() {
+        std::lock_guard lock(events_mutex);
+        std::vector<Event> batch(std::make_move_iterator(events.begin()),
+                                 std::make_move_iterator(events.end()));
+        events.clear();
+        return batch;
+    }
     Cancellation active;
     std::future<Completion> pending;
     std::uint64_t next_id = 1, assistant_id = 0;
@@ -72,7 +104,7 @@ struct ChatController::Impl {
         context.events = [this](const Event& event) {
             // Keep private native/configuration payloads out of the UI queue.
             if (event.type == "TextDelta" || event.type == "ThinkingDelta")
-                events.push({event.type, {{"text", event.data.value("text", std::string())}}});
+                push_event({event.type, {{"text", event.data.value("text", std::string())}}});
             else if (event.type == "ToolStarted" || event.type == "ToolCompleted") {
                 auto name = event.data.value("name", std::string("tool"));
                 if (name.size() > 256) {
@@ -81,7 +113,7 @@ struct ChatController::Impl {
                         --end;
                     name = name.substr(0, end) + "...";
                 }
-                events.push({event.type, {{"name", std::move(name)}}});
+                push_event({event.type, {{"name", std::move(name)}}});
             }
         };
         auto task = std::make_shared<std::packaged_task<Completion()>>(
@@ -100,7 +132,10 @@ struct ChatController::Impl {
                 if (chat) {
                     result.session = chat->session();
                     auto status = chat->status();
-                    result.connected = status.at("state") != "disconnected";
+                    // needs_reconnect (failed restore/reconnect) is not a usable connection.
+                    const auto phase = status.at("state").get<std::string>();
+                    result.connected = phase != "disconnected" && phase != "needs_reconnect" &&
+                                       phase != "connecting";
                     if (!result.error.empty())
                         result.result.metrics = status.at("metrics");
                 }
@@ -130,15 +165,28 @@ struct ChatController::Impl {
                 return &*it;
         return nullptr;
     }
-    void append(std::string& target, const std::string& text) {
-        if (text.size() > text_limit - std::min(text_limit, target.size()) ||
-            text.size() > transcript_limit - std::min(transcript_limit, displayed_bytes)) {
-            view.error_code = "ContextTooLarge";
-            active.cancel();
-            return;
+    // Drop the oldest rows from the view (never the live answer) to stay in the display window.
+    void trim_view() {
+        while ((displayed_bytes > transcript_limit || view.messages.size() > row_limit) &&
+               view.messages.size() > 1 && view.messages.front().id != assistant_id) {
+            displayed_bytes -= std::min(displayed_bytes, view.messages.front().markdown.size());
+            view.messages.erase(view.messages.begin());
         }
-        target += text;
-        displayed_bytes += text.size();
+    }
+    void append(std::string& target, const std::string& text) {
+        if (target.size() >= text_limit)
+            return; // already marked as truncated for display
+        if (text.size() > text_limit - target.size()) {
+            auto keep = text_limit - target.size();
+            while (keep && (static_cast<unsigned char>(text[keep]) & 0xc0) == 0x80)
+                --keep;
+            target += text.substr(0, keep) + display_cut;
+            displayed_bytes += keep + display_cut.size();
+        } else {
+            target += text;
+            displayed_bytes += text.size();
+        }
+        trim_view();
         ++view.revision;
     }
     void consume(const std::vector<Event>& batch) {
@@ -164,14 +212,16 @@ struct ChatController::Impl {
             if (role != "user" && role != "assistant")
                 continue;
             auto text = display_content(message.at("content"));
-            if (text.size() > text_limit || text.size() > transcript_limit - displayed_bytes ||
-                view.messages.size() >= 2000) {
-                view.error_code = "ContextTooLarge";
-                break;
+            if (text.size() > text_limit) {
+                auto keep = text_limit;
+                while (keep && (static_cast<unsigned char>(text[keep]) & 0xc0) == 0x80)
+                    --keep;
+                text = text.substr(0, keep) + display_cut;
             }
             displayed_bytes += text.size();
             view.messages.push_back({next_id++, role, std::move(text)});
         }
+        trim_view();
         ++view.revision;
     }
 };
@@ -220,15 +270,13 @@ void ChatController::send(std::string text, std::vector<std::filesystem::path> a
     auto& s = *impl_;
     s.require_idle(true);
     if ((text.find_first_not_of(" \t\r\n") == std::string::npos && attachments.empty()) ||
-        text.size() > 64 * 1024 || attachments.size() > 16)
-        throw Error("InvalidContent", "Message must contain text or up to 16 attachments");
+        attachments.size() > 256)
+        throw Error("InvalidContent", "Message must contain text or up to 256 attachments");
     std::string display = text;
+    if (display.size() > text_limit)
+        display = display.substr(0, text_limit) + display_cut;
     for (const auto& path : attachments)
         display += "\n\n[" + path_utf8(path.filename()) + "]";
-    if (s.view.messages.size() >= 1998 ||
-        display.size() > transcript_limit - std::min(transcript_limit, s.displayed_bytes))
-        throw Error("ContextTooLarge",
-                    "Start a new conversation before exceeding the display budget");
     s.view.messages.push_back({s.next_id++, "user", std::move(display)});
     s.displayed_bytes += s.view.messages.back().markdown.size();
     s.assistant_id = s.next_id++;
@@ -241,15 +289,9 @@ void ChatController::send(std::string text, std::vector<std::filesystem::path> a
         Json content = text;
         if (!attachments.empty()) {
             content = Json::array({text_block(text)});
-            auto bytes = content.dump().size();
             for (const auto& path : attachments) {
                 context.cancellation.check();
-                auto attachment = attachment_from_file(path);
-                auto size = attachment.dump().size();
-                if (size > transcript_limit - std::min(transcript_limit, bytes))
-                    throw Error("ContextTooLarge", "Attachments exceed the message budget");
-                bytes += size;
-                content.push_back(std::move(attachment));
+                content.push_back(attachment_from_file(path));
             }
             validate_content(content);
         }
@@ -266,10 +308,7 @@ void ChatController::refresh_models() {
     auto& s = *impl_;
     s.require_idle(true);
     s.start("loading_models", [&s](auto& result, const auto& context) {
-        auto models = s.provider->list_models(context);
-        if (models.dump().size() > 4 * 1024 * 1024)
-            throw Error("ContextTooLarge", "Model catalogue exceeds the UI budget");
-        result.models = std::move(models);
+        result.models = s.provider->list_models(context);
     });
 }
 void ChatController::reconnect() {
@@ -303,12 +342,12 @@ void ChatController::cancel() noexcept {
 void ChatController::poll() {
     auto& s = *impl_;
     // A bounded batch per frame; completion is applied after all queued deltas.
-    s.consume(s.events.drain(2048));
+    s.consume(s.drain_events());
     if (!s.pending.valid() ||
         s.pending.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
         return;
     // A producer may have queued its final deltas after this frame's drain.
-    s.consume(s.events.drain(2048));
+    s.consume(s.drain_events());
     auto result = s.pending.get();
     s.view.busy = false;
     s.view.connected = result.connected;
@@ -337,9 +376,10 @@ void ChatController::poll() {
         }
         if (!result.history.is_null())
             s.restore_rows(result.history);
-        if (!result.models.is_null())
-            s.view.models = std::move(result.models);
     }
+    // A failed automatic connection may still return the catalogue to choose from.
+    if (!result.models.is_null())
+        s.view.models = std::move(result.models);
     s.assistant_id = 0;
     if (s.view.error_code == "ContextTooLarge")
         s.view.phase = "failed";

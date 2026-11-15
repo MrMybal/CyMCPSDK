@@ -126,7 +126,7 @@ struct ChatPanel::Impl {
     std::vector<cyui::TranscriptMessage> rows;
     cyui::Document thinking;
     cyui::DocumentState thinking_view;
-    std::vector<char> draft = std::vector<char>(64 * 1024 + 1, '\0');
+    std::string draft; // grows with the text: pasted logs and files are not truncated
     std::vector<std::filesystem::path> attachments;
     std::uint64_t revision = ~std::uint64_t(0);
     std::string language, local_error, link;
@@ -149,11 +149,18 @@ ChatPanel::ChatPanel(ChatController& controller, ChatPanelOptions options)
     : impl_(std::make_unique<Impl>(controller, std::move(options))) {}
 ChatPanel::~ChatPanel() = default;
 void ChatPanel::set_draft(std::string text) {
-    if (text.size() >= impl_->draft.size())
-        throw Error("ContextTooLarge", "Draft exceeds 64 KiB");
-    std::copy(text.begin(), text.end(), impl_->draft.begin());
-    impl_->draft[text.size()] = '\0';
+    impl_->draft = std::move(text);
 }
+namespace {
+int resize_draft(ImGuiInputTextCallbackData* data) {
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+        auto* text = static_cast<std::string*>(data->UserData);
+        text->resize(static_cast<std::size_t>(data->BufTextLen));
+        data->Buf = text->data();
+    }
+    return 0;
+}
+} // namespace
 void ChatPanel::draw(const char* id, float width, float height) {
     auto& s = *impl_;
     s.controller.poll();
@@ -274,8 +281,11 @@ void ChatPanel::draw(const char* id, float width, float height) {
         s.focus_draft = false;
     }
     const bool submit =
-        ImGui::InputTextMultiline("##draft", s.draft.data(), s.draft.size(), cyui::dp(-1, 90),
-                                  ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::InputTextMultiline("##draft", s.draft.data(), s.draft.capacity() + 1,
+                                  cyui::dp(-1, 90),
+                                  ImGuiInputTextFlags_EnterReturnsTrue |
+                                      ImGuiInputTextFlags_CallbackResize,
+                                  resize_draft, &s.draft);
     cyui::tooltip(cyui::tr("Type a message. Ctrl+Enter sends; Enter inserts a new line.").c_str());
     bool send = submit;
     {
@@ -294,8 +304,8 @@ void ChatPanel::draw(const char* id, float width, float height) {
         if (cyui::button(cyui::trLabel("Attach files").c_str()))
             s.action([&] {
                 auto paths = s.options.pick_attachments();
-                if (paths.size() + s.attachments.size() > 16)
-                    throw Error("InvalidContent", "At most 16 attachments");
+                if (paths.size() + s.attachments.size() > 256)
+                    throw Error("InvalidContent", "At most 256 attachments");
                 s.attachments.insert(s.attachments.end(), paths.begin(), paths.end());
             });
         ImGui::SameLine();
@@ -312,8 +322,8 @@ void ChatPanel::draw(const char* id, float width, float height) {
     }
     if (send && !state.busy && state.connected)
         s.action([&] {
-            s.controller.send(s.draft.data(), s.attachments);
-            s.draft[0] = '\0';
+            s.controller.send(s.draft, s.attachments);
+            s.draft.clear();
             s.attachments.clear();
             s.focus_draft = true;
         });

@@ -4,6 +4,7 @@
 #include <cwctype>
 #include <cymcp/ai.hpp>
 #include <fstream>
+#include <future>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -166,6 +167,93 @@ bool text_model(const Json& row) {
     }
     return true;
 }
+// Platform packages of an npm CLI ship "<pkg>-<platform>/vendor/<target triple>/bin/<name>".
+// Only the current OS/architecture triple is accepted; directories are listed, never walked.
+std::filesystem::path vendored_native(const std::filesystem::path& root, const std::string& package,
+                                      const std::filesystem::path& folder,
+                                      const std::string& name) {
+#if defined(_M_ARM64) || defined(__aarch64__)
+    const char* arch = "aarch64";
+#else
+    const char* arch = "x86_64";
+#endif
+#ifdef _WIN32
+    const char* os = "windows";
+#elif defined(__APPLE__)
+    const char* os = "darwin";
+#else
+    const char* os = "linux";
+#endif
+    auto slash = package.find('/');
+    auto scope = slash == std::string::npos ? std::string() : package.substr(0, slash);
+    auto base = slash == std::string::npos ? package : package.substr(slash + 1);
+    std::vector<std::filesystem::path> vendors{folder / "vendor"};
+    std::error_code ec;
+    for (auto parent : {folder / "node_modules" / std::filesystem::u8path(scope),
+                        root / std::filesystem::u8path(scope)})
+        for (const auto& entry : std::filesystem::directory_iterator(parent, ec)) {
+            auto file = path_utf8(entry.path().filename());
+            if (file.rfind(base + "-", 0) == 0)
+                vendors.push_back(entry.path() / "vendor");
+        }
+    for (const auto& vendor : vendors)
+        for (const auto& triple : std::filesystem::directory_iterator(vendor, ec)) {
+            auto id = path_utf8(triple.path().filename());
+            if (id.find(arch) == std::string::npos || id.find(os) == std::string::npos)
+                continue;
+            for (auto candidate : {triple.path() / "bin" / std::filesystem::u8path(name),
+                                   triple.path() / std::filesystem::u8path(name) /
+                                       std::filesystem::u8path(name)}) {
+#ifdef _WIN32
+                candidate += L".exe";
+#endif
+                if (runnable(candidate))
+                    return std::filesystem::absolute(candidate);
+            }
+        }
+    return {};
+}
+// OLLAMA_HOST follows Ollama's own convention: optional scheme (http), host defaulting to
+// 127.0.0.1, port defaulting to 11434. A bind-all address is reached through loopback.
+std::string ollama_endpoint(std::string value) {
+    std::string scheme = "http";
+    if (auto at = value.find("://"); at != std::string::npos) {
+        scheme = value.substr(0, at);
+        value = value.substr(at + 3);
+    }
+    std::string path;
+    if (auto slash = value.find('/'); slash != std::string::npos) {
+        path = value.substr(slash);
+        value = value.substr(0, slash);
+        while (!path.empty() && path.back() == '/')
+            path.pop_back();
+    }
+    std::string host = value, port;
+    if (!value.empty() && value.front() == '[') {
+        auto close = value.find(']');
+        if (close == std::string::npos)
+            return {};
+        host = value.substr(0, close + 1);
+        if (close + 1 < value.size() && value[close + 1] == ':')
+            port = value.substr(close + 2);
+    } else if (auto colon = value.rfind(':'); colon != std::string::npos) {
+        host = value.substr(0, colon);
+        port = value.substr(colon + 1);
+    }
+    if (host.empty() || host == "0.0.0.0" || host == "[::]")
+        host = "127.0.0.1";
+    if (port.empty())
+        port = scheme == "https" ? "443" : "11434";
+    return scheme + "://" + host + ":" + port + path;
+}
+// The official Anthropic SDKs read ANTHROPIC_BASE_URL without the /v1 version segment.
+std::string anthropic_endpoint(std::string value) {
+    while (!value.empty() && value.back() == '/')
+        value.pop_back();
+    if (value.size() < 3 || value.compare(value.size() - 3, 3, "/v1") != 0)
+        value += "/v1";
+    return value;
+}
 } // namespace
 
 ProviderDiscoveryHints builtin_discovery(const std::string& id) {
@@ -193,6 +281,13 @@ ProviderDiscoveryHints builtin_discovery(const std::string& id) {
         hints.executables = found->second.first;
         hints.npm_packages = found->second.second;
     }
+    // Documented sign-in subcommands; other CLIs sign in interactively on first launch.
+    if (id == "codex")
+        hints.login_arguments = {"login"};
+    else if (id == "claude-code" || id == "claude")
+        hints.login_arguments = {"auth", "login"};
+    else if (id == "opencode" || id == "opencode-cli")
+        hints.login_arguments = {"auth", "login"};
     if (id == "openai" || id == "openai-compatible") {
         hints.api_key_env = "OPENAI_API_KEY";
         hints.endpoint_env = "OPENAI_BASE_URL";
@@ -207,12 +302,14 @@ ProviderDiscoveryHints builtin_discovery(const std::string& id) {
         hints.default_endpoint = "https://openrouter.ai/api/v1";
     } else if (id == "ollama") {
         hints.local_service = true;
+        hints.service_executables = {"ollama"};
         hints.endpoint_env = "OLLAMA_HOST";
         hints.default_endpoint = "http://127.0.0.1:11434";
     } else if (id == "lmstudio" || id == "llama.cpp") {
         hints.local_service = true;
+        hints.service_executables = {id == "lmstudio" ? "lms" : "llama-server"};
         hints.default_endpoint =
-            id == "lmstudio" ? "http://127.0.0.1:1234/v1" : "http://127.0.0.1:9931/v1";
+            id == "lmstudio" ? "http://127.0.0.1:1234/v1" : "http://127.0.0.1:8080/v1";
     }
     return hints;
 }
@@ -271,6 +368,12 @@ ProcessOptions resolve_provider_process(const ProviderDiscoveryHints& hints, Pro
                 const auto extension = path.extension();
                 if (extension != ".js" && extension != ".mjs" && extension != ".cjs")
                     continue;
+                // A JS launcher often only starts a vendored native binary (Codex): run that
+                // binary directly, without an extra Node process in between.
+                if (auto native = vendored_native(root, package, folder, name); !native.empty()) {
+                    process.executable = std::move(native);
+                    return process;
+                }
                 auto node = find_native(paths, "node");
                 if (node.empty())
                     continue;
@@ -310,8 +413,9 @@ std::vector<DiscoveredConnection> ProviderRegistry::discover(const DiscoveryOpti
         for (const auto& [id, entry] : entries_)
             descriptors.push_back(entry.first);
     }
-    std::vector<DiscoveredConnection> result;
-    for (const auto& descriptor : descriptors) {
+    // Profiles are independent: inspect them concurrently so stopped local services (whose
+    // refused connections can take seconds on Windows) do not add up.
+    const auto inspect = [&](const ProviderDescriptor& descriptor) {
         context.cancellation.check();
         DiscoveredConnection row;
         row.provider_id = descriptor.id;
@@ -337,13 +441,15 @@ std::vector<DiscoveredConnection> ProviderRegistry::discover(const DiscoveryOpti
             } else if (!hints.default_endpoint.empty() || !hints.endpoint_env.empty() ||
                        row.config.settings.contains("base_url")) {
                 auto endpoint = row.config.settings.value("base_url", std::string());
-                if (endpoint.empty() && options.use_environment && !hints.endpoint_env.empty())
+                if (endpoint.empty() && options.use_environment && !hints.endpoint_env.empty()) {
                     endpoint = environment(hints.endpoint_env);
+                    if (!endpoint.empty() && descriptor.id == "ollama")
+                        endpoint = ollama_endpoint(endpoint);
+                    else if (!endpoint.empty() && descriptor.id == "anthropic")
+                        endpoint = anthropic_endpoint(endpoint);
+                }
                 if (endpoint.empty())
                     endpoint = hints.default_endpoint;
-                if (descriptor.id == "ollama" && !endpoint.empty() &&
-                    endpoint.find("://") == std::string::npos)
-                    endpoint = "http://" + endpoint;
                 if (endpoint.empty()) {
                     row.state = "needs-endpoint";
                 } else {
@@ -383,12 +489,37 @@ std::vector<DiscoveredConnection> ProviderRegistry::discover(const DiscoveryOpti
             context.cancellation.check();
             row.error_code = error.code;
             row.state = error.code == "ExecutableMissing" ? "not-installed" : "unavailable";
+            // A local service that is installed but not started is actionable on its own.
+            if (row.source.empty() && !hints.service_executables.empty() &&
+                row.state == "unavailable") {
+                auto paths = directories(options);
+                for (const auto& name : hints.service_executables)
+                    if (!find_native(paths, name).empty()) {
+                        row.state = "not-running";
+                        row.source = "installed-service";
+                        break;
+                    }
+            }
         } catch (const std::exception&) {
             row.state = "unavailable";
             row.error_code = "InvalidOptions";
         }
-        result.push_back(std::move(row));
-    }
+        return row;
+    };
+    std::vector<std::future<DiscoveredConnection>> pending;
+    for (const auto& descriptor : descriptors)
+        pending.push_back(std::async(std::launch::async, inspect, std::cref(descriptor)));
+    std::vector<DiscoveredConnection> result;
+    std::exception_ptr failure;
+    for (auto& task : pending)
+        try {
+            result.push_back(task.get()); // joins every task before returning or throwing
+        } catch (...) {
+            if (!failure)
+                failure = std::current_exception();
+        }
+    if (failure)
+        std::rethrow_exception(failure);
     // Present useful choices first, with native accounts before API credentials.
     const auto rank = [](const DiscoveredConnection& row) {
         if (!row.available())

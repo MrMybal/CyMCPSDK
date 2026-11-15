@@ -16,8 +16,9 @@ struct CodexProvider::Impl {
     CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
         auto context = input;
         context.cancellation = input.cancellation.child();
-        context.cancellation.deadline =
-            std::min(context.cancellation.deadline, Clock::now() + timeout);
+        if (timeout.count() > 0) // 0: no deadline, only cancellation ends the operation
+            context.cancellation.deadline =
+                std::min(context.cancellation.deadline, Clock::now() + timeout);
         std::lock_guard lock(cancellation_mutex);
         active = context.cancellation;
         return context;
@@ -28,7 +29,7 @@ struct CodexProvider::Impl {
             if (line.stderr_stream)
                 continue;
             try {
-                auto value = parse_json(line.text);
+                auto value = parse_json(line.text, provider_message_limit);
                 if (!value.is_object())
                     throw Error("ProtocolError", "Expected provider message object");
                 return value;
@@ -101,7 +102,7 @@ struct CodexProvider::Impl {
                 return value["result"];
             }
             auto bytes = value.dump().size();
-            if (pending.size() >= 1024 || pending_bytes + bytes > 4 * 1024 * 1024)
+            if (pending.size() >= 1000000 || pending_bytes + bytes > provider_message_limit)
                 throw Error("OutputOverflow", "Provider event backlog exceeds limit");
             pending_bytes += bytes;
             pending.push_back(std::move(value));

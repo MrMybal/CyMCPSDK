@@ -1,4 +1,5 @@
 #include <cymcp/ai.hpp>
+#include <limits>
 #include <set>
 #include <sstream>
 namespace cymcp {
@@ -28,8 +29,8 @@ class SseDecoder {
                 line_.clear();
             } else
                 line_ += bytes[n];
-            if (line_.size() > 1024 * 1024 || data_.size() > 1024 * 1024)
-                throw Error("ResponseTooLarge", "SSE event exceeds limit");
+            if (line_.size() > provider_message_limit || data_.size() > provider_message_limit)
+                throw Error("ResponseTooLarge", "SSE event exceeds the memory guard");
         }
     }
     void finish() {
@@ -37,10 +38,16 @@ class SseDecoder {
             throw Error("UnexpectedEOF", "Truncated SSE event");
     }
 };
+// Result recorded for a call that never ran because the turn was cancelled or timed out.
+std::string interrupted_output(const std::string& code) {
+    return Json({{"error", {{"code", code}, {"message", "Tool call interrupted before completion"}}}})
+        .dump();
+}
 HttpRequest model_request(const HttpChatOptions& options, const std::string& path) {
     HttpRequest request;
     request.url = options.base_url + path;
     request.timeout = options.timeout;
+    request.max_response_bytes = provider_message_limit;
     request.headers = {{"Accept", "application/json"}, {"Content-Type", "application/json"}};
     if (!options.api_key.empty())
         request.headers["Authorization"] = "Bearer " + options.api_key;
@@ -59,9 +66,16 @@ HttpChatProvider::HttpChatProvider(HttpChatOptions opts)
         options_.base_url.pop_back();
     parse_url(options_.base_url);
     if (parse_url(options_.base_url).target.find('?') != std::string::npos ||
-        options_.max_tool_rounds < 1 || options_.max_tool_rounds > 64 ||
+        options_.max_output_tokens < 0 || options_.turn_timeout.count() < 0 ||
         options_.timeout.count() <= 0 || options_.timeout > std::chrono::hours(24))
-        throw Error("InvalidOptions", "Invalid tool round budget");
+        throw Error("InvalidOptions", "Invalid chat options");
+}
+bool HttpChatProvider::local_service() const noexcept {
+    try {
+        return parse_url(options_.base_url).loopback;
+    } catch (...) {
+        return false;
+    }
 }
 ProviderCapabilities HttpChatProvider::capabilities() const {
     return {true, false, static_cast<bool>(options_.tools), true, true, true, true, false, false};
@@ -77,7 +91,7 @@ Json HttpChatProvider::list_models(const CallContext& context) {
                     : response.status == 429                         ? "RateLimited"
                                                                      : "ProviderError",
                     "Model catalogue request failed");
-    auto result = parse_json(response.body, 16 * 1024 * 1024);
+    auto result = parse_json(response.body, provider_message_limit);
     if (!result.contains("data") || !result["data"].is_array())
         throw Error("ProtocolError", "Missing model catalogue");
     return result["data"];
@@ -95,12 +109,14 @@ Session HttpChatProvider::start_session(std::string model, std::string resume,
 }
 ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallContext& input) {
     auto context = input;
-    context.cancellation.deadline =
-        std::min(context.cancellation.deadline, Clock::now() + options_.timeout);
+    if (options_.turn_timeout.count() > 0)
+        context.cancellation.deadline =
+            std::min(context.cancellation.deadline, Clock::now() + options_.turn_timeout);
     if (!messages.is_array() || messages.empty())
         throw Error("InvalidParameters", "Messages required");
     std::map<std::string, std::string> names;
-    for (std::size_t round = 0; round < options_.max_tool_rounds; ++round) {
+    for (std::size_t round = 0; options_.max_tool_rounds == 0 || round < options_.max_tool_rounds;
+         ++round) {
         context.cancellation.check();
         ChatResult result;
         Json calls = Json::array();
@@ -108,6 +124,10 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
         auto request = model_request(options_, "/chat/completions");
         request.method = "POST";
         request.headers["Accept"] = "text/event-stream";
+        // A generation stream has no total deadline or size budget: only silence aborts it.
+        request.idle_timeout = options_.timeout;
+        request.timeout = std::chrono::milliseconds(0);
+        request.max_response_bytes = std::numeric_limits<std::size_t>::max();
         auto wire_messages = messages;
         for (auto& message : wire_messages) {
             message.erase("_cymcp_native");
@@ -119,6 +139,8 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
                         {"messages", wire_messages},
                         {"stream", true},
                         {"stream_options", {{"include_usage", true}}}};
+        if (options_.max_output_tokens > 0)
+            payload["max_tokens"] = options_.max_output_tokens;
         if (options_.tools) {
             Json tools = Json::array();
             for (const auto& tool : options_.tools->describe()) {
@@ -143,8 +165,6 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
                 payload["tools"] = tools;
         }
         request.body = payload.dump();
-        if (request.body.size() > 8 * 1024 * 1024)
-            throw Error("ContextTooLarge", "Conversation exceeds request limit");
         SseDecoder decoder([&](const std::string& data) {
             if (done)
                 throw Error("ProtocolError", "Data after terminal SSE marker");
@@ -152,7 +172,7 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
                 done = true;
                 return;
             }
-            auto event = parse_json(data);
+            auto event = parse_json(data, provider_message_limit);
             if (event.contains("error"))
                 throw Error("ProviderError", "Provider returned an error");
             if (event.contains("usage") && !event["usage"].is_null()) {
@@ -177,7 +197,7 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
                 if (delta.contains("tool_calls"))
                     for (const auto& part : delta["tool_calls"]) {
                         auto index = part.at("index").get<int>();
-                        if (index < 0 || index >= 32)
+                        if (index < 0 || index >= 65536)
                             throw Error("ProtocolError", "Invalid tool call index");
                         while (calls.size() <= static_cast<std::size_t>(index))
                             calls.push_back({{"id", ""},
@@ -223,6 +243,9 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
         if (!terminal || !done)
             throw Error("UnexpectedEOF", "Provider stream ended before completion");
         Json assistant = {{"role", "assistant"}, {"content", result.text}};
+        // A length/content-filter stop can cut a call: never replay it without a result.
+        if (result.finish_reason != "tool_calls")
+            calls = Json::array();
         if (calls.empty()) {
             if (result.finish_reason == "tool_calls")
                 throw Error("ProtocolError", "Missing tool calls");
@@ -241,6 +264,8 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
         }
         assistant["tool_calls"] = calls;
         messages.push_back(assistant);
+        std::size_t answered = 0;
+        try {
         for (const auto& call : calls) {
             auto name = call["function"]["name"].get<std::string>();
             auto id = call["id"].get<std::string>();
@@ -263,7 +288,16 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
             }
             messages.push_back(
                 {{"role", "tool"}, {"tool_call_id", id}, {"content", output.dump()}});
+            ++answered;
             context.emit("ToolCompleted", {{"id", id}, {"name", name}, {"output", output}});
+        }
+        } catch (const Error& error) {
+            // Every recorded call needs a result, or the next request is rejected (HTTP 400).
+            for (std::size_t n = answered; n < calls.size(); ++n)
+                messages.push_back({{"role", "tool"},
+                                    {"tool_call_id", calls[n].at("id")},
+                                    {"content", interrupted_output(error.code)}});
+            throw;
         }
     }
     throw Error("ToolBudgetExceeded", "Maximum tool rounds reached");
@@ -315,7 +349,24 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
     try {
         s.provider->connect(context);
         Json catalogue = Json::array();
+        // The catalogue is informative: failing to list it never fails a valid session.
+        const auto optional_catalogue = [&] {
+            try {
+                return s.provider->list_models(context);
+            } catch (const Error&) {
+                if (context.cancellation.cancelled())
+                    throw;
+                return Json::array();
+            }
+        };
         if (automatic_model && s.provider->uses_host_history() && s.model.empty()) {
+            if (!s.provider->local_service()) {
+                // A paid catalogue's order is not a recommendation: return it for an explicit
+                // choice instead of opening a session on an arbitrary commercial model.
+                if (models)
+                    *models = optional_catalogue();
+                throw Error("UnknownModel", "Select a model from the provider catalogue");
+            }
             catalogue = s.provider->list_models(context);
             s.model = default_model(catalogue);
             if (s.model.empty())
@@ -331,14 +382,8 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
         }
         auto session = s.provider->start_session(s.model, std::move(resume), context, system);
         if (models) {
-            if (catalogue.empty() && s.provider->capabilities().model_catalogue) {
-                try {
-                    catalogue = s.provider->list_models(context);
-                } catch (const Error& error) {
-                    if (error.code != "Unsupported")
-                        throw;
-                }
-            }
+            if (catalogue.empty() && s.provider->capabilities().model_catalogue)
+                catalogue = optional_catalogue();
             *models = std::move(catalogue);
         }
         std::lock_guard lock(s.history);
@@ -395,8 +440,9 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
     }
     validate_content(content);
     messages.push_back({{"role", "user"}, {"content", std::move(content)}});
-    if (messages.dump().size() > 8 * 1024 * 1024)
-        throw Error("ContextTooLarge", "Conversation exceeds memory budget");
+    // Memory guard only: the model context window is the real limit, enforced by the provider.
+    if (messages.dump().size() > provider_message_limit)
+        throw Error("ContextTooLarge", "Conversation exceeds the memory guard");
     auto commit = [&] {
         std::lock_guard lock(s.history);
         s.messages = messages;
@@ -537,7 +583,7 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
     Json messages;
     std::string id, model, native_model, system, previous_error;
     try {
-        if (snapshot.dump().size() > 16 * 1024 * 1024)
+        if (snapshot.dump().size() > provider_message_limit)
             throw Error("ContextTooLarge", "Checkpoint exceeds limit");
         if (snapshot.at("format") != "cymcp-conversation" || snapshot.at("version") != 1)
             throw Error("UnsupportedVersion", "Unsupported conversation checkpoint");

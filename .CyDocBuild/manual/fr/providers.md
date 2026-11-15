@@ -54,6 +54,9 @@ de Chat Lab. Le CLI et l'interface peuvent charger cette configuration sans secr
 ```
 
 En mode automatique, choisir un modèle retourné dans la liste ou conserver le réglage natif.
+Seuls les services locaux reçoivent un modèle automatiquement ; une API distante affiche son
+catalogue et attend un choix explicite. En mode manuel, choisir un fournisseur préremplit ses
+paramètres conventionnels (adresse, variable de clé, délais) et l'installation détectée.
 Le mode manuel accepte aussi un identifiant exact. Ne pas mettre de vraie
 clé dans un fichier JSON. `settings.base_url` remplace l'adresse du service. Le profil Ollama
 attend la base de son API native ; les serveurs compatibles utilisent généralement une base `/v1`.

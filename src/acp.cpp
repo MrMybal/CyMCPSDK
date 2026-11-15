@@ -49,8 +49,9 @@ struct AcpProvider::Impl {
     CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
         auto context = input;
         context.cancellation = input.cancellation.child();
-        context.cancellation.deadline =
-            std::min(context.cancellation.deadline, Clock::now() + timeout);
+        if (timeout.count() > 0) // 0: no deadline, only cancellation ends the operation
+            context.cancellation.deadline =
+                std::min(context.cancellation.deadline, Clock::now() + timeout);
         std::lock_guard lock(cancellation_mutex);
         active = context.cancellation;
         return context;
@@ -67,7 +68,7 @@ struct AcpProvider::Impl {
         while (process->next(line, context.cancellation)) {
             if (line.stderr_stream || line.text.empty())
                 continue;
-            auto message = parse_json(line.text);
+            auto message = parse_json(line.text, provider_message_limit);
             if (!message.is_object() || message.value("jsonrpc", std::string()) != "2.0")
                 throw Error("ProtocolError", "Expected ACP JSON-RPC message");
             return message;
@@ -159,7 +160,7 @@ struct AcpProvider::Impl {
                     throw Error("AccessDenied", "Client service denied by host policy");
                 auto result = options.request_handler(method, params, context);
                 context.cancellation.check();
-                if (!result.is_object() || result.dump().size() > 4 * 1024 * 1024)
+                if (!result.is_object() || result.dump().size() > provider_message_limit)
                     throw Error("InvalidResult", "Invalid ACP client service result");
                 response["result"] = std::move(result);
             } catch (const Error& error) {
@@ -189,7 +190,7 @@ struct AcpProvider::Impl {
                 auto text = content.at("text").get<std::string>();
                 if (kind == "agent_message_chunk") {
                     result->text += text;
-                    if (result->text.size() > 8 * 1024 * 1024)
+                    if (result->text.size() > provider_message_limit)
                         throw Error("ResponseTooLarge", "ACP answer exceeds limit");
                 }
                 context.emit(kind == "agent_message_chunk" ? "TextDelta" : "ThinkingDelta",
@@ -290,7 +291,7 @@ AcpProvider::AcpProvider(AcpOptions options)
     : Provider("acp"), impl_(std::make_unique<Impl>(std::move(options))) {
     const auto& opts = impl_->options;
     if (!opts.mcp_servers.is_array() || opts.mcp_servers.dump().size() > 1024 * 1024 ||
-        opts.connect_timeout.count() <= 0 || opts.turn_timeout.count() <= 0 ||
+        opts.connect_timeout.count() <= 0 || opts.turn_timeout.count() < 0 ||
         opts.connect_timeout > std::chrono::hours(24) || opts.turn_timeout > std::chrono::hours(24))
         throw Error("InvalidOptions", "Invalid ACP options");
     Json boolean_schema = {{"type", "boolean"}};
@@ -383,7 +384,7 @@ Json AcpProvider::list_models(const CallContext& input) {
     }
     if (probe.wait(context.cancellation) != 0)
         throw Error("ModelDiscoveryFailed", "Native model discovery failed");
-    return model_rows(parse_json(output));
+    return model_rows(parse_json(output, provider_message_limit));
 }
 Session AcpProvider::start_session(std::string model, std::string resume, const CallContext& input,
                                    std::string system) {
@@ -451,9 +452,11 @@ ChatResult AcpProvider::send(Session& session, Json& messages, const CallContext
                       text_block("Application instructions:\n" + p.system + "\nUser message:\n"));
     p.first_prompt = false; // submitted turns must never be resent implicitly
     ChatResult result;
+    bool answered = false; // the correlated session/prompt response was received
     try {
         auto response = p.rpc("session/prompt", {{"sessionId", session.id}, {"prompt", prompt}},
                               context, &result);
+        answered = true;
         auto reason = response.at("stopReason").get<std::string>();
         if (reason == "cancelled")
             throw Error("Cancelled", "ACP agent cancelled the turn");
@@ -471,12 +474,16 @@ ChatResult AcpProvider::send(Session& session, Json& messages, const CallContext
             session.model = p.current_model();
         context.emit("TurnCompleted", {{"text", result.text}, {"finishReason", reason}});
         return result;
-    } catch (const Error& error) {
-        if (error.code == "Cancelled" || error.code == "Timeout") {
+    } catch (const Error&) {
+        // Any failure before the agent's answer (cancellation, timeout, overflow, a closed or
+        // misbehaving process...) leaves its prompt running: cancel it and drop the process so
+        // a later turn never reads stale updates. A turn that answered left the session clean.
+        if (!answered) {
             CallContext cleanup;
             cleanup.cancellation.deadline = Clock::now() + std::chrono::milliseconds(100);
             try {
-                p.process->write(Json({{"jsonrpc", "2.0"},
+                if (p.process)
+                    p.process->write(Json({{"jsonrpc", "2.0"},
                                        {"method", "session/cancel"},
                                        {"params", {{"sessionId", session.id}}}})
                                          .dump() +
@@ -485,8 +492,7 @@ ChatResult AcpProvider::send(Session& session, Json& messages, const CallContext
             } catch (...) {
             }
             p.reset();
-        } else if (error.code == "ProtocolError" || error.code == "UnexpectedEOF")
-            p.reset();
+        }
         throw;
     } catch (...) {
         p.reset();

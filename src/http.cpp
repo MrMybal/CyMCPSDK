@@ -80,7 +80,9 @@ std::string lower(std::string s) {
 void validate_request(const HttpRequest& r) {
     if (r.method != "GET" && r.method != "POST" && r.method != "DELETE" && r.method != "HEAD")
         throw Error("InvalidOptions", "Unsupported HTTP method");
-    if (r.timeout.count() <= 0 || r.timeout > std::chrono::hours(24) || !r.max_response_bytes)
+    if (r.timeout.count() < 0 || r.idle_timeout.count() < 0 ||
+        r.timeout > std::chrono::hours(24 * 365) || r.idle_timeout > std::chrono::hours(24) ||
+        !r.max_response_bytes)
         throw Error("InvalidOptions", "Invalid HTTP limits");
     for (const auto& [key, value] : r.headers)
         if (key.empty() ||
@@ -129,11 +131,16 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     validate_request(request);
     auto url = parse_url(request.url);
     Cancellation cancel = input;
-    cancel.deadline = std::min(cancel.deadline, Clock::now() + request.timeout);
+    if (request.timeout.count() > 0)
+        cancel.deadline = std::min(cancel.deadline, Clock::now() + request.timeout);
     cancel.check();
     HttpResponse result;
     std::size_t received = 0;
+    // Idle detection shared by both back ends: any received byte restarts the interval.
+    std::atomic<std::int64_t> last_activity{Clock::now().time_since_epoch().count()};
+    std::atomic_bool idle_expired{false};
     auto accept = [&](const char* data, std::size_t size) {
+        last_activity.store(Clock::now().time_since_epoch().count());
         cancel.check();
         if (size > request.max_response_bytes - std::min(received, request.max_response_bytes))
             throw Error("ResponseTooLarge", "HTTP response exceeds limit");
@@ -150,16 +157,24 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
                                  url.loopback ? WINHTTP_ACCESS_TYPE_NO_PROXY
                                               : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+    // WinHTTP send/receive timeouts are per operation: they bound silence, not a whole stream.
+    // Zero means infinite; the total deadline is enforced by the watcher below.
+    const auto idle = request.idle_timeout.count() > 0 ? request.idle_timeout : request.timeout;
     auto timeout = static_cast<int>(
-        std::min<std::int64_t>(request.timeout.count(), std::numeric_limits<int>::max()));
-    WinHttpSetTimeouts(session.get(), std::min(timeout, 10000), std::min(timeout, 10000), timeout,
-                       timeout);
+        std::min<std::int64_t>(idle.count(), std::numeric_limits<int>::max()));
+    WinHttpSetTimeouts(session.get(), timeout ? std::min(timeout, 10000) : 10000,
+                       timeout ? std::min(timeout, 10000) : 10000, timeout, timeout);
     Internet connection(WinHttpConnect(session.get(), wide_http(url.host).c_str(),
                                        static_cast<INTERNET_PORT>(url.port), 0));
     Internet handle(WinHttpOpenRequest(connection.get(), wide_http(request.method).c_str(),
                                        wide_http(url.target).c_str(), nullptr, WINHTTP_NO_REFERER,
                                        WINHTTP_DEFAULT_ACCEPT_TYPES,
                                        url.scheme == "https" ? WINHTTP_FLAG_SECURE : 0));
+    // Waiting for the response headers is a silence too (default would be 90 s, or infinite
+    // for a zero idle value).
+    DWORD header_wait = static_cast<DWORD>(timeout);
+    WinHttpSetOption(handle.get(), WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT, &header_wait,
+                     sizeof(header_wait));
     DWORD disabled = WINHTTP_DISABLE_REDIRECTS;
     WinHttpSetOption(handle.get(), WINHTTP_OPTION_DISABLE_FEATURE, &disabled, sizeof(disabled));
     std::jthread watcher([&](std::stop_token stop) {
@@ -171,6 +186,13 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
                 handle.close();
                 return;
             }
+            if (request.idle_timeout.count() > 0 &&
+                Clock::now() - Clock::time_point(Clock::duration(last_activity.load())) >
+                    request.idle_timeout) {
+                idle_expired.store(true);
+                handle.close();
+                return;
+            }
             wake.wait_for(wait, stop, std::chrono::milliseconds(20), [] { return false; });
         }
     });
@@ -178,9 +200,12 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     for (const auto& [key, value] : request.headers)
         headers += wide_http(key + ": " + value + "\r\n");
     auto failed = [&] {
+        const auto code = GetLastError();
         cancel.check();
+        if (code == ERROR_WINHTTP_TIMEOUT || idle_expired.load())
+            throw Error("Timeout", "HTTP connection stayed silent beyond its idle timeout");
         throw Error("NetworkError",
-                    "HTTP request failed (system code " + std::to_string(GetLastError()) + ")");
+                    "HTTP request failed (system code " + std::to_string(code) + ")");
     };
     if (request.body.size() > std::numeric_limits<DWORD>::max())
         throw Error("InvalidOptions", "Request body too large");
@@ -196,6 +221,7 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
                              WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX))
         failed();
     result.status = static_cast<int>(status);
+    last_activity.store(Clock::now().time_since_epoch().count());
     DWORD header_size = 0;
     WinHttpQueryHeaders(handle.get(), WINHTTP_QUERY_RAW_HEADERS_CRLF, nullptr, nullptr,
                         &header_size, nullptr);
@@ -243,6 +269,8 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
         accept(buffer.data(), bytes);
     }
     watcher.request_stop();
+    if (idle_expired.load())
+        throw Error("Timeout", "HTTP connection stayed silent beyond its idle timeout");
 #else
     static const auto initialized = curl_global_init(CURL_GLOBAL_DEFAULT);
     if (initialized != CURLE_OK)
@@ -269,6 +297,12 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, static_cast<long>(request.timeout.count()));
+    if (request.idle_timeout.count() > 0) {
+        // Abort only after a full idle interval below one byte per second.
+        curl_easy_setopt(handle, CURLOPT_LOW_SPEED_LIMIT, 1L);
+        curl_easy_setopt(handle, CURLOPT_LOW_SPEED_TIME,
+                         static_cast<long>((request.idle_timeout.count() + 999) / 1000));
+    }
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
     if (url.loopback)
         curl_easy_setopt(handle, CURLOPT_NOPROXY, "*");
@@ -335,6 +369,7 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     long status = 0;
     curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &status);
     result.status = static_cast<int>(status);
+    last_activity.store(Clock::now().time_since_epoch().count());
 #endif
     cancel.check();
     return result;

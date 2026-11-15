@@ -404,6 +404,41 @@ int main(int argc, char** argv) {
                   "Restore preserves native reasoning and executed tool results after failure");
             check(requests.load() == before_restore,
                   "Restoring a failed tool round does not repeat its generation or action");
+            {
+                // Stop during a long tool: the recorded call must still get a result, or every
+                // later request of this conversation is rejected by the provider.
+                auto blocking = std::make_shared<Registry>(Policy::allow_all());
+                std::atomic_bool started{false};
+                blocking->add({"app.sum",
+                               "Blocks until cancelled",
+                               {{"type", "object"}},
+                               {{"type", "object"}},
+                               true,
+                               [&](const Json&, const CallContext& context) {
+                                   started = true;
+                                   while (true) {
+                                       context.cancellation.check();
+                                       std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                                   }
+                                   return Json::object();
+                               }});
+                config.tools = blocking;
+                config.settings.erase("max_tool_rounds");
+                Conversation interrupted(registry.create(id, config), "fixture-model",
+                                         "App instructions");
+                interrupted.connect();
+                Executor worker(1);
+                auto pending = interrupted.send_async(worker, "use app.sum");
+                for (int n = 0; n < 2500 && !started; ++n)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                interrupted.cancel();
+                expect_error("Cancelled", [&] { pending.get(); });
+                auto history = interrupted.history();
+                check(started && history.back().at("role") == "tool" &&
+                          history.back().at("content").get<std::string>().find("Cancelled") !=
+                              std::string::npos,
+                      "A cancelled tool call keeps a result so the conversation stays valid");
+            }
         }
         mode = 6;
         ProviderConfig anthropic;

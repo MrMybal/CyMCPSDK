@@ -42,7 +42,7 @@ class ProviderFixture final : public Provider {
             for (int n = 0; n < 3000; ++n)
                 context.emit("ToolStarted", {{"name", "fixture-tool"}});
         if (probe_->oversized) {
-            std::string text(2 * 1024 * 1024 + 1, 'x');
+            std::string text(16 * 1024 * 1024 + 1, 'x');
             context.emit("TextDelta", {{"text", text}});
             return {text, "stop"};
         }
@@ -119,7 +119,6 @@ int main() {
         check(chat.state().models.at(0).at("id") == "fixture-model",
               "Catalogue populated from provider");
         expect_error("InvalidContent", [&] { chat.send(" \n"); });
-        expect_error("InvalidContent", [&] { chat.send(std::string(65537, 'x')); });
         chat.send("hello");
         expect_error("Busy", [&] { chat.send("duplicate"); });
         bool streamed = false;
@@ -205,18 +204,21 @@ int main() {
         wait(chat);
         probe->flood = true;
         chat.send("flood");
-        // Deliberately stop UI consumption to exercise bounded backpressure.
+        // Deliberately stop UI consumption: deltas coalesce instead of failing the turn.
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         wait(chat);
-        check(chat.state().error_code == "Backpressure" && chat.state().activity.size() <= 128,
-              "Slow UI triggers explicit bounded backpressure and bounded activity");
+        check(chat.state().error_code.empty() && chat.state().phase == "ready" &&
+                  chat.state().activity.size() <= 128,
+              "Slow UI never fails a generation and keeps bounded activity");
         probe->flood = false;
         probe->oversized = true;
         chat.send("large");
         wait(chat);
-        check(chat.state().error_code == "ContextTooLarge" && chat.state().phase == "failed" &&
-                  chat.state().messages.back().markdown.size() <= 2 * 1024 * 1024,
-              "Oversized response cancels instead of growing the transcript without bound");
+        check(chat.state().error_code.empty() && chat.state().phase == "ready" &&
+                  chat.state().messages.back().markdown.size() <= 16 * 1024 * 1024 + 256 &&
+                  chat.state().messages.back().markdown.find("display truncated") !=
+                      std::string::npos,
+              "Oversized answer completes; only its display is truncated");
         probe->oversized = false;
         auto broken_storage = connection;
         broken_storage.history_id = "../invalid";
@@ -259,7 +261,8 @@ int main() {
         {
             ChatPanel panel(chat);
             panel.set_draft("A UTF-8 draft: é è 中文");
-            expect_error("ContextTooLarge", [&] { panel.set_draft(std::string(65537, 'x')); });
+            panel.set_draft(std::string(1024 * 1024, 'x')); // large pastes are not truncated
+            panel.set_draft("A UTF-8 draft: é è 中文");
             for (const auto& theme : cyui::builtInThemes()) {
                 cyui::setTheme(theme.key.c_str());
                 for (const char* locale : {"en", "fr"}) {

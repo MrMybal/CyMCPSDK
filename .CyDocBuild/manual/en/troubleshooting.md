@@ -29,9 +29,9 @@ connection is not a guarantee that the account can perform a generation.
 `UnexpectedEOF`. Keep the partial text, reconnect explicitly, and decide what to send next.
 `SessionInvalid` means the exact native session could not be resumed; retain its saved history.
 
-`Backpressure` or `ContextTooLarge` means a queue/display/content budget was reached. Save the
-conversation and start a new one, or reduce attachments. ChatUI bounds events and displayed text;
-it does not silently drop a conversation to stay below its budget.
+`ContextTooLarge` now means a memory guard (256 MiB per message) or the model's own context
+window was reached: start a new conversation or reduce attachments. A slow or minimised UI no
+longer fails a turn; very long transcripts only scroll their oldest rows out of the view.
 
 ## Missing manual {#help}
 

@@ -29,7 +29,10 @@ réussie ne garantit pas que le compte peut effectuer une génération.
 `UnexpectedEOF`. Conserver le texte partiel, reconnecter explicitement, puis choisir le message suivant.
 `SessionInvalid` indique que la session exacte n'a pas pu être reprise ; garder son historique enregistré.
 
-`Backpressure` ou `ContextTooLarge` indique un budget de file, d'affichage ou de contenu atteint.
+`ContextTooLarge` indique désormais une garde mémoire (256 Mio par message) ou la fenêtre de
+contexte du modèle : démarrer une nouvelle conversation ou réduire les pièces jointes. Une
+interface lente ou réduite ne fait plus échouer un tour ; un très long historique fait seulement
+sortir ses plus anciens messages de la vue.
 Sauvegarder puis créer une conversation, ou réduire les pièces jointes. ChatUI borne ses événements
 et son texte affiché ; il ne supprime pas silencieusement une conversation pour respecter son budget.
 

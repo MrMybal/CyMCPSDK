@@ -171,14 +171,14 @@ void McpServer::serve_stdio(std::istream& in, std::ostream& out, std::size_t wor
     char ch;
     while (in.get(ch)) {
         if (ch != '\n') {
-            if (line.size() < 1024 * 1024)
+            if (line.size() < provider_message_limit)
                 line += ch;
             else
                 oversized = true;
             continue;
         }
         if (oversized) {
-            send(rpc_error(nullptr, -32700, "Message exceeds 1 MiB"));
+            send(rpc_error(nullptr, -32700, "Message exceeds the memory guard"));
             line.clear();
             oversized = false;
             continue;
@@ -187,7 +187,7 @@ void McpServer::serve_stdio(std::istream& in, std::ostream& out, std::size_t wor
             continue;
         Json request;
         try {
-            request = parse_json(line);
+            request = parse_json(line, provider_message_limit);
         } catch (...) {
             send(rpc_error(nullptr, -32700, "Parse error"));
             line.clear();
@@ -232,7 +232,12 @@ struct McpClient::Impl {
             while (process->next(line, cancel)) {
                 if (line.stderr_stream)
                     continue;
-                Json next = parse_json(line.text);
+                Json next = parse_json(line.text, provider_message_limit);
+                // JSON-RPC answers an undeterminable request with id null: on this ordered
+                // channel it is the reply to the request just written.
+                if (next.is_object() && next.contains("error") && next.contains("id") &&
+                    next.at("id").is_null() && !next.contains("method"))
+                    next["id"] = id;
                 if (next.contains("method") && next.contains("id")) {
                     process->write(
                         rpc_error(next["id"], -32601, "Client request unsupported").dump() + "\n");
@@ -249,6 +254,10 @@ struct McpClient::Impl {
             req.method = "POST";
             req.url = url;
             req.body = message.dump();
+            // A tool may legitimately run for a long time: only the caller's cancellation and
+            // deadline bound the exchange.
+            req.timeout = std::chrono::milliseconds(0);
+            req.max_response_bytes = provider_message_limit;
             req.headers = {{"Content-Type", "application/json"},
                            {"Accept", "application/json, text/event-stream"},
                            {"Authorization", "Bearer " + token},
@@ -262,12 +271,17 @@ struct McpClient::Impl {
                 return nullptr;
             if (response.status < 200 || response.status >= 300) {
                 try {
-                    reply = parse_json(response.body);
+                    reply = parse_json(response.body, provider_message_limit);
                 } catch (...) {
-                    throw Error("ProtocolError", "MCP HTTP request rejected");
+                    reply = nullptr;
                 }
-                if (!reply.contains("error"))
-                    throw Error("ProtocolError", "MCP HTTP request rejected");
+                // Represent any rejection as a JSON-RPC error for this request, so a server
+                // that refuses server/discover (e.g. "not initialized", id null, or a plain HTTP
+                // error) still lets connect() fall back to the legacy handshake.
+                if (!reply.is_object() || !reply.contains("error"))
+                    reply = rpc_error(id, -32600, "MCP HTTP request rejected");
+                else if (!reply.contains("id") || reply.at("id").is_null())
+                    reply["id"] = id;
             } else if (response.headers["content-type"].find("text/event-stream") !=
                        std::string::npos) {
                 std::istringstream events(response.body);
@@ -278,14 +292,21 @@ struct McpClient::Impl {
                     if (line.rfind("data:", 0) == 0)
                         data += line.substr(5) + "\n";
                     else if (line.empty() && !data.empty()) {
-                        auto next = parse_json(data);
+                        auto next = parse_json(data, provider_message_limit);
+                        if (next.is_object() && next.contains("error") &&
+                            next.value("id", Json()).is_null())
+                            next["id"] = id;
                         if (next.value("id", Json()) == id)
                             reply = std::move(next);
                         data.clear();
                     }
                 }
-            } else
-                reply = parse_json(response.body);
+            } else {
+                reply = parse_json(response.body, provider_message_limit);
+                if (reply.is_object() && reply.contains("error") &&
+                    reply.value("id", Json()).is_null())
+                    reply["id"] = id;
+            }
 #else
             throw Error("Unsupported", "HTTP module disabled");
 #endif

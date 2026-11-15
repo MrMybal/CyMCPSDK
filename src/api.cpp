@@ -1,8 +1,11 @@
 #include <cymcp/ai.hpp>
+#include <limits>
 #include <set>
 namespace cymcp {
 namespace {
-constexpr std::size_t frame_limit = 1024 * 1024;
+constexpr std::size_t frame_limit = provider_message_limit;
+// Used only when an Anthropic-compatible catalogue does not publish the model's output cap.
+constexpr int fallback_output_tokens = 64000;
 void http_status(int status) {
     if (status >= 200 && status < 300)
         return;
@@ -24,9 +27,11 @@ HttpRequest request_for(const ApiOptions& options, const std::string& path) {
     return request;
 }
 Json get(const ApiOptions& options, const std::string& path, const CallContext& context) {
-    auto response = HttpClient().perform(request_for(options, path), context.cancellation);
+    auto request = request_for(options, path);
+    request.max_response_bytes = provider_message_limit;
+    auto response = HttpClient().perform(request, context.cancellation);
     http_status(response.status);
-    return parse_json(response.body, 16 * 1024 * 1024);
+    return parse_json(response.body, provider_message_limit);
 }
 std::string percent_encode(const std::string& value) {
     const char* hex = "0123456789ABCDEF";
@@ -53,11 +58,11 @@ class Frames {
             line_.pop_back();
         if (ndjson_) {
             if (!line_.empty())
-                consume_(parse_json(line_));
+                consume_(parse_json(line_, frame_limit));
         } else if (line_.empty()) {
             if (!data_.empty()) {
                 data_.pop_back();
-                consume_(parse_json(data_));
+                consume_(parse_json(data_, frame_limit));
                 data_.clear();
             }
         } else if (line_.rfind("data:", 0) == 0)
@@ -91,8 +96,10 @@ void stream(HttpRequest request, const ApiOptions& options, const Json& body,
     request.headers["Accept"] =
         options.protocol == ApiProtocol::Ollama ? "application/x-ndjson" : "text/event-stream";
     request.body = body.dump();
-    if (request.body.size() > 8 * 1024 * 1024)
-        throw Error("ContextTooLarge", "API request exceeds limit");
+    // A generation stream has no total deadline or size budget: only silence aborts it.
+    request.idle_timeout = options.timeout;
+    request.timeout = std::chrono::milliseconds(0);
+    request.max_response_bytes = std::numeric_limits<std::size_t>::max();
     Frames frames(options.protocol == ApiProtocol::Ollama, consume);
     std::exception_ptr failure;
     auto response =
@@ -174,6 +181,11 @@ struct Tools {
         return output;
     }
 };
+// Result recorded for a call that never ran because the turn was cancelled or timed out.
+std::string interrupted_output(const std::string& code) {
+    return Json({{"error", {{"code", code}, {"message", "Tool call interrupted before completion"}}}})
+        .dump();
+}
 std::string protocol_id(ApiProtocol protocol) {
     return protocol == ApiProtocol::OpenAIResponses     ? "responses"
            : protocol == ApiProtocol::AnthropicMessages ? "anthropic"
@@ -252,8 +264,8 @@ Json history_for(const Json& messages, ApiProtocol protocol, std::string& system
 }
 void append(std::string& text, const std::string& delta) {
     text += delta;
-    if (text.size() > 8 * 1024 * 1024)
-        throw Error("ResponseTooLarge", "API answer exceeds limit");
+    if (text.size() > provider_message_limit)
+        throw Error("ResponseTooLarge", "API answer exceeds the memory guard");
 }
 } // namespace
 ApiProvider::ApiProvider(ApiOptions options)
@@ -280,10 +292,17 @@ ApiProvider::ApiProvider(ApiOptions options)
     while (!options_.base_url.empty() && options_.base_url.back() == '/')
         options_.base_url.pop_back();
     auto url = parse_url(options_.base_url);
-    if (url.target.find('?') != std::string::npos || options_.max_tool_rounds < 1 ||
-        options_.max_tool_rounds > 64 || options_.max_output_tokens < 1 ||
-        options_.timeout.count() <= 0 || options_.timeout > std::chrono::hours(24))
+    if (url.target.find('?') != std::string::npos || options_.max_output_tokens < 0 ||
+        options_.timeout.count() <= 0 || options_.timeout > std::chrono::hours(24) ||
+        options_.turn_timeout.count() < 0)
         throw Error("InvalidOptions", "Invalid API options");
+}
+bool ApiProvider::local_service() const noexcept {
+    try {
+        return parse_url(options_.base_url).loopback;
+    } catch (...) {
+        return false;
+    }
 }
 ProviderCapabilities ApiProvider::capabilities() const {
     bool chat = options_.protocol == ApiProtocol::OpenRouter;
@@ -328,10 +347,16 @@ Json ApiProvider::list_models(const CallContext& input) {
             if (!row.is_object() || !row.contains("id") || !row.at("id").is_string() ||
                 row.at("id").get<std::string>().empty())
                 throw Error("ProtocolError", "Invalid model catalogue entry");
+            if (options_.protocol == ApiProtocol::AnthropicMessages &&
+                row.contains("max_tokens") && row.at("max_tokens").is_number_integer() &&
+                row.at("max_tokens").get<int>() > 0) {
+                std::lock_guard lock(limits_mutex_);
+                output_limits_[row.at("id").get<std::string>()] = row.at("max_tokens").get<int>();
+            }
             rows.push_back(std::move(row));
         }
-        if (rows.dump().size() > 16 * 1024 * 1024)
-            throw Error("ResponseTooLarge", "Model catalogue exceeds limit");
+        if (rows.size() > 100000)
+            throw Error("ResponseTooLarge", "Model catalogue exceeds the memory guard");
         if (options_.protocol != ApiProtocol::AnthropicMessages || !data.value("has_more", false))
             return rows;
         auto cursor = data.value("last_id", std::string());
@@ -340,6 +365,27 @@ Json ApiProvider::list_models(const CallContext& input) {
         path = "/models?after_id=" + percent_encode(cursor);
     }
     throw Error("ProtocolError", "Too many model catalogue pages");
+}
+int ApiProvider::output_limit(const std::string& model, const CallContext& context) {
+    if (options_.max_output_tokens > 0)
+        return options_.max_output_tokens;
+    {
+        std::lock_guard lock(limits_mutex_);
+        if (auto found = output_limits_.find(model); found != output_limits_.end())
+            return found->second;
+    }
+    int limit = fallback_output_tokens;
+    try {
+        auto row = get(options_, "/models/" + percent_encode(model), context);
+        if (row.contains("max_tokens") && row.at("max_tokens").is_number_integer() &&
+            row.at("max_tokens").get<int>() > 0)
+            limit = row.at("max_tokens").get<int>();
+    } catch (const Error&) {
+        context.cancellation.check();
+    }
+    std::lock_guard lock(limits_mutex_);
+    output_limits_[model] = limit;
+    return limit;
 }
 Session ApiProvider::start_session(std::string model, std::string resume,
                                    const CallContext& context, std::string) {
@@ -353,18 +399,21 @@ Session ApiProvider::start_session(std::string model, std::string resume,
 }
 ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext& input) {
     auto context = input;
-    context.cancellation.deadline =
-        std::min(context.cancellation.deadline, Clock::now() + options_.timeout);
+    if (options_.turn_timeout.count() > 0)
+        context.cancellation.deadline =
+            std::min(context.cancellation.deadline, Clock::now() + options_.turn_timeout);
     if (!messages.is_array() || messages.empty())
         throw Error("InvalidParameters", "Messages required");
     if (options_.protocol == ApiProtocol::OpenRouter) {
-        HttpChatOptions opts{options_.base_url, options_.api_key, options_.tools,
-                             options_.max_tool_rounds, options_.timeout};
+        HttpChatOptions opts{options_.base_url,        options_.api_key, options_.tools,
+                             options_.max_tool_rounds, options_.timeout, options_.max_output_tokens,
+                             options_.turn_timeout};
         return HttpChatProvider(std::move(opts)).send(session, messages, context);
     }
     Tools tools(options_.tools);
     auto protocol = options_.protocol;
-    for (std::size_t round = 0; round < options_.max_tool_rounds; ++round) {
+    for (std::size_t round = 0; options_.max_tool_rounds == 0 || round < options_.max_tool_rounds;
+         ++round) {
         context.cancellation.check();
         ChatResult result;
         Json calls = Json::array(), content = Json::array();
@@ -377,17 +426,20 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
             body["input"] = history;
             body["store"] = false;
             body["include"] = {"reasoning.encrypted_content"};
-            body["max_output_tokens"] = options_.max_output_tokens;
+            if (options_.max_output_tokens > 0)
+                body["max_output_tokens"] = options_.max_output_tokens;
         } else if (protocol == ApiProtocol::AnthropicMessages) {
             path = "/messages";
             body["messages"] = history;
-            body["max_tokens"] = options_.max_output_tokens;
+            // Required by Messages: the model's own maximum unless the host sets a value.
+            body["max_tokens"] = output_limit(session.model, context);
             if (!system.empty())
                 body["system"] = system;
         } else {
             path = "/api/chat";
             body["messages"] = history;
-            body["options"] = {{"num_predict", options_.max_output_tokens}};
+            if (options_.max_output_tokens > 0)
+                body["options"] = {{"num_predict", options_.max_output_tokens}};
         }
         if (!tools.descriptions.empty())
             body["tools"] = tools.definitions(protocol);
@@ -400,8 +452,8 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
             if (!data.is_object())
                 throw Error("ProtocolError", "Expected API event object");
             auto type = data.value("type", std::string());
-            if (type == "error" || type == "response.failed" || type == "response.incomplete" ||
-                data.contains("error"))
+            if (type == "error" || type == "response.failed" ||
+                (data.contains("error") && !data.at("error").is_null()))
                 throw Error("ProviderError", "API generation failed");
             if (terminal)
                 throw Error("ProtocolError", "API data after terminal result");
@@ -411,10 +463,13 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
                     text = data.at("delta").get<std::string>();
                 else if (type == "response.reasoning_summary_text.delta")
                     context.emit("ThinkingDelta", {{"text", data.at("delta")}});
-                else if (type == "response.completed") {
+                else if (type == "response.completed" || type == "response.incomplete") {
                     auto response = data.at("response");
-                    if (response.value("status", std::string()) != "completed")
+                    const auto status = response.value("status", std::string());
+                    if (status != "completed" && status != "incomplete")
                         throw Error("ProviderError", "OpenAI response did not complete");
+                    // A truncated answer is a result, like Messages max_tokens: keep its text.
+                    const bool incomplete = status == "incomplete";
                     content = response.at("output");
                     if (!content.is_array())
                         throw Error("ProtocolError", "Invalid Responses output");
@@ -428,13 +483,27 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
                                 else if (part.value("type", std::string()) == "refusal")
                                     append(result.text, part.at("refusal").get<std::string>());
                             }
-                        else if (kind == "function_call")
+                        else if (kind == "function_call" && !incomplete)
                             calls.push_back({{"id", item.at("call_id")},
                                              {"name", item.at("name")},
                                              {"arguments", item.at("arguments")}});
                     }
+                    if (incomplete) {
+                        // Never replay a truncated function call without its output.
+                        Json kept = Json::array();
+                        for (const auto& item : content)
+                            if (item.value("type", std::string()) != "function_call")
+                                kept.push_back(item);
+                        content = std::move(kept);
+                    }
                     result.usage = response.value("usage", Json::object());
-                    reason = calls.empty() ? "stop" : "tool_calls";
+                    std::string why = "length";
+                    if (auto details = response.value("incomplete_details", Json());
+                        details.is_object() &&
+                        details.value("reason", std::string("max_output_tokens")) !=
+                            "max_output_tokens")
+                        why = details.value("reason", std::string("incomplete"));
+                    reason = incomplete ? why : calls.empty() ? "stop" : "tool_calls";
                     terminal = true;
                 }
             } else if (protocol == ApiProtocol::AnthropicMessages) {
@@ -442,7 +511,7 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
                     result.usage = data.at("message").value("usage", Json::object());
                 else if (type == "content_block_start") {
                     int index = data.at("index").get<int>();
-                    if (index < 0 || index >= 64 || blocks.contains(index))
+                    if (index < 0 || index >= 65536 || blocks.contains(index))
                         throw Error("ProtocolError", "Invalid content block index");
                     blocks[index] = data.at("content_block");
                     if (blocks.at(index).value("type", std::string()) == "text")
@@ -479,8 +548,12 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
                         throw Error("ProtocolError", "Incomplete Anthropic message");
                     for (auto& [index, block] : blocks) {
                         if (block.value("type", std::string()) == "tool_use") {
+                            // max_tokens/refusal can cut a call: drop it rather than replaying
+                            // an unanswerable tool_use.
+                            if (reason != "tool_use")
+                                continue;
                             if (arguments.contains(index))
-                                block["input"] = parse_json(arguments.at(index));
+                                block["input"] = parse_json(arguments.at(index), frame_limit);
                             calls.push_back({{"id", block.at("id")},
                                              {"name", block.at("name")},
                                              {"arguments", block.at("input")}});
@@ -520,14 +593,18 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
         });
         if (!terminal)
             throw Error("UnexpectedEOF", "API stream ended before its final result");
-        if (calls.size() > 32)
-            throw Error("ProtocolError", "Too many API tool calls");
         if (!calls.empty() &&
             ((protocol == ApiProtocol::AnthropicMessages && reason != "tool_use") ||
              (protocol == ApiProtocol::OpenAIResponses && reason != "tool_calls")))
             throw Error("ProtocolError", "Invalid tool completion reason");
         if (protocol == ApiProtocol::AnthropicMessages && calls.empty() && reason == "tool_use")
             throw Error("ProtocolError", "Missing Anthropic tool calls");
+        std::set<std::string> ids;
+        for (const auto& call : calls) {
+            auto id = call.at("id").get<std::string>();
+            if (id.empty() || !ids.insert(id).second)
+                throw Error("ProtocolError", "Missing or duplicate API tool call ID");
+        }
         if (protocol == ApiProtocol::Ollama) {
             Json assistant = {{"role", "assistant"}, {"content", result.text}};
             if (!thinking.empty())
@@ -546,18 +623,24 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
             context.emit("TurnCompleted", {{"text", result.text}, {"finishReason", reason}});
             return result;
         }
-        std::set<std::string> ids;
-        for (const auto& call : calls) {
-            auto id = call.at("id").get<std::string>();
-            if (id.empty() || !ids.insert(id).second)
-                throw Error("ProtocolError", "Missing or duplicate API tool call ID");
-        }
-        for (const auto& call : calls) {
-            auto output = tools.execute(options_, call, context);
-            messages.push_back({{"role", "tool"},
-                                {"tool_call_id", call.at("id")},
-                                {"name", call.at("name")},
-                                {"content", output.dump()}});
+        std::size_t answered = 0;
+        try {
+            for (const auto& call : calls) {
+                auto output = tools.execute(options_, call, context);
+                messages.push_back({{"role", "tool"},
+                                    {"tool_call_id", call.at("id")},
+                                    {"name", call.at("name")},
+                                    {"content", output.dump()}});
+                ++answered;
+            }
+        } catch (const Error& error) {
+            // Every recorded call needs a result, or the next request is rejected (HTTP 400).
+            for (std::size_t n = answered; n < calls.size(); ++n)
+                messages.push_back({{"role", "tool"},
+                                    {"tool_call_id", calls[n].at("id")},
+                                    {"name", calls[n].at("name")},
+                                    {"content", interrupted_output(error.code)}});
+            throw;
         }
     }
     throw Error("ToolBudgetExceeded", "Maximum API tool rounds reached");

@@ -5,7 +5,7 @@
 #include <fstream>
 namespace cymcp {
 namespace {
-constexpr std::size_t limit = 8 * 1024 * 1024;
+constexpr std::size_t limit = provider_message_limit;
 const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 std::string base64(const std::string& bytes) {
     std::string out;
@@ -103,8 +103,8 @@ void validate_content(const Json& content) {
 }
 Json attachment_from_file(const std::filesystem::path& path, std::string type,
                           std::size_t max_bytes) {
-    if (!max_bytes || max_bytes > 4 * 1024 * 1024)
-        throw Error("InvalidOptions", "Attachment byte limit must be between 1 and 4 MiB");
+    if (!max_bytes || max_bytes > 128 * 1024 * 1024)
+        throw Error("InvalidOptions", "Attachment byte limit must be between 1 and 128 MiB");
     if (std::filesystem::is_symlink(std::filesystem::symlink_status(path)) ||
         !std::filesystem::is_regular_file(path))
         throw Error("UnsafePath", "Attachment must be a regular file");

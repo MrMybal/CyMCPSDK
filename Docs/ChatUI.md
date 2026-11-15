@@ -160,10 +160,12 @@ ne lance aucun script Markdown et ne télécharge aucune image distante.
 
 ## Limites et validation
 
-La file UI est bornée à 2 048 événements et 4 MiB ; les payloads natifs privés
-n'y sont pas copiés. Le compositeur accepte 64 KiB et au plus 16 pièces jointes.
-Les lectures utilisent les budgets existants du SDK et refusent les liens de
-fichiers. L'affichage est limité à 2 MiB par réponse, 8 MiB et 2 000 messages.
+La file UI fusionne les deltas successifs : une interface qui ne lit plus (fenêtre réduite)
+ne fait jamais échouer une génération ; les payloads natifs privés n'y sont pas copiés.
+Le compositeur s'agrandit avec le texte et accepte jusqu'à 256 pièces jointes.
+Les lectures refusent les liens de fichiers. L'affichage est une fenêtre : au-delà de 16 MiB
+une réponse est affichée tronquée, et au-delà de 64 MiB ou 4 000 messages les plus anciens
+quittent la vue. La conversation elle-même n'est jamais coupée ni annulée par ces valeurs.
 Une limite provoque une erreur explicite et une annulation, sans
 historique silencieusement tronqué ni nouvelle génération automatique.
 

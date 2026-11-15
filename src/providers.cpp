@@ -8,6 +8,21 @@ std::chrono::milliseconds duration(const Json& settings, const char* key, long l
         throw Error("InvalidOptions", "Provider timeout must be between 1 ms and 24 h");
     return std::chrono::milliseconds(value);
 }
+// Optional budgets: 0 (the default) means unlimited; negative values are rejected.
+std::size_t count(const Json& settings, const char* key) {
+    auto value = settings.value(key, 0LL);
+    if (value < 0)
+        throw Error("InvalidOptions", "Budget must be 0 (unlimited) or positive");
+    return static_cast<std::size_t>(value);
+}
+// Whole-turn deadlines are optional: 0 (the default) lets an agent work until it finishes or
+// the host cancels it.
+std::chrono::milliseconds optional_duration(const Json& settings, const char* key) {
+    auto value = settings.value(key, 0LL);
+    if (value < 0 || value > 365LL * 86400000)
+        throw Error("InvalidOptions", "Turn timeout must be 0 (none) or a positive duration");
+    return std::chrono::milliseconds(value);
+}
 ProcessOptions process_for(const ProviderConfig& config, const char* name) {
     return resolve_provider_process(builtin_discovery(name), config.process);
 }
@@ -17,12 +32,68 @@ void no_host_tools(const ProviderConfig& config) {
             "Unsupported",
             "This CLI uses native/MCP tools; configure its native tool connection explicitly");
 }
+// Conventional settings of each built-in profile. The factories keep identical fallbacks so a
+// typed caller without the registry gets the same behaviour. Policy-dependent values (Codex
+// sandbox, Devin permission flags) are derived from allow_all_actions and are not listed.
+Json builtin_settings(const std::string& id) {
+    const bool api = id == "openai" || id == "anthropic" || id == "openrouter" || id == "ollama";
+    const bool compatible = id == "openai-compatible" || id == "llama.cpp" || id == "lmstudio";
+    if (api || compatible) {
+        // Agent conventions: unlimited tool rounds and output (the model maximum), no turn
+        // deadline; timeout_ms only detects a silent connection.
+        Json settings = {{"timeout_ms", 600000},
+                         {"turn_timeout_ms", 0},
+                         {"max_tool_rounds", 0},
+                         {"max_output_tokens", 0}};
+        if (id == "openai")
+            settings["base_url"] = "https://api.openai.com/v1";
+        else if (id == "anthropic")
+            settings["base_url"] = "https://api.anthropic.com/v1";
+        else if (id == "openrouter")
+            settings["base_url"] = "https://openrouter.ai/api/v1";
+        else if (id == "ollama")
+            settings["base_url"] = "http://127.0.0.1:11434";
+        else if (id == "llama.cpp")
+            settings["base_url"] = "http://127.0.0.1:8080/v1";
+        else if (id == "lmstudio")
+            settings["base_url"] = "http://127.0.0.1:1234/v1";
+        return settings;
+    }
+    Json settings = {{"connect_timeout_ms", id == "codex" ? 30000 : 15000},
+                     {"turn_timeout_ms", 0},
+                     {"allow_all_actions", false}};
+    if (id == "codex") {
+        settings["approval_policy"] = "never";
+    } else if (id == "claude-code") {
+        settings["persistent"] = true;
+        settings["setting_sources"] = "user";
+        settings["allowed_tools"] = Json::array();
+        settings["mcp_servers"] = Json::object();
+    } else if (id == "antigravity" || id == "opencode-cli" || id == "command-code" ||
+               id == "codebuddy") {
+        settings["persistent"] = id == "antigravity";
+        settings["native_settings"] = Json::object();
+        if (id == "codebuddy")
+            settings["allowed_tools"] = Json::array();
+    } else {
+        // ACP profiles.
+        settings["mcp_servers"] = Json::array();
+        if (id == "devin")
+            settings["models_arguments"] = {"models", "list", "--format", "json"};
+        else if (id == "gemini" || id == "qwen-code" || id == "codebuddy-acp")
+            settings["acp_arguments"] = {"--acp"};
+        else if (id != "acp")
+            settings["acp_arguments"] = {"acp"};
+    }
+    return settings;
+}
 } // namespace
 ProviderRegistry::ProviderRegistry(bool builtins) {
     if (!builtins)
         return;
     auto add_builtin = [this](ProviderDescriptor descriptor, ProviderFactory factory) {
         descriptor.discovery = builtin_discovery(descriptor.id);
+        descriptor.default_settings = builtin_settings(descriptor.id);
         add(std::move(descriptor), std::move(factory));
     };
     add_builtin({"codex",
@@ -35,7 +106,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                     options.process = process_for(config, "codex");
                     options.connect_timeout =
                         duration(config.settings, "connect_timeout_ms", 30000);
-                    options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
+                    options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
                     bool allow = config.settings.value("allow_all_actions", false);
                     options.sandbox = config.settings.value(
                         "sandbox", std::string(allow ? "danger-full-access" : "read-only"));
@@ -57,7 +128,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                     options.process = process_for(config, "claude");
                     options.connect_timeout =
                         duration(config.settings, "connect_timeout_ms", 15000);
-                    options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
+                    options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
                     options.mcp_servers = config.settings.value("mcp_servers", Json::object());
                     options.allowed_tools =
                         config.settings.value("allowed_tools", std::vector<std::string>());
@@ -97,7 +168,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                                                       : buddy   ? "codebuddy"
                                                                 : "opencode");
                 options.connect_timeout = duration(config.settings, "connect_timeout_ms", 15000);
-                options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
+                options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
                 options.allow_all_actions = config.settings.value("allow_all_actions", false);
                 options.persistent = config.settings.value("persistent", agy);
                 options.native_settings = config.settings.value("native_settings", Json::object());
@@ -135,7 +206,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                                                                               : id.c_str());
                 options.process = process;
                 options.connect_timeout = duration(config.settings, "connect_timeout_ms", 15000);
-                options.turn_timeout = duration(config.settings, "turn_timeout_ms", 600000);
+                options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
                 bool allow = config.settings.value("allow_all_actions", false);
                 options.approvals = allow ? Policy::allow_all() : config.approvals;
                 options.mode = config.settings.value("mode", std::string());
@@ -199,11 +270,10 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                         options.base_url = config.settings.value("base_url", std::string());
                         options.api_key = config.api_key;
                         options.tools = config.tools;
-                        options.max_tool_rounds =
-                            config.settings.value("max_tool_rounds", std::size_t(8));
-                        options.max_output_tokens =
-                            config.settings.value("max_output_tokens", 4096);
-                        options.timeout = duration(config.settings, "timeout_ms", 120000);
+                        options.max_tool_rounds = count(config.settings, "max_tool_rounds");
+                        options.max_output_tokens = config.settings.value("max_output_tokens", 0);
+                        options.timeout = duration(config.settings, "timeout_ms", 600000);
+                        options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
                         return std::make_shared<ApiProvider>(std::move(options));
                     });
     }
@@ -218,13 +288,15 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                     [id](const ProviderConfig& config) {
                         HttpChatOptions options;
                         options.base_url = config.settings.value(
-                            "base_url", std::string(id == "lmstudio" ? "http://127.0.0.1:1234/v1"
-                                                                     : "http://127.0.0.1:9931/v1"));
+                            "base_url", std::string(id == "lmstudio"    ? "http://127.0.0.1:1234/v1"
+                                                    : id == "llama.cpp" ? "http://127.0.0.1:8080/v1"
+                                                                        : "http://127.0.0.1:9931/v1"));
                         options.api_key = config.api_key;
                         options.tools = config.tools;
-                        options.max_tool_rounds =
-                            config.settings.value("max_tool_rounds", std::size_t(8));
-                        options.timeout = duration(config.settings, "timeout_ms", 120000);
+                        options.max_tool_rounds = count(config.settings, "max_tool_rounds");
+                        options.max_output_tokens = config.settings.value("max_output_tokens", 0);
+                        options.timeout = duration(config.settings, "timeout_ms", 600000);
+                        options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
                         return std::make_shared<HttpChatProvider>(std::move(options));
                     });
     }
@@ -235,11 +307,31 @@ void ProviderRegistry::add(ProviderDescriptor descriptor, ProviderFactory factor
             std::string::npos ||
         descriptor.name.empty() || descriptor.transport.empty() || !factory)
         throw Error("InvalidOptions", "Provider requires a stable ID, name, transport and factory");
+    if (!descriptor.default_settings.is_object() || descriptor.default_settings.contains("api_key"))
+        throw Error("InvalidOptions", "Default settings must be a non-secret object");
     auto id = descriptor.id;
     std::lock_guard lock(mutex_);
     if (!entries_.emplace(id, std::make_pair(std::move(descriptor), std::move(factory))).second)
         throw Error("DuplicateProvider", "Provider ID is already registered");
 }
+namespace {
+// Non-secret conventions for pre-filling a host UI. Environment names are published, never
+// their values; "credential_env" names the variable that may hold the provider's API key.
+Json defaults(const ProviderDescriptor& d) {
+    const auto& h = d.discovery;
+    auto settings = d.default_settings;
+    auto endpoint = settings.value("base_url", h.default_endpoint);
+    settings.erase("base_url");
+    return {{"settings", std::move(settings)},
+            {"base_url", endpoint},
+            {"endpoint_env", h.endpoint_env},
+            {"credential_env", h.api_key_env},
+            {"executables", h.executables},
+            {"npm_packages", h.npm_packages},
+            {"login_arguments", h.login_arguments},
+            {"local_service", h.local_service}};
+}
+} // namespace
 Json ProviderRegistry::describe() const {
     std::lock_guard lock(mutex_);
     Json rows = Json::array();
@@ -260,7 +352,8 @@ Json ProviderRegistry::describe() const {
                           {"image_input", c.image_input},
                           {"audio_input", c.audio_input},
                           {"file_input", c.file_input},
-                          {"persistent_process", c.persistent_process}}}});
+                          {"persistent_process", c.persistent_process}}},
+                        {"defaults", defaults(d)}});
     }
     return rows;
 }
@@ -269,16 +362,21 @@ std::shared_ptr<Provider> ProviderRegistry::create(const std::string& id,
     if (!config.settings.is_object() || config.settings.contains("api_key"))
         throw Error("InvalidOptions", "Use non-secret settings and the separate API key field");
     ProviderFactory factory;
+    ProviderConfig effective = config;
     {
         std::lock_guard lock(mutex_);
         auto found = entries_.find(id);
         if (found == entries_.end())
             throw Error("UnknownProvider", "Provider ID is not registered");
         factory = found->second.second;
+        // Conventional defaults first; every host-supplied key wins, including explicit values.
+        effective.settings = found->second.first.default_settings;
     }
+    for (const auto& [key, value] : config.settings.items())
+        effective.settings[key] = value;
     // Factories may call the registry; never execute extension code under its lock.
     try {
-        auto provider = factory(config);
+        auto provider = factory(effective);
         if (!provider)
             throw Error("InvalidProvider", "Provider factory returned null");
         provider->identity_ = id;

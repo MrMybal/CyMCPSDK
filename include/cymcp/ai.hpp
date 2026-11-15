@@ -29,6 +29,11 @@ class Provider {
     virtual bool uses_host_history() const noexcept {
         return false;
     }
+    // True for a loopback model service (Ollama, LM Studio, llama.cpp...). Only these
+    // may have a model chosen automatically: a cloud catalogue order implies no price.
+    virtual bool local_service() const noexcept {
+        return false;
+    }
     virtual ProviderCapabilities capabilities() const = 0;
     virtual void connect(const CallContext& = {}) = 0;
     virtual Json list_models(const CallContext& = {}) {
@@ -40,11 +45,15 @@ class Provider {
     virtual ChatResult send(Session&, Json& messages, const CallContext&) = 0;
     virtual void disconnect() noexcept = 0;
 };
+// Agent defaults: no tool-round, output or whole-turn budget. Cancellation stops a turn; the
+// idle timeout only detects a stalled connection and never cuts a stream that produces data.
 struct HttpChatOptions {
     std::string base_url = "http://127.0.0.1:9931/v1", api_key;
     std::shared_ptr<const Registry> tools;
-    std::size_t max_tool_rounds = 8;
-    std::chrono::milliseconds timeout{120000};
+    std::size_t max_tool_rounds = 0;            // 0 = unlimited
+    std::chrono::milliseconds timeout{600000};  // idle timeout of each HTTP request
+    int max_output_tokens = 0;                  // 0 = server/model default (not sent)
+    std::chrono::milliseconds turn_timeout{0};  // optional whole-turn deadline; 0 = none
 };
 class HttpChatProvider final : public Provider {
     HttpChatOptions options_;
@@ -54,6 +63,7 @@ class HttpChatProvider final : public Provider {
     bool uses_host_history() const noexcept override {
         return true;
     }
+    bool local_service() const noexcept override;
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
     Json list_models(const CallContext& = {}) override;
@@ -66,7 +76,7 @@ class HttpChatProvider final : public Provider {
 using ProviderRequestHandler =
     std::function<Json(const std::string&, const Json&, const CallContext&)>;
 struct CodexOptions {
-    std::chrono::milliseconds connect_timeout{30000}, turn_timeout{600000};
+    std::chrono::milliseconds connect_timeout{30000}, turn_timeout{0}; // 0 = no turn deadline
     ProcessOptions process;
     std::string approval_policy = "never", sandbox = "read-only";
     std::shared_ptr<const Registry> tools;
@@ -89,7 +99,7 @@ class CodexProvider final : public Provider {
     void disconnect() noexcept override;
 };
 struct ClaudeOptions {
-    std::chrono::milliseconds connect_timeout{15000}, turn_timeout{600000};
+    std::chrono::milliseconds connect_timeout{15000}, turn_timeout{0}; // 0 = no turn deadline
     ProcessOptions process;
     Json mcp_servers = Json::object();
     std::vector<std::string> allowed_tools; // empty means no built-in tools
@@ -117,18 +127,23 @@ struct ApiOptions {
     ApiProtocol protocol = ApiProtocol::OpenAIResponses;
     std::string base_url, api_key; // empty URL selects the protocol's official endpoint
     std::shared_ptr<const Registry> tools;
-    std::size_t max_tool_rounds = 8;
-    int max_output_tokens = 4096;
-    std::chrono::milliseconds timeout{120000};
+    std::size_t max_tool_rounds = 0;           // 0 = unlimited
+    int max_output_tokens = 0;                 // 0 = the model's maximum output
+    std::chrono::milliseconds timeout{600000}; // idle timeout of each HTTP request
+    std::chrono::milliseconds turn_timeout{0}; // optional whole-turn deadline; 0 = none
 };
 class ApiProvider final : public Provider {
     ApiOptions options_;
+    mutable std::mutex limits_mutex_;
+    std::map<std::string, int> output_limits_; // per-model maximum output from the catalogue
+    int output_limit(const std::string& model, const CallContext&);
 
   public:
     explicit ApiProvider(ApiOptions);
     bool uses_host_history() const noexcept override {
         return true;
     }
+    bool local_service() const noexcept override;
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
     Json list_models(const CallContext& = {}) override;
@@ -141,7 +156,7 @@ enum class AgentCliProtocol { OpenCode, Antigravity, CommandCode, CodeBuddy };
 struct AgentCliOptions {
     AgentCliProtocol protocol = AgentCliProtocol::OpenCode;
     ProcessOptions process;
-    std::chrono::milliseconds connect_timeout{15000}, turn_timeout{600000};
+    std::chrono::milliseconds connect_timeout{15000}, turn_timeout{0}; // 0 = no turn deadline
     bool allow_all_actions = false;
     bool persistent = false; // supported by Antigravity stream input
     // OpenCode v1 config, or Antigravity/CodeBuddy --settings; policy flags take precedence.
@@ -156,6 +171,7 @@ class AgentCliProvider final : public Provider {
     Cancellation active_;
     bool connected_ = false;
     std::unique_ptr<Process> process_;
+    std::unique_ptr<PrivateFile> settings_file_; // --settings without exposing it in argv
     std::string active_session_;
     CallContext begin(const CallContext&, std::chrono::milliseconds);
 
@@ -173,7 +189,7 @@ class AgentCliProvider final : public Provider {
 struct AcpOptions {
     // Complete command including the agent's ACP subcommand/flag; no shell is used.
     ProcessOptions process;
-    std::chrono::milliseconds connect_timeout{15000}, turn_timeout{600000};
+    std::chrono::milliseconds connect_timeout{15000}, turn_timeout{0}; // 0 = no turn deadline
     Json mcp_servers = Json::array(); // ACP stdio/HTTP server objects, not Claude's keyed map
     Policy approvals; // denies agent permission requests until explicitly configured
     std::string mode; // optional exact native mode/config value
@@ -202,12 +218,20 @@ struct ProviderDiscoveryHints {
     std::vector<std::string> executables, npm_packages;
     std::string api_key_env, endpoint_env, default_endpoint;
     bool local_service = false;
+    // Executables of a local service: found while its endpoint is silent → "not-running".
+    std::vector<std::string> service_executables;
+    // Arguments of the CLI's own interactive sign-in (empty: run the CLI itself, which signs in
+    // on first use). The SDK never runs it: a host launches it in a visible console on request.
+    std::vector<std::string> login_arguments;
 };
 struct ProviderDescriptor {
     std::string id, name, transport, authentication;
     // Available features; instance capabilities reflect the supplied configuration.
     ProviderCapabilities capabilities;
     ProviderDiscoveryHints discovery;
+    // Conventional non-secret settings. ProviderRegistry::create() merges them under the
+    // host's settings, and describe() publishes them so a UI can pre-fill its fields.
+    Json default_settings = Json::object();
 };
 struct ProviderConfig {
     ProcessOptions process;

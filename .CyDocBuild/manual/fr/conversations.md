@@ -14,7 +14,7 @@ sourceRevision: 1
 ressources texte/PDF sont acceptés selon le transport et le modèle. Le panneau affiche les noms ;
 un aperçu multimédia enrichi nécessite les services de ressources fournis par l'application hôte.
 
-La saisie accepte jusqu'à 16 fichiers et 64 Kio de texte. Des budgets de fichiers/contenus et la
+La saisie s'agrandit avec le texte et accepte jusqu'à 256 fichiers. Des budgets de fichiers/contenus et la
 validation MIME/base64 s'appliquent aussi. Un contenu incompatible est refusé explicitement.
 Un modèle qui reçoit une image ne prend pas forcément en charge l'audio ou les documents.
 

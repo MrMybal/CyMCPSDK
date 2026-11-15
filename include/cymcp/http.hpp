@@ -5,7 +5,11 @@ struct HttpRequest {
     std::string method = "GET", url, body;
     std::map<std::string, std::string> headers;
     std::size_t max_response_bytes = 16 * 1024 * 1024;
+    // Total deadline; 0 means none (cancellation still applies).
     std::chrono::milliseconds timeout{120000};
+    // Longest silence while sending or receiving; 0 uses the total deadline. A stream that
+    // keeps producing bytes is never cut by this value.
+    std::chrono::milliseconds idle_timeout{0};
 };
 struct HttpResponse {
     int status = 0;

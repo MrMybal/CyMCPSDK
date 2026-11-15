@@ -33,9 +33,46 @@ Le profil générique `acp` nécessite une recette ou un exécutable explicite.
 
 Le CLI `cymcp_chat discover` affiche les états sans exporter les clés ou les chemins privés.
 Le contrôleur accepte `ChatConnection.automatic_model = true` : les CLI gardent leur
-modèle natif, les API sélectionnent un modèle texte du catalogue réel et la liste retourne
-dans `ChatViewState.models`. Sans interface, `Conversation::connect({}, context, true, &models)`
-fournit le même choix automatique. Une erreur ne rejoue pas la génération et ne change pas de fournisseur.
+modèle natif, les services locaux (`Provider::local_service()`, adresse loopback) sélectionnent
+un modèle texte de leur catalogue réel, et la liste retourne dans `ChatViewState.models`.
+Une API distante n'ouvre jamais de session sur un modèle choisi au hasard : sans ID explicite,
+elle retourne son catalogue et l'erreur `UnknownModel`, pour un choix explicite.
+Sans interface, `Conversation::connect({}, context, true, &models)` fournit le même comportement.
+Le catalogue est facultatif : son échec n'empêche pas une session valide.
+Une erreur ne rejoue pas la génération et ne change pas de fournisseur.
+
+`OLLAMA_HOST` suit la convention d'Ollama : schéma `http`, port `11434` et adresse
+`0.0.0.0` jointe par loopback. `ANTHROPIC_BASE_URL` suit la convention des SDK Anthropic,
+sans le segment `/v1`, ajouté par le SDK.
+
+## Paramètres par défaut
+
+Les défauts sont pensés pour un usage agent dans une application : aucun plafond arbitraire.
+`max_output_tokens = 0` envoie le maximum du modèle (Messages : `max_tokens` lu dans le
+catalogue `/v1/models`, 64 000 si l'API ne le publie pas ; Responses, Chat Completions et
+Ollama : paramètre omis). `max_tool_rounds = 0` laisse l'agent enchaîner les outils jusqu'à
+sa réponse. `turn_timeout_ms = 0` ne borne pas la durée d'un tour, CLI comme API ; seul
+`cancel()` l'interrompt. `timeout_ms` (API) est un délai d'**inactivité** : un flux qui produit
+des octets n'est jamais coupé. Une réponse tronquée par le modèle (`max_tokens`,
+`response.incomplete`, `length`) est un résultat avec sa `finish_reason`, sans appel d'outil
+partiel rejoué. Les tailles restantes sont des gardes mémoire (256 Mio par message de
+fournisseur ou d'historique), pas des budgets de contenu. Une file de sortie de processus pleine
+ralentit l'enfant au lieu d'échouer.
+
+Un appel d'outil interrompu (Stop, délai) reçoit un résultat d'erreur `Cancelled`/`Timeout` :
+l'historique reste valide et le tour suivant est accepté par le fournisseur.
+Les serveurs MCP et `settings.native_settings` passent par des fichiers temporaires privés
+(lecture propriétaire seulement), jamais par la ligne de commande visible dans `ps` ;
+la consigne système de Claude Code passe par `--append-system-prompt-file`.
+
+Chaque profil intégré publie ses conventions dans `describe()[i].defaults` :
+`settings` (délais, permissions, arguments ACP, limites d'outils), `base_url`,
+`endpoint_env`, `credential_env` (le **nom** de la variable de clé, jamais sa valeur),
+`executables`, `npm_packages` et `local_service`. `ProviderRegistry::create()` applique
+`ProviderDescriptor.default_settings` sous les réglages de l'hôte : toute clé fournie
+par l'hôte l'emporte. Chat Lab préremplit ses champs avec ces valeurs, puis avec
+l'installation détectée. Adresses locales par défaut : Ollama `http://127.0.0.1:11434`,
+LM Studio `http://127.0.0.1:1234/v1`, llama.cpp `http://127.0.0.1:8080/v1` (port de `llama-server`).
 
 Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et 22 profils intégrés.
 Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux SDK Python des fournisseurs,
@@ -95,10 +132,13 @@ Json catalogue = providers.describe();
 ProviderConfig config;
 config.api_key = key_from_host_vault; // mémoire, hors configuration sérialisable
 config.tools = app_operations;       // shared_ptr<const Registry>
+// Défauts agent : aucun budget de tours d'outils ni de sortie, aucun délai de tour.
+// timeout_ms détecte seulement une connexion silencieuse (10 min par défaut).
 config.settings = {
-    {"timeout_ms", 120000},
-    {"max_output_tokens", 4096},
-    {"max_tool_rounds", 8}
+    {"timeout_ms", 600000},      // inactivité d'une requête HTTP
+    {"turn_timeout_ms", 0},      // 0 = pas de délai pour le tour complet
+    {"max_output_tokens", 0},    // 0 = maximum du modèle
+    {"max_tool_rounds", 0}       // 0 = illimité ; Stop/cancel() arrête le tour
 };
 auto provider = providers.create("anthropic", config);
 Conversation chat(provider, exact_model_id, "Assist the user of this application.");
@@ -132,7 +172,7 @@ config.process.executable = absolute_native_cli_path;
 config.process.cwd = project_directory;
 config.settings = {
     {"connect_timeout_ms", 15000},
-    {"turn_timeout_ms", 600000},
+    {"turn_timeout_ms", 0},      // 0 = l'agent travaille jusqu'à la fin ou l'annulation
     {"allow_all_actions", false}
 };
 auto provider = providers.create("antigravity", config);

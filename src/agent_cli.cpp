@@ -37,7 +37,7 @@ AgentCliProvider::AgentCliProvider(AgentCliOptions options)
                                                                    : "codebuddy"),
       options_(std::move(options)) {
     if (!options_.native_settings.is_object() || options_.connect_timeout.count() <= 0 ||
-        options_.turn_timeout.count() <= 0 || options_.connect_timeout > std::chrono::hours(24) ||
+        options_.turn_timeout.count() < 0 || options_.connect_timeout > std::chrono::hours(24) ||
         options_.turn_timeout > std::chrono::hours(24))
         throw Error("InvalidOptions", "Invalid CLI options");
     if (options_.protocol != AgentCliProtocol::CodeBuddy &&
@@ -69,7 +69,9 @@ ProviderCapabilities AgentCliProvider::capabilities() const {
 CallContext AgentCliProvider::begin(const CallContext& input, std::chrono::milliseconds timeout) {
     auto context = input;
     context.cancellation = input.cancellation.child();
-    context.cancellation.deadline = std::min(context.cancellation.deadline, Clock::now() + timeout);
+    if (timeout.count() > 0) // 0: no deadline, only cancellation ends the operation
+        context.cancellation.deadline =
+            std::min(context.cancellation.deadline, Clock::now() + timeout);
     std::lock_guard lock(cancellation_mutex_);
     active_ = context.cancellation;
     return context;
@@ -102,7 +104,7 @@ Json AgentCliProvider::list_models(const CallContext& input) {
         options_.protocol == AgentCliProtocol::CommandCode) {
         auto first = output.find_first_not_of(" \r\n\t");
         if (first != std::string::npos && (output[first] == '[' || output[first] == '{')) {
-            auto data = parse_json(output);
+            auto data = parse_json(output, provider_message_limit);
             rows = data.is_array() ? data : data.value("models", data.value("data", Json::array()));
             if (!rows.is_array())
                 throw Error("ProtocolError", "Invalid CLI catalogue");
@@ -165,6 +167,12 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
     }
     auto config = options_.process;
     auto& args = config.arguments;
+    std::unique_ptr<PrivateFile> settings_file; // kept for the launched process only
+    const auto settings_path = [&] {
+        settings_file =
+            std::make_unique<PrivateFile>("settings.json", options_.native_settings.dump());
+        return path_utf8(settings_file->path());
+    };
     bool agy = options_.protocol == AgentCliProtocol::Antigravity;
     bool command = options_.protocol == AgentCliProtocol::CommandCode;
     bool buddy = options_.protocol == AgentCliProtocol::CodeBuddy;
@@ -175,8 +183,8 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
             args.push_back("--dangerously-skip-permissions");
         else
             args.insert(args.end(), {"--mode", "plan", "--sandbox"});
-        if (!options_.native_settings.empty())
-            args.insert(args.end(), {"--settings", options_.native_settings.dump()});
+        if (!options_.native_settings.empty() && !process_)
+            args.insert(args.end(), {"--settings", settings_path()});
         if (!session.id.empty())
             args.insert(args.end(), {"--conversation", session.id});
     } else if (command) {
@@ -196,8 +204,8 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
             args.insert(
                 args.end(),
                 {"--mcp-config", path_utf8(std::filesystem::absolute(options_.mcp_config_file))});
-        if (!options_.native_settings.empty())
-            args.insert(args.end(), {"--settings", options_.native_settings.dump()});
+        if (!options_.native_settings.empty() && !process_)
+            args.insert(args.end(), {"--settings", settings_path()});
         if (options_.allow_all_actions)
             args.insert(args.end(), {"--permission-mode", "bypassPermissions",
                                      "--dangerously-skip-permissions"});
@@ -223,13 +231,22 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
     }
     if (!session.model.empty())
         args.insert(args.end(), {"--model", session.model});
-    if (!agy && !command && !buddy)
+    if (!agy && !command && !buddy) {
+#ifdef _WIN32
+        // OpenCode 1.x only accepts its message as an argument.
+        if (prompt.size() > 30000)
+            throw Error("MessageTooLarge",
+                        "OpenCode CLI 1.x takes the message on the Windows command line (32 767 "
+                        "characters); use the 'opencode' ACP profile for long messages");
+#endif
         args.insert(args.end(), {"--", prompt});
+    }
     if (process_ && active_session_ != session.id)
         throw Error("SessionInvalid", "Persistent CLI session mismatch");
     bool launched = !process_;
     if (!process_) {
         process_ = std::make_unique<Process>(config);
+        settings_file_ = std::move(settings_file);
         active_session_ = session.id;
     }
     auto& process = *process_;
@@ -268,7 +285,7 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
     while (process.next(line, context.cancellation)) {
         if (line.stderr_stream || line.text.empty())
             continue;
-        auto data = parse_json(line.text);
+        auto data = parse_json(line.text, provider_message_limit);
         if (!data.is_object())
             throw Error("ProtocolError", "Expected CLI event object");
         auto kind = data.value(agy ? "event" : "type", std::string());
@@ -331,7 +348,7 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
                 auto& previous = snapshots[key];
                 snapshot_bytes -= previous.size();
                 snapshot_bytes += snapshot.size();
-                if (snapshot_bytes > 8 * 1024 * 1024 || snapshots.size() > 256)
+                if (snapshot_bytes > provider_message_limit || snapshots.size() > 65536)
                     throw Error("ResponseTooLarge", "CLI snapshots exceed limit");
                 if (snapshot.rfind(previous, 0) == 0)
                     text = snapshot.substr(previous.size());
@@ -381,7 +398,7 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
             context.emit("ProviderEvent", data);
         if (!text.empty()) {
             result.text += text;
-            if (result.text.size() > 8 * 1024 * 1024)
+            if (result.text.size() > provider_message_limit)
                 throw Error("ResponseTooLarge", "CLI answer exceeds limit");
             context.emit("TextDelta", {{"text", text}});
         }

@@ -5,6 +5,9 @@ namespace cymcp {
 struct ClaudeProvider::Impl {
     ClaudeOptions options;
     std::unique_ptr<Process> process;
+    // MCP servers often carry tokens in env/headers; system prompts can exceed the Windows
+    // 32 767-character command line. Both are passed as owner-only files for the process life.
+    std::unique_ptr<PrivateFile> mcp_file, system_file;
     mutable std::mutex mutex;
     std::mutex cancellation_mutex;
     Cancellation active;
@@ -13,14 +16,17 @@ struct ClaudeProvider::Impl {
     CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
         auto context = input;
         context.cancellation = input.cancellation.child();
-        context.cancellation.deadline =
-            std::min(context.cancellation.deadline, Clock::now() + timeout);
+        if (timeout.count() > 0) // 0: no deadline, only cancellation ends the operation
+            context.cancellation.deadline =
+                std::min(context.cancellation.deadline, Clock::now() + timeout);
         std::lock_guard lock(cancellation_mutex);
         active = context.cancellation;
         return context;
     }
     void reset() noexcept {
         process.reset();
+        mcp_file.reset();
+        system_file.reset();
         session_id.clear();
     }
 };
@@ -28,7 +34,7 @@ ClaudeProvider::ClaudeProvider(ClaudeOptions options)
     : Provider("claude-code"), impl_(std::make_unique<Impl>(std::move(options))) {
     if (!impl_->options.mcp_servers.is_object() || impl_->options.connect_timeout.count() <= 0 ||
         impl_->options.connect_timeout > std::chrono::hours(24) ||
-        impl_->options.turn_timeout.count() <= 0 ||
+        impl_->options.turn_timeout.count() < 0 ||
         impl_->options.turn_timeout > std::chrono::hours(24))
         throw Error("InvalidOptions", "Invalid Claude options");
     const auto& sources = impl_->options.setting_sources;
@@ -102,11 +108,12 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
     try {
         if (!p.process) {
             auto config = p.options.process;
+            p.mcp_file = std::make_unique<PrivateFile>(
+                "mcp.json", Json({{"mcpServers", p.options.mcp_servers}}).dump());
             config.arguments.insert(config.arguments.end(),
                                     {"-p", "--output-format", "stream-json", "--verbose",
                                      "--include-partial-messages", "--strict-mcp-config",
-                                     "--mcp-config",
-                                     Json({{"mcpServers", p.options.mcp_servers}}).dump(),
+                                     "--mcp-config", path_utf8(p.mcp_file->path()),
                                      "--setting-sources", p.options.setting_sources});
             if (p.options.persistent)
                 config.arguments.insert(config.arguments.end(), {"--input-format", "stream-json"});
@@ -131,8 +138,12 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
             for (const auto& message : messages)
                 if (message.value("role", std::string()) == "system")
                     system += detail::content_text(message.at("content")) + "\n";
-            if (!system.empty())
-                config.arguments.insert(config.arguments.end(), {"--append-system-prompt", system});
+            if (!system.empty()) {
+                p.system_file = std::make_unique<PrivateFile>("system-prompt.md", system);
+                config.arguments.insert(config.arguments.end(),
+                                        {"--append-system-prompt-file",
+                                         path_utf8(p.system_file->path())});
+            }
             p.process = std::make_unique<Process>(config);
             p.session_id = session.id;
             context.emit(
@@ -160,7 +171,7 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
                 continue;
             Json value;
             try {
-                value = parse_json(line.text);
+                value = parse_json(line.text, provider_message_limit);
             } catch (...) {
                 throw Error("MalformedJSON", "Invalid Claude stream JSON");
             }

@@ -44,7 +44,7 @@ void ConversationStore::save(const std::string& id, const Conversation& conversa
     auto target = file_for(directory_, id);
     auto snapshot = conversation.checkpoint();
     auto bytes = snapshot.dump();
-    if (bytes.size() > 16 * 1024 * 1024)
+    if (bytes.size() > provider_message_limit)
         throw Error("ContextTooLarge", "Checkpoint exceeds limit");
     auto temporary = directory_ / ("pending-" + random_token(16));
     struct Cleanup {
@@ -77,19 +77,19 @@ Json ConversationStore::load(const std::string& id) const {
     auto path = file_for(directory_, id);
     if (!std::filesystem::is_regular_file(path))
         throw Error("FileError", "Conversation checkpoint not found");
-    if (std::filesystem::file_size(path) > 16 * 1024 * 1024)
+    if (std::filesystem::file_size(path) > provider_message_limit)
         throw Error("ContextTooLarge", "Checkpoint exceeds limit");
     std::ifstream input(path, std::ios::binary);
     std::string data;
     char buffer[65536];
     while (input.read(buffer, sizeof(buffer)) || input.gcount()) {
         data.append(buffer, static_cast<std::size_t>(input.gcount()));
-        if (data.size() > 16 * 1024 * 1024)
+        if (data.size() > provider_message_limit)
             throw Error("ContextTooLarge", "Checkpoint exceeds limit");
     }
     if (!input.eof())
         throw Error("FileError", "Cannot read conversation checkpoint");
-    return parse_json(data, 16 * 1024 * 1024);
+    return parse_json(data, provider_message_limit);
 }
 void ConversationStore::erase(const std::string& id) const {
     std::filesystem::remove(file_for(directory_, id));

@@ -23,7 +23,7 @@ struct LocalHttpServer::Impl {
         server.new_task_queue = [workers] {
             return new httplib::ThreadPool(workers, workers, 128, 30);
         };
-        server.set_payload_max_length(1024 * 1024);
+        server.set_payload_max_length(provider_message_limit);
         server.set_read_timeout(10, 0);
         server.set_write_timeout(10, 0);
         server.set_keep_alive_max_count(100);
@@ -48,7 +48,7 @@ struct LocalHttpServer::Impl {
                 return;
             }
             try {
-                auto value = parse_json(req.body);
+                auto value = parse_json(req.body, provider_message_limit);
                 CallContext context;
                 context.principal = "authenticated-local";
                 context.cancellation = shutdown.child();

@@ -6,7 +6,8 @@ struct ProcessOptions {
     std::vector<std::string> arguments;
     std::filesystem::path cwd;
     std::map<std::string, std::string> environment;
-    std::size_t max_line_bytes = 1024 * 1024, max_queue_bytes = 4 * 1024 * 1024;
+    // Memory guards only. A full queue applies backpressure to the child; it never fails a turn.
+    std::size_t max_line_bytes = 256 * 1024 * 1024, max_queue_bytes = 64 * 1024 * 1024;
 };
 struct ProcessLine {
     bool stderr_stream = false;
@@ -30,4 +31,19 @@ class Process {
     void terminate() noexcept;
 };
 std::filesystem::path find_executable(const std::string& name);
+// A file in a fresh owner-only temporary directory, removed with this object. Used to pass
+// configuration that may contain credentials (MCP headers, settings) without exposing it in
+// the process command line, and to pass texts longer than the OS command-line limit.
+class PrivateFile {
+    std::filesystem::path directory_, path_;
+
+  public:
+    PrivateFile(const std::string& name, const std::string& content);
+    ~PrivateFile();
+    PrivateFile(const PrivateFile&) = delete;
+    PrivateFile& operator=(const PrivateFile&) = delete;
+    const std::filesystem::path& path() const noexcept {
+        return path_;
+    }
+};
 } // namespace cymcp

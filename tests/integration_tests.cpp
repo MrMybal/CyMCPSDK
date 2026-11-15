@@ -70,10 +70,11 @@ int main(int argc, char** argv) {
             Process process(options);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             ProcessLine line;
-            expect_error("OutputOverflow", [&] {
-                while (process.next(line)) {
-                };
-            });
+            std::size_t lines = 0;
+            while (process.next(line))
+                ++lines;
+            check(lines == 1024 * 1024,
+                  "A full output queue applies backpressure instead of failing the turn");
         }
         std::atomic<int> invocations = 0;
         operations->add(

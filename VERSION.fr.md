@@ -12,6 +12,19 @@
   La détection n'envoie aucun message, n'installe rien et ne lit pas les fichiers privés d'identifiants.
 - La détection fait partie du SDK IA ; l'hôte peut ajouter ses recettes et emplacements.
   Les paramètres manuels restent disponibles.
+- Défauts pensés pour les agents, sans limites arbitraires : sortie au maximum du modèle,
+  tours d'outils illimités, aucun délai de tour (CLI et API) ; `timeout_ms` détecte seulement
+  une connexion silencieuse. Les tailles restantes sont des gardes mémoire de 256 Mio.
+- Chaque profil publie ses paramètres conventionnels dans `describe()` (`defaults`) ;
+  Chat Lab les préremplit en mode manuel avec l'installation détectée.
+- Détection : Codex npm lancé par son binaire natif, sondages en parallèle, service local
+  installé mais arrêté signalé, `OLLAMA_HOST` et `ANTHROPIC_BASE_URL` normalisés,
+  llama.cpp sur le port 8080. Le modèle automatique est réservé aux services locaux.
+- Corrections : appel d'outil interrompu complété dans l'historique ; une interface réduite ne
+  fait plus échouer un tour ; ACP réinitialisé après toute erreur en cours de tour ; état
+  « connecté » exact après un échec de restauration ; repli MCP HTTP vers le protocole legacy ;
+  réponse tronquée OpenAI conservée ; secrets MCP/réglages hors de la ligne de commande ;
+  message trop long pour la ligne de commande Windows signalé explicitement.
 
 ## 0.5.2
 

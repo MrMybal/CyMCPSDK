@@ -14,7 +14,7 @@ revision: 1
 audio and text/PDF resources, depending on the transport and model. The panel lists attachment names;
 rich media preview requires resource services supplied by the host application.
 
-The composer accepts up to 16 files and 64 KiB of message text. File/content budgets and MIME/base64
+The composer grows with the text and accepts up to 256 files. File/content budgets and MIME/base64
 validation also apply. Unsupported content is rejected explicitly. A model receiving an image
 does not imply support for audio or documents.
 

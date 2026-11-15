@@ -51,6 +51,9 @@ For example, the CLI and GUI can load this non-secret configuration with `--conf
 ```
 
 In automatic mode, choose a returned model in the dropdown or keep the provider default.
+Only local services get a model automatically; a remote API shows its catalogue and waits for
+an explicit choice. In manual mode, selecting a provider pre-fills its conventional settings
+(endpoint, key variable, timeouts) and the detected installation.
 Manual mode also accepts an exact model ID. Do not put a real key in a JSON file.
 Use `settings.base_url` for an endpoint override. The Ollama profile expects its native
 API base, whereas compatible servers commonly use a base ending in `/v1`.

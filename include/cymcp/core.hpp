@@ -19,6 +19,10 @@ namespace cymcp {
 using Json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 Json parse_json(const std::string&, std::size_t max_bytes = 1024 * 1024, int max_depth = 64);
+// Bound for one JSON message received from a trusted provider (child process, model API).
+// A memory guard against a runaway stream, not a content budget: agent turns carry large
+// tool outputs, diffs and file contents.
+inline constexpr std::size_t provider_message_limit = 256 * 1024 * 1024;
 std::string path_utf8(const std::filesystem::path&);
 inline constexpr const char* version = "0.5.3";
 class Error : public std::runtime_error {
