@@ -24,7 +24,7 @@ Json parse_json(const std::string&, std::size_t max_bytes = 1024 * 1024, int max
 // tool outputs, diffs and file contents.
 inline constexpr std::size_t provider_message_limit = 256 * 1024 * 1024;
 std::string path_utf8(const std::filesystem::path&);
-inline constexpr const char* version = "0.5.3";
+inline constexpr const char* version = "0.5.4";
 class Error : public std::runtime_error {
   public:
     std::string code;

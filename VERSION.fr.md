@@ -2,16 +2,8 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
-## 0.5.3 — En développement
+## 0.5.4 — En développement
 
-- Chat Lab démarre en mode automatique : détection en arrière-plan des CLI natifs,
-  installations npm prises en charge, clés API d'environnement et services de modèles locaux démarrés.
-- Les connexions disponibles s'ouvrent sans saisir de chemin, d'arguments ni d'identifiant de modèle.
-  Les fournisseurs natifs gardent leurs réglages ; les modèles texte API viennent du catalogue réel.
-- Les installations, clés, adresses et modèles manquants ont des états de configuration distincts.
-  La détection n'envoie aucun message, n'installe rien et ne lit pas les fichiers privés d'identifiants.
-- La détection fait partie du SDK IA ; l'hôte peut ajouter ses recettes et emplacements.
-  Les paramètres manuels restent disponibles.
 - Défauts pensés pour les agents, sans limites arbitraires : sortie au maximum du modèle,
   tours d'outils illimités, aucun délai de tour (CLI et API) ; `timeout_ms` détecte seulement
   une connexion silencieuse. Les tailles restantes sont des gardes mémoire de 256 Mio.
@@ -25,6 +17,18 @@
   « connecté » exact après un échec de restauration ; repli MCP HTTP vers le protocole legacy ;
   réponse tronquée OpenAI conservée ; secrets MCP/réglages hors de la ligne de commande ;
   message trop long pour la ligne de commande Windows signalé explicitement.
+- Chat Lab propose **Se connecter** pour ouvrir le parcours de connexion natif du fournisseur dans une console.
+
+## 0.5.3
+
+- Chat Lab démarre en mode automatique : détection en arrière-plan des CLI natifs,
+  installations npm prises en charge, clés API d'environnement et services de modèles locaux démarrés.
+- Les connexions disponibles s'ouvrent sans saisir de chemin, d'arguments ni d'identifiant de modèle.
+  Les fournisseurs natifs gardent leurs réglages ; les modèles texte API viennent du catalogue réel.
+- Les installations, clés, adresses et modèles manquants ont des états de configuration distincts.
+  La détection n'envoie aucun message, n'installe rien et ne lit pas les fichiers privés d'identifiants.
+- La détection fait partie du SDK IA ; l'hôte peut ajouter ses recettes et emplacements.
+  Les paramètres manuels restent disponibles.
 
 ## 0.5.2
 

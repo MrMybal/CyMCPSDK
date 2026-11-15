@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.3</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.4</strong></a><br><strong>IN DEVELOPMENT</strong></p>
       <p><sub>Build from source · Windows x64 example</sub></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ A modular C++20 library for application developers who want AI agents to use the
 conversations inside the app, and connections to other applications' tools. It provides
 native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
-> **IN DEVELOPMENT · 0.5.3**
+> **IN DEVELOPMENT · 0.5.4**
 >
 > The Windows example is available as a source build. Linux/macOS distribution and dependency
 > installation work remain in progress. Read the [version notes and known issues](VERSION.md).
@@ -45,6 +45,8 @@ Chat Lab demonstrates streamed messages, Markdown/code/tables, attachments, canc
 exact session reconnection and optional history. Its demonstration counter can be used by an
 AI or another MCP/SDK client. English is the default; French and five CyUI themes are available.
 **Help (F1)** opens the supplied local manual.
+Native providers offer **Sign in** when authentication is required. Manual provider selection
+pre-fills conventional settings; remote APIs display their catalogue for an explicit model choice.
 
 ## Modules
 
@@ -67,14 +69,14 @@ or driver is bundled. Android is deferred.
 
 ## Installation
 
-No GitHub binary release is published for 0.5.3. Build from source with access to this repository.
+No GitHub binary release is published for 0.5.4. Build from source with access to this repository.
 For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 runtime and DX11
 (WARP fallback available). Keep `Documentation/`, `licenses/` and notices beside the executable.
 
 1. Build the Windows example with the commands below.
 2. Run `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
 3. Keep **Automatic connection** enabled. Installed CLIs, running local services and environment API keys
-   are detected; the first available connection opens without sending a message.
+   are detected; the first available connection is prepared without sending a message.
 4. Click another detected connection if needed, then send with **Ctrl+Enter**. Actual models appear in a dropdown.
 
 Manual settings remain available by disabling **Automatic connection**. To try without an AI account,

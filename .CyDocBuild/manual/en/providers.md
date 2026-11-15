@@ -5,7 +5,7 @@ description: Select a CLI, native API or local endpoint and supply its real mode
 section: Guides
 parent: chat-lab
 order: 1
-revision: 2
+revision: 3
 ---
 
 ## Built-in profiles {#profiles}

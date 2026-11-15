@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Licence de la bibliothèque</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.5.3</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.5.4</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
       <p><sub>Compilation depuis les sources · exemple Windows x64</sub></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ Une bibliothèque C++20 modulaire pour les développeurs qui veulent permettre a
 d'utiliser leur app, intégrer des conversations et accéder aux outils d'autres applications.
 Elle fournit des transports SDK/MCP natifs et un panneau de tchat Markdown CyUI optionnel.
 
-> **EN DÉVELOPPEMENT · 0.5.3**
+> **EN DÉVELOPPEMENT · 0.5.4**
 >
 > L'exemple Windows se compile depuis les sources. La distribution Linux/macOS et les
 > installations de dépendances restent en cours de réalisation. Consulter les [notes de version et problèmes connus](VERSION.fr.md).
@@ -45,6 +45,9 @@ Chat Lab propose les messages progressifs, Markdown/code/tableaux, pièces joint
 reconnexion exacte et historique optionnel. Son compteur de démonstration est utilisable par
 une IA ou un autre client MCP/SDK. L'anglais est le défaut ; le français et cinq thèmes CyUI
 sont disponibles. **Aide (F1)** ouvre le manuel local fourni.
+Les fournisseurs natifs proposent **Se connecter** lorsqu'une authentification est nécessaire.
+Le mode manuel préremplit les paramètres conventionnels ; les API distantes affichent leur
+catalogue pour un choix explicite du modèle.
 
 ## Modules
 
@@ -67,14 +70,14 @@ moteur d'inférence, modèle, runtime CUDA ou pilote n'est embarqué. Android es
 
 ## Installation
 
-Aucune release binaire GitHub n'est publiée pour la 0.5.3. Compiler les sources avec accès au dépôt.
+Aucune release binaire GitHub n'est publiée pour la 0.5.4. Compiler les sources avec accès au dépôt.
 Pour Chat Lab : Windows 10/11 x64, runtime Microsoft Visual C++ 2015–2022 x64 et DX11
 (repli WARP disponible). Garder `Documentation/`, `licenses/` et les notices à côté de l'exécutable.
 
 1. Compiler l'exemple Windows avec les commandes ci-dessous.
 2. Lancer `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
 3. Garder **Automatic connection** activé. Les CLI installés, services locaux démarrés et clés API
-   d'environnement sont détectés ; la première connexion disponible s'ouvre sans envoyer de message.
+   d'environnement sont détectés ; la première connexion disponible est préparée sans envoyer de message.
 4. Cliquer sur une autre connexion si nécessaire, puis envoyer avec **Ctrl+Entrée**. Les vrais modèles sont proposés dans une liste.
 
 Les paramètres manuels restent accessibles en désactivant **Automatic connection**. Pour essayer sans

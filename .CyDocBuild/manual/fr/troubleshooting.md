@@ -5,7 +5,7 @@ description: Comprendre les erreurs fournisseur, les interruptions et l'absence 
 section: Guides
 parent: overview
 order: 4
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Erreurs de connexion {#connection}
@@ -13,7 +13,7 @@ sourceRevision: 1
 | Erreur ou symptôme | Action |
 | --- | --- |
 | `ExecutableMissing` | Sélectionner le CLI natif et vérifier son exécution dans le compte/environnement voulu. |
-| `AuthenticationRequired` | Vérifier l'authentification dans l'outil natif, ou fournir l'identifiant API par variable/champ en mémoire. |
+| `AuthenticationRequired` | Pour un fournisseur natif, utiliser **Se connecter**, terminer la connexion native puis reconnecter ici. Pour une API, fournir l'identifiant par variable/champ en mémoire. |
 | `ProviderError` après connexion | Vérifier l'ID exact du modèle, les droits du compte et l'erreur native hors de l'app. |
 | Catalogue `Unsupported` | Saisir un vrai ID de modèle ; certains transports n'exposent pas la découverte. |
 | Adresse locale injoignable | Démarrer le service et vérifier URL de base, port et format API. |

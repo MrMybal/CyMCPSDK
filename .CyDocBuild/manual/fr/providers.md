@@ -5,7 +5,7 @@ description: Sélectionner CLI, API native ou service local avec ses vrais modè
 section: Guides
 parent: chat-lab
 order: 1
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Profils intégrés {#profiles}

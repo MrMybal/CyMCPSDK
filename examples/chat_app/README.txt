@@ -1,4 +1,4 @@
-CyMCPSDK Chat Lab 0.5.3 - Windows x64
+CyMCPSDK Chat Lab 0.5.4 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
 English is the default, including the local Markdown demonstration.
@@ -8,7 +8,8 @@ Automatic connection is enabled at startup. Installed native CLIs and supported
 npm packages, environment API keys and running local model services are detected
 in the background. The first available connection opens without sending a message.
 Click another detected connection to use it. CLI accounts and default models are
-reused; API text models come from the actual catalogue. No manual paths are needed
+reused; local services choose from their actual catalogue. Remote APIs show their
+catalogue and wait for your model choice. No manual paths are needed
 for detected installations. Missing prerequisites are listed under Other providers.
 Disable Automatic connection for the optional manual settings below.
 Demo / Markdown uses deterministic local text and needs no AI account or model.
@@ -20,6 +21,8 @@ Executable and choose the actual .exe (or node.exe with its script as a JSON
 argument). Shell wrappers such as .cmd and .ps1 are not launched by this SDK.
 API keys can come from an environment variable or the masked memory-only field.
 Advanced settings accepts the same settings object as the SDK JSON examples.
+When a native provider needs authentication, Sign in opens its own login in a console;
+complete it and reconnect. Manual provider selection pre-fills conventional settings.
 
 Allow all actions explicitly enables the provider's unrestricted permission mode.
 The application does not advertise filesystem or terminal services to ACP agents.

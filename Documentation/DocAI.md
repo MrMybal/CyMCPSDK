@@ -1,6 +1,6 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.5.3 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.5.4 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 
@@ -22,6 +22,9 @@ directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
   sending a message. ProviderRegistry::discover is reusable without CyUI; extensions
   declare discovery recipes and host-private installation locations. Manual settings
   remain available. Never change providers automatically after a connection failure.
+- Automatic model selection applies to local services. Remote APIs return their
+  actual catalogue and wait for the user's choice. Provider defaults are exposed by
+  describe(); Sign in opens a native login only after the user's explicit activation.
 - Inspect `Docs/Integration.md`, `Docs/Providers.md`, `Docs/Conversations.md` and
   `Docs/ChatUI.md` in the source checkout for detailed developer contracts.
 

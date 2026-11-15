@@ -5,7 +5,7 @@ description: Understand provider errors, interrupted sessions and missing local 
 section: Guides
 parent: overview
 order: 4
-revision: 1
+revision: 2
 ---
 
 ## Connection errors {#connection}
@@ -13,7 +13,7 @@ revision: 1
 | Error or symptom | What to do |
 | --- | --- |
 | `ExecutableMissing` | Select the native CLI executable; verify it runs in the intended account/environment. |
-| `AuthenticationRequired` | Check authentication in the provider's native tool, or supply the API credential through its environment/memory field. |
+| `AuthenticationRequired` | For native providers, use **Sign in**, complete the native login and reconnect. For APIs, supply the credential through its environment/memory field. |
 | `ProviderError` after connecting | Verify the exact model ID, account entitlement and provider-native error outside the app. |
 | Catalogue returns `Unsupported` | Enter a real model ID manually; some transports do not expose discovery. |
 | Local endpoint unreachable | Start the local service and check its base URL/port and API format. |

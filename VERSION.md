@@ -2,16 +2,8 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
-## 0.5.3 — In development
+## 0.5.4 — In development
 
-- Chat Lab starts in automatic mode: installed native CLIs, supported npm installations,
-  environment API keys and running local model services are detected in the background.
-- Available connections open without executable paths, launch arguments or manually typed model IDs.
-  Native providers retain their defaults; API text models come from their actual catalogues.
-- Missing installations, keys, endpoints and local models have distinct setup states.
-  Detection does not submit messages, install runtimes or read private credential files.
-- Discovery is part of the AI SDK and accepts host-defined provider recipes and search locations.
-  Manual connection settings remain available.
 - Agent-oriented defaults without arbitrary limits: model-maximum output, unlimited tool
   rounds, no turn deadline (CLI and API); `timeout_ms` only detects a silent connection.
   Remaining sizes are 256 MiB memory guards.
@@ -24,6 +16,18 @@
   ACP resets after any mid-turn error; exact connected state after a failed restore; MCP HTTP
   legacy fallback; truncated OpenAI answers kept; MCP/settings secrets kept off the command line;
   messages too long for the Windows command line reported explicitly.
+- Chat Lab offers **Sign in** to open the selected native provider's own login in a console.
+
+## 0.5.3
+
+- Chat Lab starts in automatic mode: installed native CLIs, supported npm installations,
+  environment API keys and running local model services are detected in the background.
+- Available connections open without executable paths, launch arguments or manually typed model IDs.
+  Native providers retain their defaults; API text models come from their actual catalogues.
+- Missing installations, keys, endpoints and local models have distinct setup states.
+  Detection does not submit messages, install runtimes or read private credential files.
+- Discovery is part of the AI SDK and accepts host-defined provider recipes and search locations.
+  Manual connection settings remain available.
 
 ## 0.5.2
 

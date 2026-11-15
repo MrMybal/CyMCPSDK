@@ -5,26 +5,32 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 2
+revision: 3
 ---
 
 ## Connect {#connect}
 
 **Automatic connection** is enabled at startup. Chat Lab detects installed native CLIs,
 user npm installations, running Ollama/LM Studio/compatible services at their known local
-addresses, and API keys supplied through environment variables. It opens the first available
+addresses, and API keys supplied through environment variables. It prepares the first available
 connection without sending a message. Click another available connection to use it directly.
 
-Native CLIs retain their own default model and account. API connections select a text model
-from the actual catalogue. The model dropdown offers returned IDs; a changed selection takes
-effect when you click **Connect**. Availability can still depend on your account and provider.
+Native CLIs retain their own default model and account. Local services can select a text model
+from the actual catalogue. Remote APIs display their catalogue and wait for your model choice.
+The model dropdown offers returned IDs; a changed selection takes effect when you click
+**Connect**. Availability can still depend on your account and provider.
 
 **Detect again** repeats the scan. **Other providers / setup** explains missing installations,
 credentials, endpoints or local models. No provider is installed or authenticated by the scan.
 API keys remain in memory. Cloud APIs are contacted only when their connection is selected.
 
+If a native provider reports that authentication is required, **Sign in** opens its own login
+in a console. Complete that login and reconnect here. This action uses the detected installation.
+
 Disable **Automatic connection** to open the optional manual form. **Refresh model catalogue**
 retrieves real model IDs. Model and connection changes apply to the next **Connect / New chat**.
+Selecting a provider pre-fills its conventional endpoint, key variable and settings, together
+with any detected installation.
 
 ```image
 {"id":"automatic-connection","src":"assets/chat-auto-en.png","alt":"Automatic detection of installed CLIs and a real streamed Codex reply","controls":"minimal"}

@@ -34,7 +34,8 @@ L'application démarre en **Automatic connection** : une recherche en arrière-p
 détecte les CLI natifs et npm installés, les clés API d'environnement et les services
 locaux démarrés. La première connexion disponible s'ouvre sans envoyer de message.
 Choisir une autre connexion dans la liste pour changer de fournisseur. Les CLI gardent
-leurs modèles natifs ; les API choisissent un modèle texte du catalogue réel.
+leurs modèles natifs ; les services locaux choisissent un modèle texte du catalogue réel.
+Les API distantes affichent leur catalogue et attendent un choix explicite de modèle.
 **Other providers / setup** indique les prérequis manquants, sans lire les secrets
 des fichiers privés. Une erreur ne déclenche pas de changement silencieux de fournisseur.
 

@@ -5,30 +5,36 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Se connecter {#connect}
 
 La **Connexion automatique** est activée au démarrage. Chat Lab détecte les CLI natifs,
 les installations npm de l'utilisateur, les services Ollama/LM Studio/compatibles démarrés
-à leurs adresses locales connues et les clés API des variables d'environnement. Il ouvre
+à leurs adresses locales connues et les clés API des variables d'environnement. Il prépare
 la première connexion disponible sans envoyer de message. Cliquer sur une autre connexion
 disponible pour l'utiliser directement.
 
-Les CLI conservent leur compte et leur modèle par défaut. Les connexions API choisissent
-un modèle texte du catalogue réel. La liste de modèles propose les identifiants retournés ;
-un changement prend effet au prochain clic sur **Connecter**. La disponibilité dépend
-toujours du compte et du fournisseur.
+Les CLI conservent leur compte et leur modèle par défaut. Les services locaux peuvent choisir
+un modèle texte du catalogue réel. Les API distantes affichent leur catalogue et attendent
+votre choix de modèle. La liste propose les identifiants retournés ; un changement prend effet
+au prochain clic sur **Connecter**. La disponibilité dépend toujours du compte et du fournisseur.
 
 **Relancer la détection** recommence la recherche. **Autres fournisseurs / configuration**
 explique les installations, identifiants, adresses ou modèles locaux manquants. La recherche
 n'installe aucun fournisseur et ne connecte aucun compte. Les clés restent en mémoire.
 Une API distante n'est contactée qu'à la sélection de sa connexion.
 
+Si un fournisseur natif demande une authentification, **Se connecter** ouvre son propre parcours
+de connexion dans une console. Terminer cette connexion puis reconnecter ici. Cette action utilise
+l'installation détectée.
+
 Désactiver **Connexion automatique** pour ouvrir le formulaire manuel facultatif.
 **Actualiser le catalogue** récupère les vrais modèles. Les modifications s'appliquent
 à la prochaine action **Connecter / Nouveau tchat**.
+Choisir un fournisseur préremplit son adresse conventionnelle, sa variable de clé et ses
+paramètres, ainsi que l'installation détectée.
 
 ```image
 {"id":"automatic-connection","src":"assets/chat-auto-fr.png","alt":"Chat Lab en français après détection et connexion automatiques, sans message envoyé","controls":"minimal"}

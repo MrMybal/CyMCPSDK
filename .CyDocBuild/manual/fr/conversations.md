@@ -5,7 +5,7 @@ description: Joindre des fichiers, annuler un tour et reprendre exactement une c
 section: Guides
 parent: chat-lab
 order: 2
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Pièces jointes {#attachments}

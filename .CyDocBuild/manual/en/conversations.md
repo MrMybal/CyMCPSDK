@@ -5,7 +5,7 @@ description: Attach files, cancel a turn and restore an exact conversation witho
 section: Guides
 parent: chat-lab
 order: 2
-revision: 1
+revision: 2
 ---
 
 ## Attachments {#attachments}
