@@ -18,15 +18,36 @@ std::string display_content(const Json& content) {
             const auto type = block.value("type", std::string());
             if (type == "text")
                 result += block.value("text", std::string());
-            else if (type == "image" || type == "audio")
-                result += "\n\n[" + type + ": " + block.value("mimeType", std::string()) + "]\n";
-            else if (type == "resource") {
-                const auto& resource = block.at("resource");
-                result +=
-                    "\n\n[" + resource.value("name", resource.value("uri", std::string())) + "]\n";
-            }
         }
     return result;
+}
+ChatAttachment attachment_view(const Json& block, std::uint64_t id, std::string name = {}) {
+    const auto type = block.value("type", std::string());
+    const auto& payload = type == "resource" ? block.at("resource") : block;
+    ChatAttachment result;
+    result.id = id;
+    result.mime_type = payload.value("mimeType", std::string("application/octet-stream"));
+    result.name = name.empty() ? payload.value("name", type + " attachment") : std::move(name);
+    result.source = "cymcp-attachment:" + std::to_string(id);
+    if (payload.contains("text"))
+        result.bytes = payload.at("text").get_ref<const std::string&>().size();
+    else {
+        const auto& data =
+            payload.at(type == "resource" ? "blob" : "data").get_ref<const std::string&>();
+        result.bytes = data.size() / 4 * 3;
+        if (!data.empty() && data.back() == '=')
+            --result.bytes;
+        if (data.size() > 1 && data[data.size() - 2] == '=')
+            --result.bytes;
+    }
+    result.content = std::make_shared<const Json>(block);
+    return result;
+}
+std::size_t row_bytes(const ChatMessage& row) {
+    auto bytes = row.markdown.size();
+    for (const auto& attachment : row.attachments)
+        bytes += static_cast<std::size_t>(attachment.bytes) * 2 + attachment.name.size();
+    return bytes;
 }
 } // namespace
 struct ChatController::Impl {
@@ -36,6 +57,8 @@ struct ChatController::Impl {
         ChatResult result;
         Json history = nullptr, models = nullptr;
         bool connected = false;
+        std::uint64_t user_id = 0;
+        std::vector<ChatAttachment> attachments;
     };
     std::shared_ptr<ProviderRegistry> registry;
     ChatViewState view;
@@ -194,7 +217,7 @@ struct ChatController::Impl {
     void trim_view() {
         while ((displayed_bytes > transcript_limit || view.messages.size() > row_limit) &&
                view.messages.size() > 1 && view.messages.front().id != assistant_id) {
-            displayed_bytes -= std::min(displayed_bytes, view.messages.front().markdown.size());
+            displayed_bytes -= std::min(displayed_bytes, row_bytes(view.messages.front()));
             view.messages.erase(view.messages.begin());
         }
     }
@@ -263,8 +286,15 @@ struct ChatController::Impl {
                     --keep;
                 text = text.substr(0, keep) + display_cut;
             }
-            displayed_bytes += text.size();
-            view.messages.push_back({next_id++, role, std::move(text)});
+            ChatMessage row{next_id++, role, std::move(text)};
+            if (message.at("content").is_array())
+                for (const auto& block : message.at("content")) {
+                    const auto type = block.value("type", std::string());
+                    if (type == "image" || type == "audio" || type == "resource")
+                        row.attachments.push_back(attachment_view(block, next_id++));
+                }
+            displayed_bytes += row_bytes(row);
+            view.messages.push_back(std::move(row));
         }
         trim_view();
         ++view.revision;
@@ -322,23 +352,33 @@ void ChatController::send(std::string text, std::vector<std::filesystem::path> a
     std::string display = text;
     if (display.size() > text_limit)
         display = display.substr(0, text_limit) + display_cut;
+    const auto user_id = s.next_id++;
+    ChatMessage user{user_id, "user", std::move(display)};
     for (const auto& path : attachments)
-        display += "\n\n[" + path_utf8(path.filename()) + "]";
-    s.view.messages.push_back({s.next_id++, "user", std::move(display)});
-    s.displayed_bytes += s.view.messages.back().markdown.size();
+        user.attachments.push_back({s.next_id++, path_utf8(path.filename())});
+    auto pending_attachments = user.attachments;
+    s.view.messages.push_back(std::move(user));
+    s.displayed_bytes += row_bytes(s.view.messages.back());
     s.assistant_id = s.next_id++;
     s.view.messages.push_back({s.assistant_id, "assistant", ""});
     s.displayed_bytes -= std::min(s.displayed_bytes, s.view.thinking.size());
     s.view.thinking.clear();
     ++s.view.revision;
-    s.start("generating", [&s, text = std::move(text), attachments = std::move(attachments)](
+    s.start("generating", [&s, text = std::move(text), attachments = std::move(attachments),
+                           user_id, pending_attachments = std::move(pending_attachments)](
                               auto& result, const auto& context) {
+        result.user_id = user_id;
         Json content = text;
         if (!attachments.empty()) {
             content = Json::array({text_block(text)});
-            for (const auto& path : attachments) {
+            for (std::size_t n = 0; n < attachments.size(); ++n) {
                 context.cancellation.check();
-                content.push_back(attachment_from_file(path));
+                auto block = attachment_from_file(attachments[n]);
+                if (block.at("type") != "resource")
+                    block["name"] = pending_attachments[n].name;
+                result.attachments.push_back(
+                    attachment_view(block, pending_attachments[n].id, pending_attachments[n].name));
+                content.push_back(std::move(block));
             }
             validate_content(content);
         }
@@ -396,6 +436,15 @@ void ChatController::poll() {
     // A producer may have queued its final deltas after this frame's drain.
     s.consume(s.drain_events());
     auto result = s.pending.get();
+    if (!result.attachments.empty())
+        for (auto& row : s.view.messages)
+            if (row.id == result.user_id) {
+                s.displayed_bytes -= std::min(s.displayed_bytes, row_bytes(row));
+                row.attachments = std::move(result.attachments);
+                s.displayed_bytes += row_bytes(row);
+                break;
+            }
+    s.trim_view();
     const bool choose_model =
         result.action == "connecting" && result.error == "UnknownModel" && !result.models.empty();
     s.diagnose(

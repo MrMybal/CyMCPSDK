@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Licence de la bibliothèque</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.5.5</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.5.6</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
       <p><sub>Compilation depuis les sources · exemple Windows x64</sub></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ Une bibliothèque C++20 modulaire pour les développeurs qui veulent permettre a
 d'utiliser leur app, intégrer des conversations et accéder aux outils d'autres applications.
 Elle fournit des transports SDK/MCP natifs et un panneau de tchat Markdown CyUI optionnel.
 
-> **EN DÉVELOPPEMENT · 0.5.5**
+> **EN DÉVELOPPEMENT · 0.5.6**
 >
 > L'exemple Windows se compile depuis les sources. La distribution Linux/macOS et les
 > installations de dépendances restent en cours de réalisation. Consulter les [notes de version et problèmes connus](VERSION.fr.md).
@@ -73,7 +73,7 @@ moteur d'inférence, modèle, runtime CUDA ou pilote n'est embarqué. Android es
 
 ## Installation
 
-Aucune release binaire GitHub n'est publiée pour la 0.5.5. Compiler les sources avec accès au dépôt.
+Aucune release binaire GitHub n'est publiée pour la 0.5.6. Compiler les sources avec accès au dépôt.
 Pour Chat Lab : Windows 10/11 x64, runtime Microsoft Visual C++ 2015–2022 x64 et DX11
 (repli WARP disponible). Garder `Documentation/`, `licenses/` et les notices à côté de l'exécutable.
 
@@ -81,7 +81,7 @@ Pour Chat Lab : Windows 10/11 x64, runtime Microsoft Visual C++ 2015–2022 x64 
 2. Lancer `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
 3. Garder **Automatic connection** activé. Les CLI installés, services locaux démarrés et clés API
    d'environnement sont détectés ; la première connexion disponible est préparée sans envoyer de message.
-4. Cliquer sur une autre connexion si nécessaire, puis envoyer avec **Ctrl+Entrée**. Les vrais modèles sont proposés dans une liste.
+4. Cliquer sur une autre connexion si nécessaire, puis envoyer avec **Entrée** (ou **Ctrl+Entrée**). Les vrais modèles sont proposés dans une liste.
 
 Les paramètres manuels restent accessibles dans **Fournisseurs**. Pour essayer sans
 compte IA, choisir **Demo / Markdown (no AI)** dans cet onglet puis **Connect / New chat**.

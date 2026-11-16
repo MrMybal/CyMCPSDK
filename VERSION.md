@@ -2,7 +2,14 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
-## 0.5.5 — In development
+## 0.5.6 — In development
+
+- Use the updated native CyUI message composer: growing input, formatting, Enter/Shift+Enter, and retained drafts during generation.
+- Render conversations through TranscriptSource with bounded visible-row caches, without copying the full transcript on each streamed delta.
+- Show native attachment cards, cached asynchronous image previews and local file previews; save embedded attachments after choosing a destination.
+- Wire copy/reply actions. Hosts can opt into inline editing and deletion through explicit provider-compatible callbacks.
+
+## 0.5.5
 
 - Chat, Providers and Logs have dedicated tabs. Provider settings use a searchable catalogue,
   explicit connection states and a separate editor; switching providers retains their fields in memory.

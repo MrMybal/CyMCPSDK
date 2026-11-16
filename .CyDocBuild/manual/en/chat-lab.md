@@ -5,7 +5,7 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 4
+revision: 5
 ---
 
 ## Connect {#connect}
@@ -54,9 +54,19 @@ instructions at session creation. See [providers](doc:providers#configure).
 
 ## Send and stop {#messages}
 
-Type in the composer. **Ctrl+Enter** sends; **Enter** inserts a line. **Attach files** selects
+Type in the composer. **Enter** sends; **Shift+Enter** inserts a line. **Ctrl+Enter** also sends. **Attach files** selects
 local attachments. Text streams into the Markdown transcript; activity and thinking appear
 when emitted by the provider. **Follow responses** controls automatic scrolling.
+
+The native input grows with the draft. Select text for the formatting toolbar, or use
+Ctrl+B/I/U/E. Drafts remain editable during a response; sending while busy keeps the draft.
+Hover or right-click a message to **Copy message** or **Reply**; Reply inserts a quote into
+the draft and waits for you to send it. Native session history stays under provider control.
+
+Attachments have their own cards. Images decode asynchronously and enlarge inside the app.
+Click a text attachment to preview it, or **Save attachment** to choose a destination for its
+embedded bytes. Copied Explorer files can be pasted in the composer. Preview services never
+fetch arbitrary Markdown image URLs. Formats without a decoder retain their file card and Save action.
 
 **Stop** requests cancellation. A partial answer remains marked interrupted.
 **Reconnect** explicitly resumes the current session; it does not resend the interrupted message.

@@ -1,6 +1,6 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.5.5 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.5.6 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 
@@ -19,6 +19,10 @@ directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 - Keep UI work nonblocking. Providers run on the controller worker; CyUI rendering
   stays on the host UI thread. English is the default, with complete French labels.
 - Chat Lab has Chat/Providers/Logs tabs. Per-provider fields stay in host memory.
+  ChatPanel uses native messageComposer and virtual TranscriptSource. Enter/Ctrl+Enter submit,
+  Shift+Enter inserts a line. Structured ChatAttachment contents are worker-loaded immutable
+  portable blocks with opaque source IDs. Native texture services must remain nonblocking.
+  Copy/reply are wired; provider-history edits/deletions require both explicit host callbacks.
   ChatViewState.diagnostics contains bounded structured lifecycle events; native payloads,
   message text, credentials and session IDs must never be copied into diagnostic records.
   The example writes a private session file on a separate worker and supports --log-file.

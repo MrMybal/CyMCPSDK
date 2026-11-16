@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.5</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.6</strong></a><br><strong>IN DEVELOPMENT</strong></p>
       <p><sub>Build from source · Windows x64 example</sub></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ A modular C++20 library for application developers who want AI agents to use the
 conversations inside the app, and connections to other applications' tools. It provides
 native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
-> **IN DEVELOPMENT · 0.5.5**
+> **IN DEVELOPMENT · 0.5.6**
 >
 > The Windows example is available as a source build. Linux/macOS distribution and dependency
 > installation work remain in progress. Read the [version notes and known issues](VERSION.md).
@@ -72,7 +72,7 @@ or driver is bundled. Android is deferred.
 
 ## Installation
 
-No GitHub binary release is published for 0.5.5. Build from source with access to this repository.
+No GitHub binary release is published for 0.5.6. Build from source with access to this repository.
 For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 runtime and DX11
 (WARP fallback available). Keep `Documentation/`, `licenses/` and notices beside the executable.
 
@@ -80,7 +80,7 @@ For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 ru
 2. Run `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
 3. Keep **Automatic connection** enabled. Installed CLIs, running local services and environment API keys
    are detected; the first available connection is prepared without sending a message.
-4. Click another detected connection if needed, then send with **Ctrl+Enter**. Actual models appear in a dropdown.
+4. Click another detected connection if needed, then send with **Enter** (or **Ctrl+Enter**). Actual models appear in a dropdown.
 
 Manual settings remain available in **Providers**. To try without an AI account,
 select **Demo / Markdown (no AI)** there and choose **Connect / New chat**.

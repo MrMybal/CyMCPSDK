@@ -5,7 +5,7 @@ description: Build and open the Windows example, then try its local Markdown dem
 section: Guides
 parent: overview
 order: 1
-revision: 3
+revision: 4
 ---
 
 ## Build the example {#build}
@@ -35,7 +35,7 @@ The Microsoft Visual C++ 2015–2022 x64 runtime is required. DX11 is used, with
 ```
 
 The demonstration generates fixed local text; it does not call a model. Choose a
-[provider](doc:providers) for an actual conversation. **Enter** adds a line in the composer.
+[provider](doc:providers) for an actual conversation. **Shift+Enter** adds a line in the composer.
 
 ## Language and help {#language}
 

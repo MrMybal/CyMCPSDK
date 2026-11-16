@@ -192,10 +192,12 @@ int main() {
         chat.send("file", {attachment});
         wait(chat);
         check(probe->attachments == 1, "Attachment read and converted on the worker");
-        auto user_row = chat.state().messages[chat.state().messages.size() - 2].markdown;
-        check(user_row.find("sample.txt") != std::string::npos &&
-                  user_row.find(path_utf8(directory)) == std::string::npos,
-              "Display labels omit private attachment parent paths");
+        const auto& user_row = chat.state().messages[chat.state().messages.size() - 2];
+        check(user_row.markdown == "file" && user_row.attachments.size() == 1 &&
+                  user_row.attachments[0].name == "sample.txt" &&
+                  user_row.attachments[0].bytes == 10 && user_row.attachments[0].content &&
+                  user_row.attachments[0].source.find(path_utf8(directory)) == std::string::npos,
+              "Native attachment cards retain embedded bytes and omit private parent paths");
         chat.save();
         wait(chat);
         chat.disconnect();
@@ -203,10 +205,19 @@ int main() {
         check(!chat.state().connected && chat.state().phase == "disconnected",
               "Disconnect keeps transcript and marks connection closed");
         connection.restore = true;
+        std::filesystem::remove(attachment);
         chat.open(connection);
         wait(chat);
         check(chat.state().connected && !chat.state().messages.empty(),
               "Stored host history restored asynchronously");
+        check(chat.state().messages[chat.state().messages.size() - 2].attachments.size() == 1 &&
+                  chat.state().messages[chat.state().messages.size() - 2].attachments[0].bytes ==
+                      10,
+              "Restored history rebuilds attachment cards from embedded contents without files");
+        {
+            std::ofstream file(attachment);
+            file << "attachment";
+        }
         check(probe->sends == sends + 2, "Restore never resubmits messages");
 
         probe->connecting = true;
@@ -305,6 +316,73 @@ int main() {
         int width, height;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
         io.Fonts->SetTexID(ImTextureID(1));
+        {
+            ChatController input_chat(registry);
+            auto input_connection = connection;
+            input_connection.history_directory.clear();
+            input_connection.history_id.clear();
+            input_connection.restore = false;
+            input_chat.open(input_connection);
+            wait(input_chat);
+            ChatPanel input_panel(input_chat);
+            auto frame = [&] {
+                ImGui::NewFrame();
+                ImGui::SetNextWindowSize({1100, 900});
+                ImGui::Begin("Native composer test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+                input_panel.draw();
+                ImGui::End();
+                ImGui::Render();
+            };
+            input_panel.set_draft("Native composer UTF-8: é 中文");
+            frame();
+            frame();
+            frame();
+            const auto before = probe->sends.load();
+            io.AddKeyEvent(ImGuiMod_Shift, true);
+            io.AddKeyEvent(ImGuiKey_Enter, true);
+            frame();
+            io.AddKeyEvent(ImGuiKey_Enter, false);
+            io.AddKeyEvent(ImGuiMod_Shift, false);
+            frame();
+            check(probe->sends == before && input_panel.draft().find('\n') != std::string::npos,
+                  "Native Shift+Enter inserts a line without submitting to the provider");
+            io.AddKeyEvent(ImGuiKey_Enter, true);
+            frame();
+            io.AddKeyEvent(ImGuiKey_Enter, false);
+            frame();
+            wait(input_chat);
+            check(probe->sends == before + 1 && input_panel.draft().empty() &&
+                      input_chat.state().messages.front().markdown.find("中文") !=
+                          std::string::npos,
+                  "Native Enter submits exactly once, preserves UTF-8 and clears the sent draft");
+            input_panel.add_attachments({attachment});
+            input_panel.set_draft("");
+            frame();
+            frame();
+            io.AddKeyEvent(ImGuiKey_Enter, true);
+            frame();
+            io.AddKeyEvent(ImGuiKey_Enter, false);
+            frame();
+            wait(input_chat);
+            check(input_chat.state()
+                          .messages[input_chat.state().messages.size() - 2]
+                          .attachments.size() == 1,
+                  "Native composer submits an attachment-only message");
+            probe->silent = true;
+            input_chat.send("wait");
+            input_panel.set_draft("Keep this draft while streaming");
+            frame();
+            frame();
+            io.AddKeyEvent(ImGuiKey_Enter, true);
+            frame();
+            io.AddKeyEvent(ImGuiKey_Enter, false);
+            frame();
+            check(input_panel.draft() == "Keep this draft while streaming",
+                  "Submitting during an active turn keeps the draft instead of dropping text");
+            input_chat.cancel();
+            wait(input_chat);
+            probe->silent = false;
+        }
         {
             ChatPanel panel(chat);
             panel.set_draft("A UTF-8 draft: é è 中文");

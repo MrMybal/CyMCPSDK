@@ -30,6 +30,10 @@ const char* phase_label(const std::string& phase) {
     return "Disconnected";
 }
 const char* error_label(const std::string& code) {
+    if (code == "Busy")
+        return "Wait for the response or stop it before sending. Your draft is kept.";
+    if (code == "AttachmentUnavailable")
+        return "Attachment preview is not available in this host.";
     if (code == "UnknownModel")
         return "Select a model in Providers, then connect.";
     if (code == "AuthenticationRequired")
@@ -93,6 +97,14 @@ void register_chat_translations() {
                 {"Type a message. Ctrl+Enter sends; Enter inserts a new line.",
                  "Écrivez un message. Ctrl+Entrée envoie ; Entrée ajoute une ligne."},
                 {"Ctrl+Enter to send", "Ctrl+Entrée pour envoyer"},
+                {"Enter to send · Shift+Enter for a new line",
+                 "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne"},
+                {"Wait for the response or stop it before sending. Your draft is kept.",
+                 "Attendez la réponse ou arrêtez-la avant d’envoyer. Votre brouillon est "
+                 "conservé."},
+                {"Cancel edit", "Annuler la modification"},
+                {"Attachment preview is not available in this host.",
+                 "Cet hôte ne fournit pas de prévisualisation de pièce jointe."},
                 {"Link", "Lien"},
                 {"Copy link", "Copier le lien"},
                 {"Close", "Fermer"},
@@ -131,14 +143,24 @@ struct ChatPanel::Impl {
     ChatController& controller;
     ChatPanelOptions options;
     cyui::TranscriptState transcript;
-    std::vector<cyui::TranscriptMessage> rows;
+    cyui::TranscriptMessage row;
     cyui::Document thinking;
     cyui::DocumentState thinking_view;
-    std::string draft; // grows with the text: pasted logs and files are not truncated
+    cyui::MessageComposerState composer, editor;
+    std::uint64_t editing = 0;
     std::vector<std::filesystem::path> attachments;
-    std::uint64_t revision = ~std::uint64_t(0);
-    std::string language, local_error, link;
-    bool focus_draft = false;
+    std::string local_error, link;
+    void attach(std::vector<std::filesystem::path> paths) {
+        if (paths.size() + attachments.size() > 256)
+            throw Error("InvalidContent", "At most 256 attachments");
+        attachments.insert(attachments.end(), paths.begin(), paths.end());
+    }
+    const ChatMessage* message(std::uint64_t id) const {
+        const auto& rows = controller.state().messages;
+        auto found = std::lower_bound(rows.begin(), rows.end(), id,
+                                      [](const auto& row, auto key) { return row.id < key; });
+        return found != rows.end() && found->id == id ? &*found : nullptr;
+    }
     explicit Impl(ChatController& c, ChatPanelOptions o) : controller(c), options(std::move(o)) {
         register_chat_translations();
     }
@@ -157,22 +179,23 @@ ChatPanel::ChatPanel(ChatController& controller, ChatPanelOptions options)
     : impl_(std::make_unique<Impl>(controller, std::move(options))) {}
 ChatPanel::~ChatPanel() = default;
 void ChatPanel::set_draft(std::string text) {
-    impl_->draft = std::move(text);
+    impl_->composer.text = std::move(text);
+    impl_->composer.focus = true;
 }
-namespace {
-int resize_draft(ImGuiInputTextCallbackData* data) {
-    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-        auto* text = static_cast<std::string*>(data->UserData);
-        text->resize(static_cast<std::size_t>(data->BufTextLen));
-        data->Buf = text->data();
-    }
-    return 0;
+const std::string& ChatPanel::draft() const noexcept {
+    return impl_->composer.text;
 }
-} // namespace
+void ChatPanel::add_attachments(std::vector<std::filesystem::path> paths) {
+    impl_->attach(std::move(paths));
+}
 void ChatPanel::draw(const char* id, float width, float height) {
     auto& s = *impl_;
     s.controller.poll();
     const auto& state = s.controller.state();
+    if (s.local_error == "Busy" && !state.busy)
+        s.local_error.clear();
+    if (s.editing && !s.message(s.editing))
+        s.editing = 0;
     cyui::ScopedID scope(id);
     ImGui::BeginChild("##chat-panel", {width, height});
     cyui::heading(cyui::tr("Chat").c_str(), 2);
@@ -210,15 +233,6 @@ void ChatPanel::draw(const char* id, float width, float height) {
         cyui::callout(cyui::Tone::warning, cyui::tr("Conversation could not be saved").c_str());
         cyui::textFaint("%s", state.storage_error.c_str());
     }
-    if (state.revision != s.revision || s.language != cyui::locale()) {
-        s.rows.clear();
-        for (const auto& message : state.messages)
-            s.rows.push_back({message.id, cyui::tr(message.role == "user" ? "You" : "Assistant"),
-                              message.markdown,
-                              message.interrupted ? cyui::tr("Interrupted") : ""});
-        s.revision = state.revision;
-        s.language = cyui::locale();
-    }
     bool details = false;
     if (!state.thinking.empty() || !state.activity.empty()) {
         details = ImGui::CollapsingHeader(cyui::trLabel("Activity").c_str());
@@ -233,11 +247,18 @@ void ChatPanel::draw(const char* id, float width, float height) {
             ImGui::EndChild();
         }
     }
+    const auto measured = ImGui::CalcTextSize(
+        s.composer.text.c_str(), nullptr, false,
+        std::max(cyui::dp(40), ImGui::GetContentRegionAvail().x - cyui::dp(110)));
+    const auto input_height =
+        std::clamp(measured.y + ImGui::GetStyle().FramePadding.y * 2 + cyui::dp(8),
+                   ImGui::GetFrameHeight() + cyui::dp(8), cyui::dp(180));
     const float footer =
-        cyui::dp(158) + (!s.attachments.empty() ? ImGui::GetFrameHeightWithSpacing() : 0);
+        input_height + ImGui::GetFrameHeightWithSpacing() * (2 + (!s.attachments.empty() ? 1 : 0) +
+                                                             (!state.metrics.empty() ? 1 : 0));
     const float transcript_height =
         std::max(cyui::dp(50), ImGui::GetContentRegionAvail().y - footer);
-    if (s.rows.empty()) {
+    if (state.messages.empty()) {
         ImGui::BeginChild("##empty", {0, transcript_height});
         cyui::emptyState(cyui::tr("No messages yet").c_str(),
                          cyui::tr(state.connected
@@ -247,12 +268,89 @@ void ChatPanel::draw(const char* id, float width, float height) {
                          cyui::icon::mail);
         ImGui::EndChild();
     } else {
-        cyui::DocumentOptions options;
-        options.services = s.options.document_services;
-        options.tasks = false;
-        options.linkPreviews = false;
-        auto result =
-            cyui::transcript("##messages", s.transcript, s.rows, {0, transcript_height}, options);
+        cyui::TranscriptOptions options;
+        options.document.services = s.options.document_services;
+        options.document.tasks = false;
+        options.document.linkPreviews = false;
+        options.editing = s.editing;
+        bool edited = false;
+        options.editor = [&](const auto&, float editor_width) {
+            cyui::MessageComposerOptions input;
+            input.attachments = false;
+            input.editing = true;
+            auto result =
+                cyui::messageComposer("##edit-message", s.editor, {editor_width, 0}, input);
+            if (result.submitted && s.options.edit_message)
+                edited = true;
+            if (result.cancelled || cyui::button(cyui::trLabel("Cancel edit").c_str()))
+                s.editing = 0;
+        };
+        cyui::TranscriptSource source;
+        source.id = ImGui::GetID("##chat-history");
+        source.count = state.messages.size();
+        // Streaming edits do not reset the sparse height index or parsed cache.
+        source.revision = state.messages.front().id;
+        source.message = [&](std::size_t index) -> const cyui::TranscriptMessage* {
+            if (index >= state.messages.size())
+                return nullptr;
+            const auto& message = state.messages[index];
+            s.row = {};
+            s.row.id = message.id;
+            s.row.role = cyui::tr(message.role == "user" ? "You" : "Assistant");
+            s.row.content = message.markdown;
+            s.row.time = message.interrupted ? cyui::tr("Interrupted") : "";
+            s.row.own = message.role == "user" && !state.busy && s.options.edit_message &&
+                        s.options.delete_message;
+            for (const auto& attachment : message.attachments)
+                s.row.attachments.push_back({attachment.id, attachment.name, attachment.source,
+                                             attachment.bytes,
+                                             attachment.mime_type.rfind("image/", 0) == 0});
+            return &s.row;
+        };
+        source.indexOf = [&](cyui::ItemId key) {
+            const auto* message = s.message(key);
+            return message ? static_cast<std::size_t>(message - state.messages.data())
+                           : std::string::npos;
+        };
+        const auto result =
+            cyui::transcript("##messages", s.transcript, source, {0, transcript_height}, options);
+        if (edited && s.editing)
+            s.action([&] {
+                s.options.edit_message(s.editing, s.editor.text);
+                s.editing = 0;
+            });
+        if (const auto* message = s.message(result.reply)) {
+            auto keep = std::min<std::size_t>(message->markdown.size(), 4096);
+            while (keep < message->markdown.size() && keep &&
+                   (static_cast<unsigned char>(message->markdown[keep]) & 0xc0) == 0x80)
+                --keep;
+            auto quote = message->markdown.substr(0, keep);
+            std::string quoted = "> ";
+            for (char c : quote) {
+                quoted += c;
+                if (c == '\n')
+                    quoted += "> ";
+            }
+            s.composer.text = quoted + "\n\n" + s.composer.text;
+            s.composer.focus = true;
+        }
+        if (result.edit)
+            if (const auto* message = s.message(result.edit)) {
+                s.editing = message->id;
+                s.editor.text = message->markdown;
+                s.editor.focus = true;
+            }
+        if (result.erase && s.options.delete_message)
+            s.action([&] { s.options.delete_message(result.erase); });
+        if (result.attachmentMessage)
+            if (const auto* message = s.message(result.attachmentMessage);
+                message && result.attachmentIndex < message->attachments.size())
+                s.action([&] {
+                    if (!s.options.open_attachment)
+                        throw Error("AttachmentUnavailable", "Host attachment callback required");
+                    s.options.open_attachment(message->attachments[result.attachmentIndex],
+                                              result.download);
+                });
         if (!result.link.empty()) {
             if (s.options.open_link)
                 s.action([&] { s.options.open_link(result.link); });
@@ -286,40 +384,31 @@ void ChatPanel::draw(const char* id, float width, float height) {
         }
         ImGui::EndChild();
     }
-    ImGui::SetNextItemWidth(-1);
-    if (s.focus_draft) {
-        ImGui::SetKeyboardFocusHere();
-        s.focus_draft = false;
-    }
-    const bool submit = ImGui::InputTextMultiline(
-        "##draft", s.draft.data(), s.draft.capacity() + 1, cyui::dp(-1, 90),
-        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackResize, resize_draft,
-        &s.draft);
-    cyui::tooltip(cyui::tr("Type a message. Ctrl+Enter sends; Enter inserts a new line.").c_str());
-    bool send = submit;
-    {
-        cyui::ScopedDisabled disabled(state.busy || !state.connected);
-        send = cyui::primaryButton(cyui::trLabel("Send").c_str(), cyui::dp(98, 0)) || send;
-    }
-    ImGui::SameLine();
+    cyui::MessageComposerOptions composer_options;
+    composer_options.attachments = static_cast<bool>(s.options.pick_attachments);
+    composer_options.canSubmitEmpty = !s.attachments.empty();
+    composer_options.paste = [&](std::string& text) {
+        if (!s.options.paste)
+            return false;
+        bool consumed = false;
+        s.action([&] {
+            std::vector<std::filesystem::path> paths;
+            consumed = s.options.paste(text, paths);
+            if (consumed)
+                s.attach(std::move(paths));
+        });
+        return consumed;
+    };
+    const auto composed = cyui::messageComposer("##composer", s.composer, {}, composer_options);
+    if (composed.attach && s.options.pick_attachments)
+        s.action([&] { s.attach(s.options.pick_attachments()); });
     {
         cyui::ScopedDisabled disabled(!state.busy);
         if (cyui::button(cyui::trLabel("Stop").c_str()))
             s.controller.cancel();
     }
     ImGui::SameLine();
-    if (s.options.pick_attachments) {
-        cyui::ScopedDisabled disabled(state.busy);
-        if (cyui::button(cyui::trLabel("Attach files").c_str()))
-            s.action([&] {
-                auto paths = s.options.pick_attachments();
-                if (paths.size() + s.attachments.size() > 256)
-                    throw Error("InvalidContent", "At most 256 attachments");
-                s.attachments.insert(s.attachments.end(), paths.begin(), paths.end());
-            });
-        ImGui::SameLine();
-    }
-    cyui::textFaint("%s", cyui::tr("Ctrl+Enter to send").c_str());
+    cyui::textFaint("%s", cyui::tr("Enter to send · Shift+Enter for a new line").c_str());
     if (!state.metrics.empty()) {
         auto first = state.metrics.value("first_token_ms", Json());
         cyui::textFaint("%s: %.0f ms", cyui::tr("Total").c_str(),
@@ -329,13 +418,15 @@ void ChatPanel::draw(const char* id, float width, float height) {
             cyui::textFaint("/ %s: %.1f ms", cyui::tr("First token").c_str(), first.get<double>());
         }
     }
-    if (send && !state.busy && state.connected)
+    if (composed.submitted && !state.busy && state.connected)
         s.action([&] {
-            s.controller.send(s.draft, s.attachments);
-            s.draft.clear();
+            s.controller.send(s.composer.text, s.attachments);
+            s.composer.text.clear();
             s.attachments.clear();
-            s.focus_draft = true;
+            s.composer.focus = true;
         });
+    else if (composed.submitted)
+        s.local_error = state.busy ? "Busy" : "InvalidState";
     ImGui::EndChild();
 }
 } // namespace cymcp

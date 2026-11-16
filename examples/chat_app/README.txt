@@ -1,4 +1,4 @@
-CyMCPSDK Chat Lab 0.5.5 - Windows x64
+CyMCPSDK Chat Lab 0.5.6 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
 Chat, Providers and Logs have dedicated tabs. Appearance is inside Providers.
@@ -20,7 +20,7 @@ for detected installations. Missing prerequisites are listed under Other provide
 Manual settings remain available in Providers alongside Automatic connection.
 Demo / Markdown uses deterministic local text and needs no AI account or model.
 Refresh model catalogue queries the connected provider. A selected model applies
-to the next connection. Enter inserts a line; Ctrl+Enter sends a message.
+to the next connection. Enter sends a message; Shift+Enter inserts a line. Ctrl+Enter also sends.
 
 Native CLIs use their existing environment/account. For an unusual installation, expand
 Executable and choose the actual .exe (or node.exe with its script as a JSON

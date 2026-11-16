@@ -2,7 +2,14 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
-## 0.5.5 — En développement
+## 0.5.6 — En développement
+
+- Utiliser la nouvelle saisie native CyUI : hauteur adaptative, formatage, Entrée/Maj+Entrée et brouillons conservés pendant la génération.
+- Afficher les conversations via TranscriptSource et ses caches bornés, sans recopier tout le transcript à chaque delta.
+- Afficher les cartes de pièces jointes, les aperçus d’images asynchrones et les fichiers texte ; enregistrer leur contenu embarqué vers une destination choisie.
+- Relier copie/réponse. L’hôte peut activer modification et suppression avec des callbacks compatibles avec son fournisseur.
+
+## 0.5.5
 
 - Onglets Tchat, Fournisseurs et Journal. Le catalogue se recherche et présente des états explicites ;
   les paramètres ont leur éditeur et restent en mémoire lors d'un changement de fournisseur.

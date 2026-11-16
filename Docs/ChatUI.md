@@ -5,6 +5,28 @@ conversation natif C++20. Il utilise `CyUI::DocumentViews` : aucun navigateur, C
 Python ou serveur web n'est nécessaire. Les modules du SDK et son agrégat
 `CyMCP::SDK` restent indépendants de l'interface graphique.
 
+Le panneau emploie maintenant `cyui::messageComposer` et `TranscriptSource` de CyUI.
+La saisie grandit jusqu’à 180 unités logiques, conserve le brouillon pendant un tour actif et
+propose le formatage natif sur la sélection. Entrée ou Ctrl+Entrée envoie ; Maj+Entrée ajoute
+une ligne. `set_draft`, `draft` et `add_attachments` permettent l’intégration avec l’hôte.
+Seules les lignes visibles sont adaptées au rendu ; un delta ne recopie pas toute la conversation.
+
+Les pièces jointes sont des `ChatAttachment` à ID stable, nom, MIME, taille et référence opaque.
+Leur `content` partagé immuable contient le bloc portable embarqué, lu sur le worker et reconstruit
+à la restauration. Il ne contient aucun chemin local. Les noms d’images restaurées sans nom dans
+le format portable utilisent un libellé générique. `open_attachment(attachment, save)` reçoit une
+activation explicite ; `document_services` fournit les textures déjà chargées sans bloquer le rendu.
+L’exemple Windows décode les images en arrière-plan, borne ses vignettes à 8 textures de 1024 pixels,
+prévisualise les textes et permet de choisir où enregistrer les octets embarqués.
+Les fichiers copiés dans l’Explorateur peuvent être collés comme pièces jointes dans la saisie.
+
+CyUI gère la copie native. Répondre cite le message dans le brouillon, sans envoyer automatiquement.
+Les actions de modification et suppression des messages utilisateur apparaissent lorsque l’hôte
+fournit **les deux** callbacks `edit_message` et `delete_message` ; l’éditeur natif applique alors
+sa proposition via le callback. L’hôte assure la compatibilité avec son historique fournisseur.
+Chat Lab ne propose pas ces mutations des sessions natives. Le hook `paste` facultatif de l’hôte
+importe du texte ou des chemins sélectionnés ; le collage texte natif fonctionne sans ce hook.
+
 Chat Lab utilise trois onglets : **Chat**, **Providers** et **Logs**. Le catalogue de fournisseurs
 est filtrable ; ses cartes sélectionnent un éditeur de paramètres et un double-clic connecte.
 Les champs de chaque fournisseur sont conservés séparément en mémoire pendant l'exécution.
@@ -53,10 +75,10 @@ locaux démarrés. La première connexion disponible s'ouvre sans envoyer de mes
 Choisir une autre connexion dans la liste pour changer de fournisseur. Les CLI gardent
 leurs modèles natifs ; les services locaux choisissent un modèle texte du catalogue réel.
 Les API distantes affichent leur catalogue et attendent un choix explicite de modèle.
-**Other providers / setup** indique les prérequis manquants, sans lire les secrets
+L’onglet **Providers** indique les prérequis manquants, sans lire les secrets
 des fichiers privés. Une erreur ne déclenche pas de changement silencieux de fournisseur.
 
-Désactiver le mode automatique, sélectionner **Demo / Markdown (no AI)** puis
+Dans Providers, sélectionner **Demo / Markdown (no AI)** puis
 **Connect / New chat** et envoyer un message permet de vérifier le rendu sans compte.
 Cette démonstration produit du texte déterministe ; elle ne mesure pas un modèle.
 Les 22 profils du registre sont aussi accessibles, avec leurs exigences réelles de

@@ -8,6 +8,10 @@ inline void workspace_translations() {
     cyui::registerTranslations(
         "fr",
         {{"Providers", "Fournisseurs"},
+         {"Saved", "Enregistré"},
+         {"Could not save attachment", "Impossible d’enregistrer la pièce jointe"},
+         {"No preview for this file type. Save the attachment to use it.",
+          "Aucun aperçu pour ce type de fichier. Enregistrez la pièce jointe pour l’utiliser."},
          {"Logs", "Journal"},
          {"Provider settings", "Paramètres des fournisseurs"},
          {"Chat and AI providers", "Tchat et fournisseurs IA"},

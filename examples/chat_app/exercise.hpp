@@ -63,7 +63,17 @@ struct Exercise {
                     app.show_page(step.at("index").template get<int>());
                 else if (action == "select-provider")
                     app.select_provider(step.at("id").template get<std::string>());
-                else if (action == "send") {
+                else if (action == "preview-attachment") {
+                    const auto& messages = app.chat.state().messages;
+                    auto row =
+                        std::find_if(messages.rbegin(), messages.rend(), [](const auto& message) {
+                            return !message.attachments.empty();
+                        });
+                    if (row == messages.rend())
+                        throw cymcp::Error("InvalidState", "No attachment");
+                    app.attachment_host.open(
+                        row->attachments.at(step.value("index", std::size_t(0))), false);
+                } else if (action == "send") {
                     std::vector<std::filesystem::path> paths;
                     for (const auto& path : step.value("attachments", cymcp::Json::array()))
                         paths.push_back(std::filesystem::u8path(path.template get<std::string>()));
@@ -104,6 +114,16 @@ struct Exercise {
             return;
         if (++wait_frames < step.value("settle_frames", 4))
             return;
+        if (step.value("image_ready", false)) {
+            bool ready = false;
+            for (const auto& message : app.chat.state().messages)
+                for (const auto& attachment : message.attachments)
+                    ready |= app.attachment_host.ready(attachment.source);
+            if (!ready && cymcp::Clock::now() - step_started < std::chrono::seconds(5))
+                return;
+            if (!ready)
+                failure = "ImagePreviewFailed";
+        }
         const auto& state = app.chat.state();
         std::string code = failure.empty() ? state.error_code : failure;
         bool ok = code == step.value("error", std::string());

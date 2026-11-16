@@ -5,7 +5,7 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Se connecter {#connect}
@@ -58,10 +58,21 @@ Consulter les [fournisseurs](doc:providers#configure).
 
 ## Envoyer et arrêter {#messages}
 
-Écrire dans la zone de saisie. **Ctrl+Entrée** envoie ; **Entrée** ajoute une ligne.
+Écrire dans la zone de saisie. **Entrée** envoie ; **Maj+Entrée** ajoute une ligne. **Ctrl+Entrée** envoie également.
 **Joindre des fichiers** sélectionne les pièces jointes locales. Le texte arrive dans le
 transcript Markdown ; l'activité et la réflexion apparaissent lorsque le fournisseur les émet.
 **Suivre les réponses** règle le défilement automatique.
+
+La saisie grandit avec le brouillon. Sélectionner du texte pour la barre de formatage, ou utiliser
+Ctrl+B/I/U/E. Le brouillon reste modifiable pendant une réponse ; un envoi pendant ce temps le conserve.
+Survoler un message ou faire un clic droit pour **Copier le message** ou **Répondre** : répondre insère
+une citation dans le brouillon et attend l’envoi. L’historique natif reste sous le contrôle du fournisseur.
+
+Les pièces jointes ont leurs propres cartes. Les images se chargent en arrière-plan et s’agrandissent
+dans l’app. Cliquer sur un texte pour son aperçu, ou **Enregistrer la pièce jointe** pour choisir une
+destination pour les octets embarqués. Les fichiers copiés dans l’Explorateur se collent dans la saisie.
+Les aperçus ne chargent pas les URL d’images arbitraires du Markdown. Un format sans décodeur conserve
+sa carte et son action d’enregistrement.
 
 **Arrêter** demande l'annulation. La réponse partielle reste marquée interrompue.
 **Reconnecter** reprend explicitement la session actuelle, sans renvoyer le message interrompu.

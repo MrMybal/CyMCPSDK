@@ -7,6 +7,7 @@
 // Include Windows definitions before the dependent SDK headers.
 #include <windows.h>
 
+#include "attachments.hpp"
 #include "workspace_ui.hpp"
 #include <array>
 #include <commdlg.h>
@@ -302,6 +303,8 @@ struct App {
     std::shared_ptr<ProviderRegistry> registry = chat_example::providers();
     chat_example::Commands commands;
     ChatController chat{registry};
+    chat_example::Attachments attachment_host;
+    cyui::DocumentServices document_services;
     ChatPanel panel;
     Json catalogue = registry->describe();
     std::string provider_id = "demo", error;
@@ -333,7 +336,47 @@ struct App {
     ~App() {
         discovery_cancel.cancel();
     }
-    explicit App(HWND w) : window(w), panel(chat, {{}, [w] { return choose_files(w); }}) {
+    ChatPanelOptions panel_options() {
+        ChatPanelOptions options;
+        options.pick_attachments = [this] { return choose_files(window); };
+        options.document_services = &document_services;
+        document_services.image = [this](const std::string& source) {
+            try {
+                const auto* attachment = chat_example::Attachments::find(chat.state(), source);
+                return attachment ? attachment_host.image(*attachment) : cyui::ImageData{};
+            } catch (...) {
+                return cyui::ImageData{};
+            }
+        };
+        options.open_attachment = [this](const auto& attachment, bool save) {
+            attachment_host.open(attachment, save);
+        };
+        options.paste = [this](std::string&, std::vector<std::filesystem::path>& paths) {
+            if (!IsClipboardFormatAvailable(CF_HDROP) || !OpenClipboard(window))
+                return false;
+            struct Clipboard {
+                ~Clipboard() {
+                    CloseClipboard();
+                }
+            } clipboard;
+            auto files = static_cast<HDROP>(GetClipboardData(CF_HDROP));
+            if (!files)
+                return false;
+            const auto count = DragQueryFileW(files, 0xffffffff, nullptr, 0);
+            if (count > 256)
+                throw Error("InvalidContent", "At most 256 attachments");
+            for (UINT n = 0; n < count; ++n) {
+                std::wstring path(DragQueryFileW(files, n, nullptr, 0) + 1, L'\0');
+                DragQueryFileW(files, n, path.data(), static_cast<UINT>(path.size()));
+                path.resize(path.size() - 1);
+                paths.emplace_back(path);
+            }
+            return !paths.empty();
+        };
+        return options;
+    }
+    explicit App(HWND w)
+        : window(w), attachment_host(w, device.Get()), panel(chat, panel_options()) {
         assign(model, "demo-markdown");
         assign(arguments, "[]");
         assign(settings, "{}");
@@ -732,6 +775,7 @@ struct App {
         if (cyui::button(cyui::trLabel("Help (F1)").c_str()))
             action([&] { open_help(); });
         cyui::divider();
+        attachment_host.draw();
         const bool requested = page_changed;
         const int requested_page = page;
         page_changed = false;

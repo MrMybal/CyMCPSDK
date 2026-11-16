@@ -262,7 +262,7 @@ struct Run {
 } // namespace
 int main(int argc, char** argv) {
     try {
-        if (argc != 3)
+        if (argc != 4)
             return 2;
         const auto output = std::filesystem::current_path() / "chat-app-validation";
         private_directory(output);
@@ -285,6 +285,24 @@ int main(int argc, char** argv) {
         }
         ModelServer model;
         Json report = Json::array();
+        {
+            const auto folder = output / "native-attachments";
+            private_directory(folder);
+            const auto image = folder / "preview.png";
+            const auto note = folder / "notes.md";
+            std::filesystem::copy_file(argv[3], image,
+                                       std::filesystem::copy_options::overwrite_existing);
+            std::ofstream(note) << "## Attachment fixture\n\nNative **Markdown** preview.";
+            Run run(argv[1], folder, {{"provider", "demo"}},
+                    Json::array(
+                        {{{"action", "connect"}},
+                         {{"action", "send"},
+                          {"text", "Native attachments"},
+                          {"attachments", Json::array({path_utf8(image), path_utf8(note)})}},
+                         {{"action", "preview-attachment"}, {"index", 0}, {"image_ready", true}},
+                         {{"action", "preview-attachment"}, {"index", 1}}}));
+            report.push_back(run.finish());
+        }
         for (const std::string theme :
              {"mid-grey", "light-grey", "amber-night", "violet", "navy"}) {
             for (int page : {1, 2}) {

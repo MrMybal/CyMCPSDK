@@ -78,7 +78,8 @@ if(CYMCP_BUILD_TESTS)
     target_compile_definitions(cymcp_chat_app_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_compile_options(cymcp_chat_app_tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
     add_test(NAME chat_app_bidirectional COMMAND cymcp_chat_app_tests
-      $<TARGET_FILE:cymcp_chat_app> $<TARGET_FILE:cymcp_fixture>)
+      $<TARGET_FILE:cymcp_chat_app> $<TARGET_FILE:cymcp_fixture>
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets/screenshots/providers-en.png")
     set_tests_properties(chat_app_bidirectional PROPERTIES TIMEOUT 90)
   endif()
 endif()

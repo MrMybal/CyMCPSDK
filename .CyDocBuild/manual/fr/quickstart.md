@@ -5,7 +5,7 @@ description: Compiler et ouvrir l'exemple Windows, puis essayer la démonstratio
 section: Guides
 parent: overview
 order: 1
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Compiler l'exemple {#build}
@@ -36,7 +36,7 @@ avec repli WARP.
 ```
 
 La démonstration produit un texte local fixe ; elle n'appelle aucun modèle. Choisir un
-[fournisseur](doc:providers) pour une vraie conversation. **Entrée** ajoute une ligne dans la saisie.
+[fournisseur](doc:providers) pour une vraie conversation. **Maj+Entrée** ajoute une ligne dans la saisie.
 
 ## Langue et aide {#language}
 

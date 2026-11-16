@@ -15,10 +15,18 @@ struct ChatConnection {
     bool restore = false;
     bool automatic_model = false;
 };
+struct ChatAttachment {
+    std::uint64_t id = 0;
+    std::string name, source, mime_type;
+    std::uint64_t bytes = 0;
+    // An immutable portable content block, loaded on the worker. No local path or URL fetching.
+    std::shared_ptr<const Json> content;
+};
 struct ChatMessage {
     std::uint64_t id = 0;
     std::string role, markdown;
     bool interrupted = false;
+    std::vector<ChatAttachment> attachments;
 };
 struct ChatActivity {
     std::string type, name;
@@ -68,6 +76,13 @@ struct ChatPanelOptions {
     std::function<void(const std::string&)> open_link;
     std::function<std::vector<std::filesystem::path>()> pick_attachments;
     const cyui::DocumentServices* document_services = nullptr;
+    std::function<void(const ChatAttachment&, bool save)> open_attachment;
+    // Optional host clipboard import; return true when consumed. Native text paste works otherwise.
+    std::function<bool(std::string&, std::vector<std::filesystem::path>&)> paste;
+    // Both callbacks are required to enable native edit/delete actions on user rows.
+    // The host owns provider-compatible mutations; the panel never rewrites a native session.
+    std::function<void(std::uint64_t, const std::string&)> edit_message;
+    std::function<void(std::uint64_t)> delete_message;
 };
 class ChatPanel {
     struct Impl;
@@ -82,5 +97,7 @@ class ChatPanel {
     // Dimensions are screen pixels; zero fills the available region.
     void draw(const char* id = "Chat", float width = 0, float height = 0);
     void set_draft(std::string);
+    const std::string& draft() const noexcept;
+    void add_attachments(std::vector<std::filesystem::path>);
 };
 } // namespace cymcp
