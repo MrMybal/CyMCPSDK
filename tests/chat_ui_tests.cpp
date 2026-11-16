@@ -27,6 +27,7 @@ class ProviderFixture final : public Provider {
             context.cancellation.check();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
+        context.emit("ProviderReady", {{"private", "MUST_NOT_APPEAR"}});
     }
     Json list_models(const CallContext&) override {
         return Json::array({{{"id", "fixture-model"}}});
@@ -114,6 +115,10 @@ int main() {
         wait(chat);
         check(chat.state().connected && chat.state().session_id == "fixture-id",
               "Native session metadata published");
+        check(chat.state().diagnostics.size() >= 3 &&
+                  chat.state().diagnostics.back().code == "Completed" &&
+                  chat.state().diagnostics.back().timestamp_ms > 0,
+              "Connection stages and timestamped completion reach structured diagnostics");
         chat.refresh_models();
         wait(chat);
         check(chat.state().models.at(0).at("id") == "fixture-model",
@@ -166,6 +171,18 @@ int main() {
         check(chat.state().error_code == "FixtureFailure" &&
                   chat.state().messages.back().markdown == "**partial",
               "Failure retains partial text and normalized error only");
+        check(chat.state().diagnostics.back().code == "FixtureFailure" &&
+                  chat.state().diagnostics.back().level == "error",
+              "Failed turn has a persistent error diagnostic");
+        bool private_diagnostics = true;
+        for (const auto& row : chat.state().diagnostics)
+            private_diagnostics &=
+                row.message.find("private-key-should-not-be-displayed") == std::string::npos &&
+                row.message.find("MUST_NOT_APPEAR") == std::string::npos &&
+                row.message.find("SECRET_NOT_IN_HISTORY") == std::string::npos &&
+                row.message.find("**partial") == std::string::npos;
+        check(private_diagnostics,
+              "Diagnostic records omit private native payloads, secrets and response text");
         probe->fail = false;
         auto attachment = directory / "sample.txt";
         {
@@ -210,6 +227,8 @@ int main() {
         check(chat.state().error_code.empty() && chat.state().phase == "ready" &&
                   chat.state().activity.size() <= 128,
               "Slow UI never fails a generation and keeps bounded activity");
+        check(chat.state().diagnostics.size() <= 1000,
+              "Long tool activity keeps bounded diagnostic memory");
         probe->flood = false;
         probe->oversized = true;
         chat.send("large");
@@ -246,6 +265,34 @@ int main() {
             probe->large_thinking = false;
         }
 
+        {
+            auto api_probe = std::make_shared<Probe>();
+            auto api_registry = std::make_shared<ProviderRegistry>(false);
+            api_registry->add({"test-api", "Test API", "http", "api-key", {}},
+                              [api_probe](const ProviderConfig&) {
+                                  return std::make_shared<ProviderFixture>(api_probe);
+                              });
+            ChatController api_chat(api_registry);
+            ChatConnection api_connection;
+            api_connection.provider_id = "test-api";
+            api_connection.automatic_model = true;
+            api_chat.open(api_connection);
+            wait(api_chat);
+            check(api_chat.state().phase == "choosing_model" && !api_chat.state().connected &&
+                      api_chat.state().models.size() == 1 && api_probe->sends == 0,
+                  "Remote API exposes its catalogue and asks for a model without submitting "
+                  "generation");
+            check(api_chat.state().diagnostics.back().code == "UnknownModel" &&
+                      api_chat.state().diagnostics.back().level == "info",
+                  "Expected model selection is explained as a setup step in diagnostics");
+            api_connection.model = "fixture-model";
+            api_chat.open(api_connection);
+            wait(api_chat);
+            api_chat.send("use selected model");
+            wait(api_chat);
+            check(api_chat.state().phase == "ready" && api_probe->sends == 1,
+                  "Selecting an API model connects and enables a real conversation turn");
+        }
         // Render the actual panel without an OS renderer, including all CyUI themes.
         ImGui::CreateContext();
         auto& io = ImGui::GetIO();

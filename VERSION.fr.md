@@ -2,7 +2,19 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
-## 0.5.4 — En développement
+## 0.5.5 — En développement
+
+- Onglets Tchat, Fournisseurs et Journal. Le catalogue se recherche et présente des états explicites ;
+  les paramètres ont leur éditeur et restent en mémoire lors d'un changement de fournisseur.
+- Correction du démarrage automatique : la démo initiale ne bloque plus la sélection d'une IA
+  installée. Une préférence explicite ne provoque pas de repli sur un autre fournisseur.
+- Diagnostics horodatés pour la détection, le protocole natif, le compte, les sessions,
+  les catalogues, le début de réponse, la fin, les erreurs et l'annulation.
+- Le journal se filtre et se copie ; un fichier privé par session est écrit en arrière-plan.
+  Les événements excluent le contenu des messages, les clés API et les identifiants natifs de session.
+- Le choix du modèle API distant est présenté comme une étape de configuration avec son catalogue.
+
+## 0.5.4
 
 - Défauts pensés pour les agents, sans limites arbitraires : sortie au maximum du modèle,
   tours d'outils illimités, aucun délai de tour (CLI et API) ; `timeout_ms` détecte seulement

@@ -137,11 +137,13 @@ void CodexProvider::connect(const CallContext& input) {
     try {
         p.process = std::make_unique<Process>(config);
         context.emit("ProcessStarted", {{"transport", "codex-app-server"}});
+        context.emit("ConnectionStage", {{"code", "ProtocolInit"}});
         p.rpc("initialize",
               {{"clientInfo", {{"name", "cymcp_sdk"}, {"version", version}}},
                {"capabilities", {{"experimentalApi", static_cast<bool>(p.options.tools)}}}},
               context);
         p.process->write("{\"method\":\"initialized\",\"params\":{}}\n");
+        context.emit("ConnectionStage", {{"code", "AccountCheck"}});
         auto account = p.rpc("account/read", {{"refreshToken", false}}, context);
         if (!account.contains("account") || account["account"].is_null())
             throw Error("AuthenticationRequired", "Sign in using the provider's native login flow");

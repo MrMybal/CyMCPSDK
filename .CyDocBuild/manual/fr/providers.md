@@ -5,7 +5,7 @@ description: Sélectionner CLI, API native ou service local avec ses vrais modè
 section: Guides
 parent: chat-lab
 order: 1
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Profils intégrés {#profiles}
@@ -31,7 +31,7 @@ et leur environnement. La détection couvre chaque profil CLI nommé ci-dessus ;
 générique `acp` nécessite une recette fournie par l'hôte. Une installation ne prouve pas
 que l'authentification ou la génération réussira.
 
-Pour une installation particulière, passer aux paramètres manuels. L'application hôte peut
+Pour une installation particulière, modifier les champs dans l'onglet **Fournisseurs**. L'application hôte peut
 ajouter ses dossiers d'exécutables, ses racines npm privées et ses recettes de détection.
 Les arguments sont des chaînes structurées ; le SDK ne les passe jamais à un shell.
 `process.environment` transmet des variables uniquement au processus enfant.

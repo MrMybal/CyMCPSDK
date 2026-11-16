@@ -5,7 +5,7 @@ description: Compiler et ouvrir l'exemple Windows, puis essayer la démonstratio
 section: Guides
 parent: overview
 order: 1
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Compiler l'exemple {#build}
@@ -27,7 +27,7 @@ avec repli WARP.
 ## Essayer sans compte {#demo}
 
 1. Lancer l'application. **L'anglais** est la langue par défaut.
-2. Désactiver **Automatic connection**, choisir **Demo / Markdown (no AI)** puis **Connect / New chat**.
+2. Ouvrir **Providers**, choisir **Demo / Markdown (no AI)** puis **Connect / New chat**.
 3. Saisir un message et choisir **Send**, ou appuyer sur **Ctrl+Entrée**.
 4. Lire le Markdown pendant son affichage progressif, sélectionner du texte ou copier un message.
 
@@ -40,7 +40,7 @@ La démonstration produit un texte local fixe ; elle n'appelle aucun modèle. Ch
 
 ## Langue et aide {#language}
 
-Dans **Appearance**, sélectionner **Français** ou **English**, puis un thème CyUI.
+Dans **Fournisseurs → Apparence**, sélectionner **Français** ou **English**, puis un thème CyUI.
 Reconnecter la démonstration après un changement de langue pour produire le nouveau texte
 dans cette langue. Les réponses IA suivent le modèle et la consigne ; changer la langue
 de l'interface ne traduit pas les messages existants.

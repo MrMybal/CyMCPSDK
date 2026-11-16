@@ -2,7 +2,19 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
-## 0.5.4 — In development
+## 0.5.5 — In development
+
+- Chat, Providers and Logs have dedicated tabs. Provider settings use a searchable catalogue,
+  explicit connection states and a separate editor; switching providers retains their fields in memory.
+- Fix automatic startup when the initial offline demo placeholder prevented an installed AI
+  from being selected. Explicit provider preferences still do not fall back to another provider.
+- Add timestamped diagnostics for discovery, native protocol/account checks, sessions,
+  model catalogues, response start, completion, failures and cancellation.
+- The Logs tab filters and copies events and opens a private session log written in the background.
+  Diagnostic records omit message bodies, API keys and native session IDs.
+- Remote API model selection is presented as a setup step with its returned catalogue.
+
+## 0.5.4
 
 - Agent-oriented defaults without arbitrary limits: model-maximum output, unlimited tool
   rounds, no turn deadline (CLI and API); `timeout_ms` only detects a silent connection.

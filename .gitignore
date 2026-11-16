@@ -5,6 +5,7 @@
 *.pdb
 __pycache__/
 /build-*.log
+*.log
 /build-toolchain.py
 /.tools/
 /CMakeUserPresets.json

@@ -5,24 +5,33 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Se connecter {#connect}
 
-La **Connexion automatique** est activée au démarrage. Chat Lab détecte les CLI natifs,
+Les onglets **Tchat**, **Fournisseurs** et **Journal** séparent les conversations, les paramètres et les diagnostics.
+Dans Fournisseurs, rechercher le catalogue, sélectionner une carte et modifier ses propres champs.
+Les réglages des autres fournisseurs restent en mémoire pour cette exécution. **Connecter / Nouveau tchat**
+ouvre la connexion et revient au tchat ; un double-clic sur une carte connecte directement.
+
+```image
+{"id":"provider-settings","src":"assets/providers-fr.png","alt":"Catalogue filtrable et paramètres de connexion et de modèle pour OpenAI API","controls":"minimal"}
+```
+
+La **Connexion automatique**, dans Fournisseurs, est activée au démarrage. Chat Lab détecte les CLI natifs,
 les installations npm de l'utilisateur, les services Ollama/LM Studio/compatibles démarrés
 à leurs adresses locales connues et les clés API des variables d'environnement. Il prépare
-la première connexion disponible sans envoyer de message. Cliquer sur une autre connexion
-disponible pour l'utiliser directement.
+la première connexion disponible sans envoyer de message. La démonstration initiale ne bloque pas ce choix.
 
 Les CLI conservent leur compte et leur modèle par défaut. Les services locaux peuvent choisir
 un modèle texte du catalogue réel. Les API distantes affichent leur catalogue et attendent
 votre choix de modèle. La liste propose les identifiants retournés ; un changement prend effet
 au prochain clic sur **Connecter**. La disponibilité dépend toujours du compte et du fournisseur.
 
-**Relancer la détection** recommence la recherche. **Autres fournisseurs / configuration**
-explique les installations, identifiants, adresses ou modèles locaux manquants. La recherche
+**Relancer la détection** recommence la recherche. Les cartes distinguent installation détectée,
+connexion active et configuration nécessaire. Le panneau du fournisseur sélectionné explique
+les installations, identifiants, adresses ou modèles locaux manquants. La recherche
 n'installe aucun fournisseur et ne connecte aucun compte. Les clés restent en mémoire.
 Une API distante n'est contactée qu'à la sélection de sa connexion.
 
@@ -30,7 +39,7 @@ Si un fournisseur natif demande une authentification, **Se connecter** ouvre son
 de connexion dans une console. Terminer cette connexion puis reconnecter ici. Cette action utilise
 l'installation détectée.
 
-Désactiver **Connexion automatique** pour ouvrir le formulaire manuel facultatif.
+Les champs manuels restent disponibles dans Fournisseurs avec le mode automatique activé.
 **Actualiser le catalogue** récupère les vrais modèles. Les modifications s'appliquent
 à la prochaine action **Connecter / Nouveau tchat**.
 Choisir un fournisseur préremplit son adresse conventionnelle, sa variable de clé et ses
@@ -40,10 +49,11 @@ paramètres, ainsi que l'installation détectée.
 {"id":"automatic-connection","src":"assets/chat-auto-fr.png","alt":"Chat Lab en français après détection et connexion automatiques, sans message envoyé","controls":"minimal"}
 ```
 
-Déplier **Exécutable** pour le chemin du CLI natif, le tableau JSON d'arguments et le dossier
-de travail. Utiliser le vrai `.exe`, ou `node.exe` accompagné des arguments de son script ;
+**Installation et connexion** contient l'exécutable et le dossier de travail ou les champs API.
+Déplier **Lancement avancé** pour les arguments JSON et les paramètres particuliers.
+Utiliser le vrai `.exe`, ou `node.exe` accompagné des arguments de son script ;
 les wrappers shell ne sont pas lancés. **Paramètres avancés (JSON)** reçoit les réglages du
-fournisseur. **Consigne système** fournit les instructions à la création de session.
+fournisseur. **Consigne système**, dans **Conversation et historique**, fournit les instructions de session.
 Consulter les [fournisseurs](doc:providers#configure).
 
 ## Envoyer et arrêter {#messages}
@@ -57,9 +67,28 @@ transcript Markdown ; l'activité et la réflexion apparaissent lorsque le fourn
 **Reconnecter** reprend explicitement la session actuelle, sans renvoyer le message interrompu.
 Consulter les [conversations et l'historique](doc:conversations).
 
+## Lire le journal {#logs}
+
+Ouvrir **Journal**, ou utiliser **Voir le journal** après une erreur. Les lignes indiquent l'heure locale,
+le fournisseur, l'opération, le code d'événement ou d'erreur, l'explication et la durée. La connexion native
+précise l'initialisation du protocole, le contrôle du compte et la création de session. La génération
+indique le début de la réponse et sa fin.
+
+Utiliser le filtre ou **Erreurs uniquement**, **Suivre le journal** et **Copier le journal** pour les diagnostics.
+**Ouvrir le fichier journal** ouvre le fichier privé de session dans `%LOCALAPPDATA%/CyMCPSDK/ChatLab/logs`.
+L'écriture se fait en arrière-plan. Survoler le nom du fichier pour son chemin complet. **Vider la vue**
+efface les lignes affichées et conserve le fichier. Messages, identifiants et clés API sont exclus.
+
+La vue garde les 2 000 dernières lignes. Chaque fichier est limité à 8 Mio ; une notification visible
+signale sa saturation ou un problème d'écriture. Le journal n'annule jamais une conversation.
+
+```image
+{"id":"connection-journal","src":"assets/logs-fr.png","alt":"Journal de Chat Lab avec les étapes et la fin d’une connexion native à Codex","controls":"minimal"}
+```
+
 ## Permettre à une IA d'utiliser les commandes {#commands}
 
-Déplier **Commandes de l'application**. La démonstration expose `get_counter` et `set_counter`,
+Dans Fournisseurs, déplier **Droits et outils de l’app**. La démonstration expose `get_counter` et `set_counter`,
 pour des entiers entre −1 000 000 et 1 000 000. Le panneau affiche la valeur actuelle.
 
 1. Activer **Autoriser la modification du compteur** pour permettre les écritures.

@@ -2,10 +2,12 @@
 #include "demo_provider.hpp"
 #include "exercise.hpp"
 #include "help.hpp"
+#include "journal.hpp"
 
 // Include Windows definitions before the dependent SDK headers.
 #include <windows.h>
 
+#include "workspace_ui.hpp"
 #include <array>
 #include <commdlg.h>
 #include <cstdlib>
@@ -303,6 +305,18 @@ struct App {
     ChatPanel panel;
     Json catalogue = registry->describe();
     std::string provider_id = "demo", error;
+    chat_example::Journal journal;
+    std::filesystem::path log_path;
+    std::uint64_t last_diagnostic = 0;
+    int page = 0; // Chat, Providers, Logs
+    bool page_changed = false, log_errors_only = false, log_follow = true;
+    cyui::TextFilter log_filter;
+    struct ProviderFields {
+        std::vector<std::string> text;
+        std::string secret;
+        std::map<std::string, std::string> environment;
+    };
+    std::map<std::string, ProviderFields> provider_fields;
     std::array<char, 256> model{}, key_env{}, resume{}, history_id{};
     std::array<char, 1024> endpoint{}, key{};
     std::array<char, 4096> executable{}, cwd{}, history_folder{};
@@ -314,6 +328,7 @@ struct App {
     std::vector<DiscoveredConnection> detected;
     DiscoveryOptions discovery_options;
     Cancellation discovery_cancel;
+    Clock::time_point discovery_started{};
     std::future<std::vector<DiscoveredConnection>> discovery_task;
     ~App() {
         discovery_cancel.cancel();
@@ -335,9 +350,69 @@ struct App {
             error.clear();
         } catch (const Error& failure) {
             error = failure.code;
+            journal.add("error", provider_id, "settings", error,
+                        chat_example::diagnostic_help(error));
         } catch (...) {
             error = "InvalidOptions";
+            journal.add("error", provider_id, "settings", error,
+                        chat_example::diagnostic_help(error));
         }
+    }
+    void start_diagnostics(std::filesystem::path path) {
+        log_path = std::move(path);
+        journal.open_file(log_path);
+        journal.add("info", "", "application", "Started", std::string("CyMCPSDK ") + version);
+    }
+    void sync_diagnostics() {
+        for (const auto& row : chat.state().diagnostics) {
+            if (row.id <= last_diagnostic)
+                continue;
+            journal.add(row.level, row.provider_id, row.operation, row.code,
+                        row.level == "error" ? chat_example::diagnostic_help(row.code)
+                                             : row.message,
+                        row.elapsed_ms);
+            last_diagnostic = row.id;
+            if (row.code == "UnknownModel" && chat.state().phase == "choosing_model")
+                show_page(1);
+        }
+    }
+    void show_page(int value) {
+        page = value;
+        page_changed = true;
+    }
+    void select_provider(const std::string& id) {
+        if (id == provider_id)
+            return;
+        provider_fields[provider_id] = {{model.data(), key_env.data(), resume.data(),
+                                         endpoint.data(), executable.data(), cwd.data(),
+                                         arguments.data(), settings.data(), system.data()},
+                                        key.data(),
+                                        process_environment};
+        auto saved = provider_fields.find(id);
+        if (saved == provider_fields.end())
+            apply_defaults(id);
+        else {
+            provider_id = id;
+            const auto& text = saved->second.text;
+            assign(model, text[0]);
+            assign(key_env, text[1]);
+            assign(resume, text[2]);
+            assign(endpoint, text[3]);
+            assign(executable, text[4]);
+            assign(cwd, text[5]);
+            assign(arguments, text[6]);
+            assign(settings, text[7]);
+            assign(system, text[8]);
+            assign(key, saved->second.secret);
+            process_environment = saved->second.environment;
+        }
+        journal.add("info", id, "settings", "ProviderSelected", "Provider settings selected");
+        error.clear();
+    }
+    void browse_executable() {
+        auto selected = choose_files(window, true);
+        if (!selected.empty())
+            assign(executable, path_utf8(selected.front()));
     }
     void load(const std::filesystem::path& path) {
         std::ifstream file(path, std::ios::binary);
@@ -364,6 +439,18 @@ struct App {
         assign(cwd, process.value("cwd", std::string()));
         assign(arguments, process.value("arguments", Json::array()).dump());
         process_environment = process.value("environment", std::map<std::string, std::string>());
+        const Json discovery_profiles = config.value("discovery", Json::object());
+        for (const auto& [id, entry] : discovery_profiles.items()) {
+            if (entry.contains("api_key"))
+                throw Error("InvalidOptions", "Use environment credentials");
+            ProviderConfig candidate;
+            const auto native = entry.value("process", Json::object());
+            candidate.process.executable =
+                std::filesystem::u8path(native.value("executable", std::string()));
+            candidate.process.arguments = native.value("arguments", std::vector<std::string>());
+            candidate.settings = entry.value("settings", Json::object());
+            discovery_options.configured[id] = std::move(candidate);
+        }
         auto options = config.value("settings", Json::object());
         allow_all = options.value("allow_all_actions", false);
         options.erase("allow_all_actions");
@@ -428,6 +515,9 @@ struct App {
         } else if (restore)
             throw Error("InvalidOptions", "Enable history first");
         chat.open(std::move(connection));
+        journal.add("info", provider_id, "connection", "ConfigurationReady",
+                    model[0] ? "Connecting with the selected model"
+                             : "Connecting with provider defaults");
     }
     ProviderConfig current_config() const {
         ProviderConfig config;
@@ -452,6 +542,9 @@ struct App {
         if (provider_id != "demo" && (executable[0] || endpoint[0] || key[0] || key_env[0]))
             options.configured[provider_id] = current_config();
         connect_after_detection = connect_first;
+        discovery_started = Clock::now();
+        journal.add("info", "", "discovery", "Started",
+                    "Searching installed CLIs, API credentials and local services");
         CallContext context;
         context.cancellation = discovery_cancel;
         discovery_task =
@@ -467,6 +560,7 @@ struct App {
         assign(resume, "");
         assign(key, "");
         assign(executable, "");
+        assign(cwd, "");
         assign(arguments, "[]");
         process_environment.clear();
         Json defaults = Json::object();
@@ -519,18 +613,29 @@ struct App {
             return;
         action([&] {
             detected = discovery_task.get();
+            const auto elapsed =
+                std::chrono::duration<double, std::milli>(Clock::now() - discovery_started).count();
+            for (const auto& row : detected)
+                journal.add("info", row.provider_id, "discovery", row.state, discovery_status(row));
+            journal.add("success", "", "discovery", "Completed", "Provider discovery completed",
+                        elapsed);
             if (!automatic || !connect_after_detection || chat.state().busy ||
                 chat.state().connected)
                 return;
             auto selected = std::find_if(detected.begin(), detected.end(), [&](const auto& row) {
-                return row.provider_id == provider_id;
+                // Demo is the initial offline placeholder, not an explicit AI preference.
+                return provider_id != "demo" && row.provider_id == provider_id;
             });
-            if (selected == detected.end())
+            if (selected == detected.end() && (provider_id.empty() || provider_id == "demo"))
                 selected = std::find_if(detected.begin(), detected.end(),
                                         [](const auto& row) { return row.available(); });
             if (selected != detected.end() && selected->available()) {
                 use_detected(*selected, selected->provider_id == provider_id);
                 connect();
+            } else {
+                journal.add("warning", provider_id == "demo" ? "" : provider_id, "connection",
+                            "NotAvailable",
+                            "No available connection matches the current selection");
             }
         });
         connect_after_detection = false;
@@ -559,58 +664,6 @@ struct App {
             return "Service unavailable — start it and detect again";
         return "Manual configuration required";
     }
-    void automatic_panel() {
-        if (discovery_task.valid())
-            ImGui::TextWrapped("%s", cyui::tr("Detecting installed AI connections...").c_str());
-        {
-            cyui::ScopedDisabled disabled(discovery_task.valid());
-            if (cyui::button(cyui::trLabel("Detect again").c_str()))
-                action([&] { detect_connections(true); });
-        }
-        ImGui::TextWrapped("%s", cyui::tr("Available connections").c_str());
-        bool found = false;
-        for (const auto& row : detected) {
-            if (!row.available())
-                continue;
-            found = true;
-            if (ImGui::Selectable((row.name + "##auto-" + row.provider_id).c_str(),
-                                  row.provider_id == provider_id))
-                action([&] {
-                    use_detected(row);
-                    connect();
-                });
-            ImGui::TextWrapped("%s", cyui::tr(discovery_status(row)).c_str());
-        }
-        if (!found && !discovery_task.valid())
-            ImGui::TextWrapped("%s", cyui::tr("No connection detected. Install a CLI, start a "
-                                              "local server, or add an API key below.")
-                                         .c_str());
-        if (provider_id != "demo" && found &&
-            cyui::button(cyui::trLabel("Connect").c_str(), cyui::Variant::secondary,
-                         cyui::dp(-1, 0)))
-            action([&] { connect(); });
-        if (cyui::beginSection(cyui::trLabel("Other providers / setup").c_str(), !found)) {
-            for (const auto& row : detected) {
-                if (row.available())
-                    continue;
-                ImGui::TextWrapped("%s", row.name.c_str());
-                ImGui::TextWrapped("%s", cyui::tr(discovery_status(row)).c_str());
-                if (!row.api_key_env.empty())
-                    cyui::textMono("%s", row.api_key_env.c_str());
-                if (cyui::button(
-                        (cyui::trLabel("Manual settings") + "##" + row.provider_id).c_str())) {
-                    action([&] {
-                        use_detected(row);
-                        automatic = false;
-                    });
-                }
-            }
-            cyui::endSection();
-        }
-        ImGui::TextWrapped(
-            "%s",
-            cyui::tr("Detected automatically. No message is sent until you press Send.").c_str());
-    }
     Json provider_entry() const {
         for (const auto& item : catalogue)
             if (item.at("id") == provider_id)
@@ -635,203 +688,20 @@ struct App {
             process.arguments.push_back(argument.get<std::string>());
         return process;
     }
-    void sign_in_panel() {
-        const auto authentication = provider_entry().value("authentication", std::string());
-        if (chat.state().error_code != "AuthenticationRequired" ||
-            authentication.rfind("native-account", 0) != 0)
-            return;
-        ImGui::TextWrapped(
-            "%s", cyui::tr("Sign in with the provider's native CLI, then reconnect.").c_str());
-        if (cyui::button(cyui::trLabel("Sign in").c_str(), cyui::Variant::secondary,
-                         cyui::dp(-1, 0)))
-            action([&] { open_console(sign_in_process()); });
-        cyui::textFaint(
-            "%s",
-            cyui::tr("A console opens: finish signing in there, then press Connect.").c_str());
+    void set_model(const std::string& id) {
+        assign(model, id);
     }
-    void connection_panel() {
-        cyui::heading(cyui::tr("Connection").c_str(), 2);
-        ImGui::SameLine();
-        if (cyui::button(cyui::trLabel("Help (F1)").c_str()))
-            action([&] { open_help(); });
-        {
-            cyui::ScopedDisabled disabled(chat.state().busy);
-            if (cyui::toggleSwitch(cyui::trLabel("Automatic connection").c_str(), &automatic) &&
-                automatic)
-                action([&] { detect_connections(!chat.state().connected); });
-            if (automatic) {
-                automatic_panel();
-            } else {
-                if (cyui::beginProperties("##provider-properties", 110)) {
-                    cyui::property(cyui::tr("Provider").c_str());
-                    auto name = provider_id;
-                    for (const auto& item : catalogue)
-                        if (item.at("id") == provider_id)
-                            name = item.at("name").get<std::string>();
-                    if (ImGui::BeginCombo("##provider", cyui::tr(name.c_str()).c_str())) {
-                        cyui::filterBox("##provider-filter", provider_filter);
-                        for (const auto& item : catalogue) {
-                            auto id = item.at("id").get<std::string>();
-                            auto label = item.at("name").get<std::string>();
-                            if (!provider_filter.matches(label.c_str(), id.c_str()))
-                                continue;
-                            if (ImGui::Selectable((cyui::tr(label.c_str()) + "##" + id).c_str(),
-                                                  id == provider_id)) {
-                                action([&] { apply_defaults(id); });
-                            }
-                        }
-                        ImGui::EndCombo();
-                    }
-                    cyui::property(cyui::tr("Model ID").c_str());
-                    ImGui::InputText("##model", model.data(), model.size());
-                    cyui::property(cyui::tr("Endpoint").c_str());
-                    ImGui::InputText("##endpoint", endpoint.data(), endpoint.size());
-                    cyui::property(cyui::tr("API key environment").c_str());
-                    ImGui::InputText("##key-env", key_env.data(), key_env.size());
-                    cyui::property(cyui::tr("API key (memory only)").c_str());
-                    ImGui::InputText("##key", key.data(), key.size(), ImGuiInputTextFlags_Password);
-                    cyui::endProperties();
-                }
-                if (cyui::beginSection(cyui::trLabel("Executable").c_str(), false)) {
-                    if (cyui::beginProperties("##process")) {
-                        cyui::property(cyui::tr("Executable").c_str());
-                        ImGui::InputText("##exe", executable.data(), executable.size());
-                        cyui::property(cyui::tr("Working directory").c_str());
-                        ImGui::InputText("##cwd", cwd.data(), cwd.size());
-                        cyui::property(cyui::tr("Arguments (JSON array)").c_str());
-                        ImGui::InputText("##argv", arguments.data(), arguments.size());
-                        cyui::endProperties();
-                    }
-                    if (cyui::button(cyui::trLabel("Browse").c_str()))
-                        action([&] {
-                            auto selected = choose_files(window, true);
-                            if (!selected.empty())
-                                assign(executable, path_utf8(selected.front()));
-                        });
-                    cyui::endSection();
-                }
-                if (cyui::beginSection(cyui::trLabel("Advanced settings (JSON)").c_str(), false)) {
-                    ImGui::InputTextMultiline("##settings", settings.data(), settings.size(),
-                                              cyui::dp(-1, 100));
-                    cyui::endSection();
-                }
-                if (cyui::beginSection(cyui::trLabel("System prompt").c_str(), false)) {
-                    ImGui::InputTextMultiline("##system", system.data(), system.size(),
-                                              cyui::dp(-1, 80));
-                    cyui::endSection();
-                }
-                cyui::toggleSwitch(cyui::trLabel("Save history").c_str(), &save_history);
-                if (save_history && cyui::beginProperties("##history")) {
-                    cyui::property(cyui::tr("History folder").c_str());
-                    ImGui::InputText("##folder", history_folder.data(), history_folder.size());
-                    cyui::property(cyui::tr("History ID").c_str());
-                    ImGui::InputText("##history-id", history_id.data(), history_id.size());
-                    cyui::endProperties();
-                }
-                if (cyui::beginSection(cyui::trLabel("Resume native ID").c_str(), false)) {
-                    ImGui::InputText("##resume", resume.data(), resume.size());
-                    cyui::endSection();
-                }
-                if (cyui::button(cyui::trLabel("Connect / New chat").c_str(),
-                                 cyui::Variant::secondary, cyui::dp(-1, 0)))
-                    action([&] { connect(); });
-                if (cyui::button(cyui::trLabel("Restore saved chat").c_str(),
-                                 cyui::Variant::secondary, cyui::dp(-1, 0)))
-                    action([&] { connect(true); });
-            }
-            cyui::toggleSwitch(cyui::trLabel("Allow all actions").c_str(), &allow_all);
-        }
-        {
-            cyui::ScopedDisabled disabled(chat.state().busy || !chat.state().connected);
-            if (cyui::button(cyui::trLabel("Refresh model catalogue").c_str(),
-                             cyui::Variant::secondary, cyui::dp(-1, 0)))
-                action([&] { chat.refresh_models(); });
-        }
-        const auto& models = chat.state().models;
-        const auto& items = models.is_array()         ? models
-                            : models.contains("data") ? models.at("data")
-                                                      : Json::array();
-        if (items.is_array() && !items.empty() &&
-            ImGui::BeginCombo("##model-catalogue", model[0] ? model.data()
-                                                   : chat.state().model.empty()
-                                                       ? cyui::tr("Provider default").c_str()
-                                                       : chat.state().model.c_str())) {
-            if (automatic && ImGui::Selectable(cyui::tr("Provider default").c_str(), !model[0]))
-                assign(model, "");
-            for (const auto& item : items) {
-                auto id = item.is_string() ? item.get<std::string>()
-                                           : item.value("model", item.value("id", std::string()));
-                if (!id.empty() && ImGui::Selectable(id.c_str(), id == model.data()))
-                    assign(model, id);
-            }
-            ImGui::EndCombo();
-        }
-        if (!items.empty())
-            ImGui::TextWrapped("%s",
-                               cyui::tr("Selected model applies to the next connection.").c_str());
-        if (!items.empty() && !model[0] && chat.state().error_code == "UnknownModel")
-            cyui::callout(cyui::Tone::info,
-                          cyui::tr("Choose a model from the catalogue, then connect.").c_str());
-        if (!automatic && provider_id == "demo")
-            cyui::callout(cyui::Tone::info,
-                          cyui::tr("Demo mode: deterministic local text, no AI request.").c_str());
-        if (cyui::beginSection(cyui::trLabel("App commands").c_str(), testing)) {
-            cyui::textMono("%s: %d", cyui::tr("Counter").c_str(),
-                           commands.snapshot().at("value").get<int>());
-            bool writable = commands.changes_allowed();
-            if (cyui::toggleSwitch(cyui::trLabel("Allow counter changes").c_str(), &writable))
-                commands.allow_changes(writable);
-            {
-                cyui::ScopedDisabled disabled(chat.state().busy);
-                cyui::toggleSwitch(cyui::trLabel("AI may use app commands").c_str(), &app_tools);
-            }
-            bool enabled = !commands.endpoint().empty();
-            if (cyui::toggleSwitch(cyui::trLabel("Expose local MCP").c_str(), &enabled))
-                action([&] {
-                    if (enabled)
-                        commands.start();
-                    else
-                        commands.stop();
-                });
-            if (!commands.endpoint().empty()) {
-                ImGui::TextUnformatted(commands.endpoint().c_str());
-                if (cyui::button(cyui::trLabel("Copy MCP token").c_str()))
-                    ImGui::SetClipboardText(commands.token().c_str());
-            }
-            cyui::endSection();
-        }
-        ImGui::PushTextWrapPos();
-        cyui::textFaint("%s",
-                        cyui::tr("Connection settings apply to the next connection.").c_str());
-        cyui::textFaint(
-            "%s", cyui::tr("Native CLI accounts are reused. API keys remain in memory.").c_str());
-        if (!error.empty())
-            cyui::textColoured(cyui::palette().error, "%s", error.c_str());
-        sign_in_panel();
-        ImGui::PopTextWrapPos();
-        if (cyui::beginSection(cyui::trLabel("Appearance").c_str(), true)) {
-            if (cyui::beginProperties("##appearance")) {
-                cyui::property(cyui::tr("Language").c_str());
-                if (ImGui::BeginCombo("##language",
-                                      cyui::locale() == "fr" ? "Français" : "English")) {
-                    if (ImGui::Selectable("English", cyui::locale() == "en"))
-                        cyui::setLocale("en");
-                    if (ImGui::Selectable("Français", cyui::locale() == "fr"))
-                        cyui::setLocale("fr");
-                    ImGui::EndCombo();
-                }
-                cyui::property(cyui::tr("Theme").c_str());
-                if (ImGui::BeginCombo("##theme", cyui::currentThemeKey().c_str())) {
-                    for (const auto& theme : cyui::builtInThemes())
-                        if (ImGui::Selectable(theme.name.c_str(),
-                                              cyui::currentThemeKey() == theme.key))
-                            cyui::setTheme(theme.key.c_str());
-                    ImGui::EndCombo();
-                }
-                cyui::endProperties();
-            }
-            cyui::endSection();
-        }
+    void sign_in() {
+        open_console(sign_in_process());
+        journal.add("info", provider_id, "authentication", "SignInOpened",
+                    "Native sign-in console opened");
+    }
+    void open_log() {
+        if (log_path.empty() || !std::filesystem::is_regular_file(log_path))
+            throw Error("FileError", "Log file is not available");
+        if (reinterpret_cast<INT_PTR>(ShellExecuteW(window, L"open", log_path.c_str(), nullptr,
+                                                    nullptr, SW_SHOWNORMAL)) <= 32)
+            throw Error("FileError", "Cannot open log file");
     }
     void open_help() {
         std::wstring path(32768, L'\0');
@@ -847,29 +717,43 @@ struct App {
     void draw() {
         chat.poll();
         poll_discovery();
+        sync_diagnostics();
         if (ImGui::IsKeyPressed(ImGuiKey_F1))
             action([&] { open_help(); });
-        auto viewport = ImGui::GetMainViewport();
+        const auto viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
         ImGui::Begin("CyMCPSDK Chat Lab", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
-        cyui::panelHeader("CyMCPSDK Chat Lab", cyui::tr("Windows test application").c_str());
+        const auto subtitle = std::string(version) + "  ·  " + cyui::tr("Chat and AI providers");
+        cyui::panelHeader("CyMCPSDK Chat Lab", subtitle.c_str());
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - cyui::dp(100));
+        if (cyui::button(cyui::trLabel("Help (F1)").c_str()))
+            action([&] { open_help(); });
         cyui::divider();
-        if (ImGui::BeginTable("##layout", 2,
-                              ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
-            ImGui::TableSetupColumn("##connection", ImGuiTableColumnFlags_WidthFixed,
-                                    cyui::dp(330));
-            ImGui::TableSetupColumn("##chat", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::BeginChild("##connection-scroll");
-            connection_panel();
-            ImGui::EndChild();
-            ImGui::TableNextColumn();
-            panel.draw();
-            ImGui::EndTable();
+        const bool requested = page_changed;
+        const int requested_page = page;
+        page_changed = false;
+        if (ImGui::BeginTabBar("##workspace-tabs")) {
+            const char* names[]{"Chat", "Providers", "Logs"};
+            for (int index = 0; index != 3; ++index) {
+                if (ImGui::BeginTabItem(
+                        cyui::trLabel(names[index]).c_str(), nullptr,
+                        requested && requested_page == index ? ImGuiTabItemFlags_SetSelected : 0)) {
+                    page = index;
+                    ImGui::BeginChild("##workspace-content");
+                    if (index == 0)
+                        chat_example::draw_chat(*this);
+                    else if (index == 1)
+                        chat_example::draw_providers(*this);
+                    else
+                        chat_example::draw_logs(*this);
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
+                }
+            }
+            ImGui::EndTabBar();
         }
         ImGui::End();
         cyui::renderNotifications();
@@ -878,7 +762,7 @@ struct App {
 } // namespace
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     bool smoke = false, hidden = false, test_ready = false;
-    std::filesystem::path capture, config, exercise_path, report_path;
+    std::filesystem::path capture, config, exercise_path, report_path, log_file;
     std::string theme = "mid-grey", language = "en";
     int count = 0;
     auto args = CommandLineToArgvW(GetCommandLineW(), &count);
@@ -900,6 +784,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             capture = args[++n];
         else if (n + 1 < count && argument == L"--config")
             config = args[++n];
+        else if (n + 1 < count && argument == L"--log-file")
+            log_file = args[++n];
         else if (n + 1 < count && argument == L"--theme")
             theme = path_utf8(args[++n]);
         else if (n + 1 < count && argument == L"--language")
@@ -962,6 +848,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     cyui::apply(ui);
     cyui::loadFonts();
     translations();
+    chat_example::workspace_translations();
     cyui::setLocale(language.c_str());
     ImGui_ImplWin32_Init(window);
     ImGui_ImplDX11_Init(device.Get(), renderer.Get());
@@ -973,6 +860,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     {
         App app(window);
         app.testing = static_cast<bool>(exercise);
+        if (log_file.empty())
+            log_file = exercise ? report_path.parent_path() / "application.log"
+                       : !capture.empty()
+                           ? capture.parent_path() / "logs" / (path_utf8(capture.stem()) + ".log")
+                           : std::filesystem::u8path(app.history_folder.data()).parent_path() /
+                                 "logs" / ("chat-" + random_token(16) + ".log");
+        app.start_diagnostics(log_file);
         if (!config.empty())
             app.action([&] { app.load(config); });
         if (smoke || !capture.empty() || exercise)

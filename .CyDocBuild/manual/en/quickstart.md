@@ -5,7 +5,7 @@ description: Build and open the Windows example, then try its local Markdown dem
 section: Guides
 parent: overview
 order: 1
-revision: 2
+revision: 3
 ---
 
 ## Build the example {#build}
@@ -26,7 +26,7 @@ The Microsoft Visual C++ 2015–2022 x64 runtime is required. DX11 is used, with
 ## Try without an account {#demo}
 
 1. Start the application. **English** is the default language.
-2. Disable **Automatic connection**, choose **Demo / Markdown (no AI)** and **Connect / New chat**.
+2. Open **Providers**, select **Demo / Markdown (no AI)** and choose **Connect / New chat**.
 3. Type a message and choose **Send**, or press **Ctrl+Enter**.
 4. Read the streamed Markdown, select text or copy a message.
 
@@ -39,7 +39,7 @@ The demonstration generates fixed local text; it does not call a model. Choose a
 
 ## Language and help {#language}
 
-Under **Appearance**, choose **English** or **Français**, and a CyUI theme.
+In **Providers → Appearance**, choose **English** or **Français**, and a CyUI theme.
 Reconnect the demonstration after changing language to produce new text in that language.
 AI responses follow the selected model and your prompt; changing interface language
 does not translate existing messages.

@@ -206,7 +206,7 @@ struct Run {
     std::unique_ptr<Process> process;
     std::filesystem::path report;
     Run(const std::string& app, const std::filesystem::path& directory, Json config, Json steps,
-        bool ready = false) {
+        bool ready = false, std::string theme = "mid-grey", std::string language = "fr") {
         private_directory(directory);
         auto input = directory / "config.json", plan = directory / "plan.json";
         report = directory / "report.json";
@@ -222,7 +222,9 @@ struct Run {
                              "--report",
                              path_utf8(report),
                              "--language",
-                             "fr",
+                             language,
+                             "--theme",
+                             theme,
                              "--capture",
                              path_utf8(directory / "screen.png")};
         if (ready)
@@ -243,6 +245,15 @@ struct Run {
               "Native app exercise reports successful terminal completion");
         check(report_value.dump().find(fixture_key) == std::string::npos,
               "API key excluded from app validation report");
+        {
+            std::ifstream log(report.parent_path() / "application.log", std::ios::binary);
+            const std::string contents(std::istreambuf_iterator<char>(log), {});
+            check(!contents.empty(), "Application writes a persistent diagnostic journal");
+            check(contents.find(fixture_key) == std::string::npos &&
+                      contents.find("APP_TOOL") == std::string::npos &&
+                      contents.find("APP_OK") == std::string::npos,
+                  "Journal excludes API credentials, prompts and generated response text");
+        }
         check(report_value.at("frames").get<int>() > 5,
               "Real window rendered throughout the exercise");
         return report_value;
@@ -274,6 +285,71 @@ int main(int argc, char** argv) {
         }
         ModelServer model;
         Json report = Json::array();
+        for (const std::string theme :
+             {"mid-grey", "light-grey", "amber-night", "violet", "navy"}) {
+            for (int page : {1, 2}) {
+                Run run(argv[1], output / ("workspace-" + theme + "-" + std::to_string(page)),
+                        {{"provider", "demo"}},
+                        Json::array({{{"action", "select-provider"}, {"id", "openai"}},
+                                     {{"action", "page"},
+                                      {"index", page},
+                                      {"page", page},
+                                      {"log_code", "ProviderSelected"}}}),
+                        false, theme, page == 1 ? "en" : "fr");
+                report.push_back(run.finish());
+            }
+        }
+        {
+            // The real no-config startup initially selects the offline demo. This must not
+            // prevent discovery from selecting an installed AI. Earlier tests pinned Codex.
+            Run run(argv[1], output / "startup-no-preference",
+                    {{"provider", "demo"},
+                     {"automatic", true},
+                     {"discovery_environment", false},
+                     {"discovery",
+                      {{"codex",
+                        {{"process",
+                          {{"executable", argv[2]},
+                           {"arguments",
+                            Json::array({"--codex-fixture", "--fixture-app-delay"})}}}}}}}},
+                    Json::array({{{"action", "automatic-connect"},
+                                  {"provider", "codex"},
+                                  {"log_code", "Completed"}},
+                                 {{"action", "send"},
+                                  {"text", "startup"},
+                                  {"reply", "Hello fixture"},
+                                  {"streaming", true}},
+                                 {{"action", "page"}, {"index", 1}, {"page", 1}},
+                                 {{"action", "page"},
+                                  {"index", 2},
+                                  {"page", 2},
+                                  {"log_code", "FirstResponse"}}}));
+            report.push_back(run.finish());
+        }
+        {
+            Run run(
+                argv[1], output / "provider-settings-tabs",
+                {{"provider", "openai-compatible"},
+                 {"model", "fixture-model"},
+                 {"api_key_env", "CYMCP_TEST_API_KEY"},
+                 {"settings", {{"base_url", model.base + "/v1"}}}},
+                Json::array(
+                    {{{"action", "page"}, {"index", 1}, {"page", 1}},
+                     {{"action", "select-provider"},
+                      {"id", "claude-code"},
+                      {"selected_provider", "claude-code"}},
+                     {{"action", "select-provider"},
+                      {"id", "openai-compatible"},
+                      {"configured_model", "fixture-model"}},
+                     {{"action", "connect"}},
+                     {{"action", "send"}, {"text", "REJECT"}, {"error", "AuthenticationRequired"}},
+                     {{"action", "page"},
+                      {"index", 2},
+                      {"page", 2},
+                      {"error", "AuthenticationRequired"},
+                      {"log_code", "AuthenticationRequired"}}}));
+            report.push_back(run.finish());
+        }
         {
             const auto before = model.requests.load();
             Run run(argv[1], output / "automatic-local",

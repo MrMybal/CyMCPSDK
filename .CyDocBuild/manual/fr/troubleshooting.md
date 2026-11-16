@@ -5,10 +5,14 @@ description: Comprendre les erreurs fournisseur, les interruptions et l'absence 
 section: Guides
 parent: overview
 order: 4
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Erreurs de connexion {#connection}
+
+Ouvrir **Journal** pour identifier l'étape : détection, protocole, compte, catalogue ou session.
+Utiliser **Copier le journal** ou **Ouvrir le fichier journal** pour les diagnostics.
+Consulter les [commandes du journal](doc:chat-lab#logs).
 
 | Erreur ou symptôme | Action |
 | --- | --- |

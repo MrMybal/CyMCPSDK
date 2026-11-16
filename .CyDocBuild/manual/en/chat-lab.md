@@ -5,29 +5,39 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 3
+revision: 4
 ---
 
 ## Connect {#connect}
 
-**Automatic connection** is enabled at startup. Chat Lab detects installed native CLIs,
+The **Chat**, **Providers** and **Logs** tabs separate conversations, connection settings and diagnostics.
+Open **Providers** to search the catalogue, select a provider and edit its own fields. Selecting
+a provider keeps the other providers' fields in memory for this run. Use **Connect / New chat**
+to open it and return to Chat, or double-click a provider card to connect directly.
+
+```image
+{"id":"provider-settings","src":"assets/providers-en.png","alt":"Searchable provider catalogue with the OpenAI API connection and model settings","controls":"minimal"}
+```
+
+**Automatic connection**, in Providers, is enabled at startup. Chat Lab detects installed native CLIs,
 user npm installations, running Ollama/LM Studio/compatible services at their known local
 addresses, and API keys supplied through environment variables. It prepares the first available
-connection without sending a message. Click another available connection to use it directly.
+connection without sending a message. The initial offline demonstration does not block this selection.
 
 Native CLIs retain their own default model and account. Local services can select a text model
 from the actual catalogue. Remote APIs display their catalogue and wait for your model choice.
 The model dropdown offers returned IDs; a changed selection takes effect when you click
 **Connect**. Availability can still depend on your account and provider.
 
-**Detect again** repeats the scan. **Other providers / setup** explains missing installations,
+**Detect again** repeats the scan. Provider cards distinguish detected installations, active
+connections and setup requirements. The selected provider explains missing installations,
 credentials, endpoints or local models. No provider is installed or authenticated by the scan.
 API keys remain in memory. Cloud APIs are contacted only when their connection is selected.
 
 If a native provider reports that authentication is required, **Sign in** opens its own login
 in a console. Complete that login and reconnect here. This action uses the detected installation.
 
-Disable **Automatic connection** to open the optional manual form. **Refresh model catalogue**
+Manual fields remain available in Providers with automatic mode enabled. **Refresh model catalogue**
 retrieves real model IDs. Model and connection changes apply to the next **Connect / New chat**.
 Selecting a provider pre-fills its conventional endpoint, key variable and settings, together
 with any detected installation.
@@ -36,9 +46,10 @@ with any detected installation.
 {"id":"automatic-connection","src":"assets/chat-auto-en.png","alt":"Automatic detection of installed CLIs and a real streamed Codex reply","controls":"minimal"}
 ```
 
-Expand **Executable** for a native CLI path, JSON argument array and working directory.
+**Installation and connection** contains the CLI path and working directory or the API endpoint/key fields.
+Expand **Advanced launch settings** for the JSON argument array and provider-specific settings.
 Use the actual `.exe`, or `node.exe` and its script arguments; shell wrappers are not launched.
-**Advanced settings (JSON)** accepts provider-specific settings. **System prompt** supplies
+**Advanced settings (JSON)** accepts provider-specific settings. **System prompt**, under **Conversation and history**, supplies
 instructions at session creation. See [providers](doc:providers#configure).
 
 ## Send and stop {#messages}
@@ -51,9 +62,27 @@ when emitted by the provider. **Follow responses** controls automatic scrolling.
 **Reconnect** explicitly resumes the current session; it does not resend the interrupted message.
 See [conversations and history](doc:conversations).
 
+## Read the journal {#logs}
+
+Open **Logs**, or use **View logs** after an error. Rows show the local time, provider, operation,
+event/error code, explanation and duration. Native connection stages include protocol initialization,
+account checks and session creation. Generation events show response start and completion.
+
+Use the text filter or **Errors only**, toggle **Follow log**, and use **Copy log** to share diagnostics.
+**Open log file** opens the private session file saved in `%LOCALAPPDATA%/CyMCPSDK/ChatLab/logs`.
+File writing runs in the background. Hover the filename for its full path. **Clear view** clears the
+on-screen rows and preserves the file. Message contents, credentials and native session IDs are excluded.
+
+The view retains the newest 2,000 rows. Each session file is limited to 8 MiB; a visible notice explains
+when it stops growing or cannot be written. Logging never cancels a conversation.
+
+```image
+{"id":"connection-journal","src":"assets/logs-en.png","alt":"Chat Lab journal showing the stages and completion of a native Codex connection","controls":"minimal"}
+```
+
 ## Let an AI use app commands {#commands}
 
-Expand **App commands**. The demonstration exposes `get_counter` and `set_counter`,
+In Providers, expand **Permissions and app tools**. The demonstration exposes `get_counter` and `set_counter`,
 with integer values between −1,000,000 and 1,000,000. The current value is visible in the panel.
 
 1. Enable **Allow counter changes** if you want writes to succeed.

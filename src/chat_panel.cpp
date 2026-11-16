@@ -9,6 +9,8 @@ namespace {
 const char* phase_label(const std::string& phase) {
     if (phase == "ready")
         return "Ready";
+    if (phase == "choosing_model")
+        return "Choose a model";
     if (phase == "connecting")
         return "Connecting";
     if (phase == "generating")
@@ -28,6 +30,8 @@ const char* phase_label(const std::string& phase) {
     return "Disconnected";
 }
 const char* error_label(const std::string& code) {
+    if (code == "UnknownModel")
+        return "Select a model in Providers, then connect.";
     if (code == "AuthenticationRequired")
         return "The provider requires authentication in its native environment.";
     if (code == "ExecutableMissing")
@@ -55,6 +59,9 @@ void register_chat_translations() {
             "fr",
             {
                 {"Ready", "Prêt"},
+                {"Choose a model", "Choisir un modèle"},
+                {"Select a model in Providers, then connect.",
+                 "Sélectionnez un modèle dans Fournisseurs puis connectez."},
                 {"Connecting", "Connexion"},
                 {"Generating", "Génération"},
                 {"Loading models", "Chargement des modèles"},
@@ -80,6 +87,7 @@ void register_chat_translations() {
                 {"First token", "Premier token"},
                 {"Total", "Total"},
                 {"No messages yet", "Aucun message pour le moment"},
+                {"Send your first message.", "Envoyez votre premier message."},
                 {"Connect a provider and send your first message.",
                  "Connectez un fournisseur puis envoyez votre premier message."},
                 {"Type a message. Ctrl+Enter sends; Enter inserts a new line.",
@@ -232,7 +240,10 @@ void ChatPanel::draw(const char* id, float width, float height) {
     if (s.rows.empty()) {
         ImGui::BeginChild("##empty", {0, transcript_height});
         cyui::emptyState(cyui::tr("No messages yet").c_str(),
-                         cyui::tr("Connect a provider and send your first message.").c_str(),
+                         cyui::tr(state.connected
+                                      ? "Send your first message."
+                                      : "Connect a provider and send your first message.")
+                             .c_str(),
                          cyui::icon::mail);
         ImGui::EndChild();
     } else {
@@ -280,12 +291,10 @@ void ChatPanel::draw(const char* id, float width, float height) {
         ImGui::SetKeyboardFocusHere();
         s.focus_draft = false;
     }
-    const bool submit =
-        ImGui::InputTextMultiline("##draft", s.draft.data(), s.draft.capacity() + 1,
-                                  cyui::dp(-1, 90),
-                                  ImGuiInputTextFlags_EnterReturnsTrue |
-                                      ImGuiInputTextFlags_CallbackResize,
-                                  resize_draft, &s.draft);
+    const bool submit = ImGui::InputTextMultiline(
+        "##draft", s.draft.data(), s.draft.capacity() + 1, cyui::dp(-1, 90),
+        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackResize, resize_draft,
+        &s.draft);
     cyui::tooltip(cyui::tr("Type a message. Ctrl+Enter sends; Enter inserts a new line.").c_str());
     bool send = submit;
     {

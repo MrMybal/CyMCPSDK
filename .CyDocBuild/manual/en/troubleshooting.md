@@ -5,10 +5,13 @@ description: Understand provider errors, interrupted sessions and missing local 
 section: Guides
 parent: overview
 order: 4
-revision: 2
+revision: 3
 ---
 
 ## Connection errors {#connection}
+
+Open **Logs** to see which discovery, protocol, account, catalogue or session step failed.
+Use **Copy log** or **Open log file** for the diagnostic record. See the [journal controls](doc:chat-lab#logs).
 
 | Error or symptom | What to do |
 | --- | --- |

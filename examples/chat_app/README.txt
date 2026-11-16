@@ -1,6 +1,12 @@
-CyMCPSDK Chat Lab 0.5.4 - Windows x64
+CyMCPSDK Chat Lab 0.5.5 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
+Chat, Providers and Logs have dedicated tabs. Appearance is inside Providers.
+Search provider cards, edit their own connection fields, then Connect / New chat.
+Double-click a card to connect. Switching providers retains settings in memory.
+Logs shows timestamped stages, errors and durations. Copy log copies diagnostics;
+Open log file opens the private background-written session log. Message bodies,
+API keys and native session IDs are excluded. Hover the filename for its full path.
 English is the default, including the local Markdown demonstration.
 Help (F1) opens the supplied offline manual in the selected language.
 Keep the complete Documentation/ directory beside the executable.
@@ -11,7 +17,7 @@ Click another detected connection to use it. CLI accounts and default models are
 reused; local services choose from their actual catalogue. Remote APIs show their
 catalogue and wait for your model choice. No manual paths are needed
 for detected installations. Missing prerequisites are listed under Other providers.
-Disable Automatic connection for the optional manual settings below.
+Manual settings remain available in Providers alongside Automatic connection.
 Demo / Markdown uses deterministic local text and needs no AI account or model.
 Refresh model catalogue queries the connected provider. A selected model applies
 to the next connection. Enter inserts a line; Ctrl+Enter sends a message.
@@ -42,6 +48,7 @@ All three app_commands configuration options are false by default.
 Optional arguments:
   --config PATH.json             Load an SDK chat configuration (manual by default).
                                  Set "automatic": true to enable discovery.
+  --log-file PATH.log            Choose the private diagnostic file for this run.
   --language fr                  Start with French UI (default: en).
   --theme navy                   Select a CyUI theme.
   --smoke --capture PATH.png      Hidden local demo test, then quit.

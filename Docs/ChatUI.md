@@ -5,6 +5,23 @@ conversation natif C++20. Il utilise `CyUI::DocumentViews` : aucun navigateur, C
 Python ou serveur web n'est nécessaire. Les modules du SDK et son agrégat
 `CyMCP::SDK` restent indépendants de l'interface graphique.
 
+Chat Lab utilise trois onglets : **Chat**, **Providers** et **Logs**. Le catalogue de fournisseurs
+est filtrable ; ses cartes sélectionnent un éditeur de paramètres et un double-clic connecte.
+Les champs de chaque fournisseur sont conservés séparément en mémoire pendant l'exécution.
+La démo initiale est un état de départ hors ligne, sans priorité sur une IA détectée en mode automatique.
+
+`ChatViewState.diagnostics` contient au plus 1 000 événements structurés : identifiant croissant,
+horodatage système en millisecondes, niveau, fournisseur, opération, code, message fixe et durée.
+Les événements `ConnectionStage` n'acceptent que les étapes connues ; les données natives,
+messages, paramètres d'outils, clés et IDs de session n'entrent pas dans ces enregistrements.
+`choosing_model` distingue le choix du catalogue d'une panne lors d'une connexion API automatique.
+
+L'exemple rassemble ces événements avec ceux de la détection dans **Logs**, puis écrit un fichier
+privé par exécution sous `%LOCALAPPDATA%/CyMCPSDK/ChatLab/logs` sur un worker distinct.
+`--log-file PATH.log` choisit un emplacement explicite. La vue garde 2 000 lignes ; le fichier est
+borné à 8 Mio et signale les erreurs ou sa saturation sans annuler de génération. **Clear view**
+conserve le fichier ; **Copy log** copie les diagnostics et **Open log file** l'ouvre dans l'outil du système.
+
 ## Application Windows de test
 
 Depuis PowerShell, avec Visual Studio 2022 C++ et son composant CMake :

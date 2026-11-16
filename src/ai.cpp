@@ -40,7 +40,8 @@ class SseDecoder {
 };
 // Result recorded for a call that never ran because the turn was cancelled or timed out.
 std::string interrupted_output(const std::string& code) {
-    return Json({{"error", {{"code", code}, {"message", "Tool call interrupted before completion"}}}})
+    return Json({{"error",
+                  {{"code", code}, {"message", "Tool call interrupted before completion"}}}})
         .dump();
 }
 HttpRequest model_request(const HttpChatOptions& options, const std::string& path) {
@@ -266,31 +267,31 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
         messages.push_back(assistant);
         std::size_t answered = 0;
         try {
-        for (const auto& call : calls) {
-            auto name = call["function"]["name"].get<std::string>();
-            auto id = call["id"].get<std::string>();
-            if (id.empty())
-                throw Error("ProtocolError", "Missing tool call ID");
-            context.emit("ToolStarted", {{"id", id}, {"name", name}});
-            Json output;
-            try {
-                auto args = parse_json(call["function"]["arguments"].get<std::string>());
-                auto found = names.find(name);
-                if (found == names.end())
-                    throw Error("UnknownOperation", "Unknown API tool");
-                output = options_.tools->invoke(found->second, args, context);
-            } catch (const Error& e) {
-                if (e.code == "Cancelled" || e.code == "Timeout")
-                    throw;
-                output = {{"error", {{"code", e.code}, {"message", e.what()}}}};
-            } catch (const Json::exception&) {
-                output = {{"error", {{"code", "InvalidArguments"}}}};
+            for (const auto& call : calls) {
+                auto name = call["function"]["name"].get<std::string>();
+                auto id = call["id"].get<std::string>();
+                if (id.empty())
+                    throw Error("ProtocolError", "Missing tool call ID");
+                context.emit("ToolStarted", {{"id", id}, {"name", name}});
+                Json output;
+                try {
+                    auto args = parse_json(call["function"]["arguments"].get<std::string>());
+                    auto found = names.find(name);
+                    if (found == names.end())
+                        throw Error("UnknownOperation", "Unknown API tool");
+                    output = options_.tools->invoke(found->second, args, context);
+                } catch (const Error& e) {
+                    if (e.code == "Cancelled" || e.code == "Timeout")
+                        throw;
+                    output = {{"error", {{"code", e.code}, {"message", e.what()}}}};
+                } catch (const Json::exception&) {
+                    output = {{"error", {{"code", "InvalidArguments"}}}};
+                }
+                messages.push_back(
+                    {{"role", "tool"}, {"tool_call_id", id}, {"content", output.dump()}});
+                ++answered;
+                context.emit("ToolCompleted", {{"id", id}, {"name", name}, {"output", output}});
             }
-            messages.push_back(
-                {{"role", "tool"}, {"tool_call_id", id}, {"content", output.dump()}});
-            ++answered;
-            context.emit("ToolCompleted", {{"id", id}, {"name", name}, {"output", output}});
-        }
         } catch (const Error& error) {
             // Every recorded call needs a result, or the next request is rejected (HTTP 400).
             for (std::size_t n = answered; n < calls.size(); ++n)
@@ -347,11 +348,13 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
     }
     auto started = Clock::now();
     try {
+        context.emit("ConnectionStage", {{"code", "ProviderConnect"}});
         s.provider->connect(context);
         Json catalogue = Json::array();
         // The catalogue is informative: failing to list it never fails a valid session.
         const auto optional_catalogue = [&] {
             try {
+                context.emit("ConnectionStage", {{"code", "ModelCatalogue"}});
                 return s.provider->list_models(context);
             } catch (const Error&) {
                 if (context.cancellation.cancelled())
@@ -367,6 +370,7 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
                     *models = optional_catalogue();
                 throw Error("UnknownModel", "Select a model from the provider catalogue");
             }
+            context.emit("ConnectionStage", {{"code", "ModelCatalogue"}});
             catalogue = s.provider->list_models(context);
             s.model = default_model(catalogue);
             if (s.model.empty())
@@ -380,6 +384,7 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
                     message["content"].is_string())
                     system += message["content"].get<std::string>() + "\n";
         }
+        context.emit("ConnectionStage", {{"code", "SessionStart"}});
         auto session = s.provider->start_session(s.model, std::move(resume), context, system);
         if (models) {
             if (catalogue.empty() && s.provider->capabilities().model_catalogue)

@@ -59,6 +59,10 @@ struct Exercise {
                     app.detect_connections(true);
                 } else if (action == "connect")
                     app.connect(step.value("restore", false));
+                else if (action == "page")
+                    app.show_page(step.at("index").template get<int>());
+                else if (action == "select-provider")
+                    app.select_provider(step.at("id").template get<std::string>());
                 else if (action == "send") {
                     std::vector<std::filesystem::path> paths;
                     for (const auto& path : step.value("attachments", cymcp::Json::array()))
@@ -107,6 +111,20 @@ struct Exercise {
             ok &= state.provider_id == step.at("provider").template get<std::string>();
         if (step.contains("model"))
             ok &= state.model == step.at("model").template get<std::string>();
+        if (step.contains("selected_provider"))
+            ok &= app.provider_id == step.at("selected_provider").template get<std::string>();
+        if (step.contains("configured_model"))
+            ok &= std::string(app.model.data()) ==
+                  step.at("configured_model").template get<std::string>();
+        if (step.contains("page"))
+            ok &= app.page == step.at("page").template get<int>();
+        if (step.contains("log_code")) {
+            const auto expected = step.at("log_code").template get<std::string>();
+            bool found = false;
+            for (const auto& row : app.journal.rows())
+                found |= row.code == expected;
+            ok &= found;
+        }
         if (action == "automatic-connect" && code.empty())
             ok &= state.connected;
         std::string reply;
@@ -142,6 +160,8 @@ struct Exercise {
              {"phase", state.phase},
              {"streamed_before_completion", streamed},
              {"messages", state.messages.size()},
+             {"page", app.page},
+             {"log_entries", app.journal.rows().size()},
              {"reply_bytes", reply.size()},
              {"elapsed_ms",
               std::chrono::duration<double, std::milli>(cymcp::Clock::now() - step_started)

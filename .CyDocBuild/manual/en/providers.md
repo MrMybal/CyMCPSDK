@@ -5,7 +5,7 @@ description: Select a CLI, native API or local endpoint and supply its real mode
 section: Guides
 parent: chat-lab
 order: 1
-revision: 3
+revision: 4
 ---
 
 ## Built-in profiles {#profiles}
@@ -29,7 +29,7 @@ without entering paths or arguments. Native CLIs reuse their existing environmen
 Detection covers every named CLI profile above; the generic `acp` profile requires a host recipe.
 An installation is not proof of successful authentication or generation.
 
-For an unusual installation, switch to manual settings. A host application can add executable
+For an unusual installation, edit the selected provider in the **Providers** tab. A host application can add executable
 directories, private npm roots and discovery recipes for its own providers. Provider-specific
 arguments are structured strings; the SDK never runs them through a shell.
 `process.environment` passes child-only environment values.

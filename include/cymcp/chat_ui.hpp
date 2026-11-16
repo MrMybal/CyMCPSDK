@@ -23,12 +23,20 @@ struct ChatMessage {
 struct ChatActivity {
     std::string type, name;
 };
+struct ChatDiagnostic {
+    std::uint64_t id = 0;
+    std::int64_t timestamp_ms = 0;
+    std::string level, provider_id, operation, code, message;
+    double elapsed_ms = 0;
+};
 struct ChatViewState {
     std::string phase = "disconnected", provider_id, model, session_id, error_code, storage_error;
     bool busy = false, connected = false;
     std::uint64_t revision = 0;
     std::vector<ChatMessage> messages;
     std::vector<ChatActivity> activity;
+    // Bounded, structured diagnostics. No prompts, responses, keys or native session IDs.
+    std::deque<ChatDiagnostic> diagnostics;
     std::string thinking;
     Json models = Json::array(), metrics = Json::object(), usage = Json::object();
 };

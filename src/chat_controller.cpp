@@ -7,7 +7,8 @@ namespace {
 // rows leave the view and an oversized message is shown truncated.
 constexpr std::size_t text_limit = 16 * 1024 * 1024, transcript_limit = 64 * 1024 * 1024,
                       row_limit = 4000;
-const std::string display_cut = "\n\n*[...display truncated; the full text stays in the conversation]*";
+const std::string display_cut =
+    "\n\n*[...display truncated; the full text stays in the conversation]*";
 std::string display_content(const Json& content) {
     if (content.is_string())
         return content.get<std::string>();
@@ -74,6 +75,19 @@ struct ChatController::Impl {
     Cancellation active;
     std::future<Completion> pending;
     std::uint64_t next_id = 1, assistant_id = 0;
+    std::uint64_t next_diagnostic = 1;
+    Clock::time_point operation_started{};
+    bool response_started = false;
+    void diagnose(std::string level, std::string operation, std::string code, std::string message,
+                  double elapsed = 0) {
+        if (view.diagnostics.size() == 1000)
+            view.diagnostics.pop_front();
+        const auto now = std::chrono::system_clock::now().time_since_epoch();
+        view.diagnostics.push_back(
+            {next_diagnostic++, std::chrono::duration_cast<std::chrono::milliseconds>(now).count(),
+             std::move(level), view.provider_id, std::move(operation), std::move(code),
+             std::move(message), elapsed});
+    }
     std::size_t displayed_bytes = 0;
     // Last member: joins before the worker's captured resources are destroyed.
     Executor worker{1, 2};
@@ -114,39 +128,50 @@ struct ChatController::Impl {
                     name = name.substr(0, end) + "...";
                 }
                 push_event({event.type, {{"name", std::move(name)}}});
+            } else if (event.type == "ProcessStarted" || event.type == "ProviderReady") {
+                // Only the event name crosses the diagnostic boundary, never its payload.
+                push_event({event.type, Json::object()});
+            } else if (event.type == "ConnectionStage") {
+                const auto stage = event.data.value("code", std::string());
+                if (stage == "ProviderConnect" || stage == "ProtocolInit" ||
+                    stage == "AccountCheck" || stage == "ModelCatalogue" || stage == "SessionStart")
+                    push_event({event.type, {{"code", stage}}});
             }
         };
-        auto task = std::make_shared<std::packaged_task<Completion()>>(
-            [this, action, context, work = std::move(work)] {
-                Completion result;
-                result.action = action;
-                try {
-                    if (action != "connecting")
-                        context.cancellation.check();
-                    work(result, context);
-                } catch (const Error& error) {
-                    result.error = error.code;
-                } catch (...) {
-                    result.error = "ProviderError";
-                }
-                if (chat) {
-                    result.session = chat->session();
-                    auto status = chat->status();
-                    // needs_reconnect (failed restore/reconnect) is not a usable connection.
-                    const auto phase = status.at("state").get<std::string>();
-                    result.connected = phase != "disconnected" && phase != "needs_reconnect" &&
-                                       phase != "connecting";
-                    if (!result.error.empty())
-                        result.result.metrics = status.at("metrics");
-                }
-                return result;
-            });
+        auto task = std::make_shared<std::packaged_task<Completion()>>([this, action, context,
+                                                                        work = std::move(work)] {
+            Completion result;
+            result.action = action;
+            try {
+                if (action != "connecting")
+                    context.cancellation.check();
+                work(result, context);
+            } catch (const Error& error) {
+                result.error = error.code;
+            } catch (...) {
+                result.error = "ProviderError";
+            }
+            if (chat) {
+                result.session = chat->session();
+                auto status = chat->status();
+                // needs_reconnect (failed restore/reconnect) is not a usable connection.
+                const auto phase = status.at("state").get<std::string>();
+                result.connected =
+                    phase != "disconnected" && phase != "needs_reconnect" && phase != "connecting";
+                if (!result.error.empty())
+                    result.result.metrics = status.at("metrics");
+            }
+            return result;
+        });
         pending = task->get_future();
         worker.post([task] { (*task)(); });
         view.busy = true;
         view.phase = std::move(action);
         view.error_code.clear();
         view.storage_error.clear();
+        operation_started = Clock::now();
+        response_started = false;
+        diagnose("info", view.phase, "Started", "Operation started");
     }
     void persist(Completion& result) {
         if (!store || !chat)
@@ -192,11 +217,31 @@ struct ChatController::Impl {
     void consume(const std::vector<Event>& batch) {
         for (const auto& event : batch) {
             if (event.type == "TextDelta") {
+                if (!response_started) {
+                    response_started = true;
+                    diagnose(
+                        "info", view.phase, "FirstResponse", "Response stream started",
+                        std::chrono::duration<double, std::milli>(Clock::now() - operation_started)
+                            .count());
+                }
                 if (auto* message = assistant())
                     append(message->markdown, event.data.at("text").get<std::string>());
             } else if (event.type == "ThinkingDelta")
                 append(view.thinking, event.data.at("text").get<std::string>());
-            else {
+            else if (event.type == "ConnectionStage") {
+                const auto stage = event.data.at("code").get<std::string>();
+                const char* message = stage == "ProviderConnect"  ? "Checking provider connection"
+                                      : stage == "ProtocolInit"   ? "Initializing native protocol"
+                                      : stage == "AccountCheck"   ? "Checking native account"
+                                      : stage == "ModelCatalogue" ? "Loading model catalogue"
+                                                                  : "Opening conversation session";
+                diagnose("info", view.phase, stage, message);
+            } else if (event.type == "ProcessStarted" || event.type == "ProviderReady") {
+                diagnose("info", view.phase, event.type,
+                         event.type == "ProcessStarted" ? "Native process started"
+                                                        : "Provider handshake completed");
+            } else {
+                diagnose("info", view.phase, event.type, "Application tool activity");
                 if (view.activity.size() == 128)
                     view.activity.erase(view.activity.begin());
                 view.activity.push_back({event.type, event.data.at("name").get<std::string>()});
@@ -240,7 +285,9 @@ void ChatController::open(ChatConnection options) {
         throw Error("InvalidOptions", "Provider and valid optional history configuration required");
     s.connection = std::move(options);
     auto revision = s.view.revision + 1;
+    auto diagnostics = std::move(s.view.diagnostics);
     s.view = ChatViewState{};
+    s.view.diagnostics = std::move(diagnostics);
     s.view.revision = revision;
     s.view.provider_id = s.connection.provider_id;
     s.view.model = s.connection.model;
@@ -349,6 +396,20 @@ void ChatController::poll() {
     // A producer may have queued its final deltas after this frame's drain.
     s.consume(s.drain_events());
     auto result = s.pending.get();
+    const bool choose_model =
+        result.action == "connecting" && result.error == "UnknownModel" && !result.models.empty();
+    s.diagnose(
+        result.error.empty()          ? "success"
+        : choose_model                ? "info"
+        : result.error == "Cancelled" ? "warning"
+                                      : "error",
+        result.action, result.error.empty() ? "Completed" : result.error,
+        result.error.empty() ? "Operation completed"
+        : choose_model       ? "Model selection required"
+                             : "Operation failed",
+        std::chrono::duration<double, std::milli>(Clock::now() - s.operation_started).count());
+    if (!result.storage_error.empty())
+        s.diagnose("error", "saving", result.storage_error, "Conversation could not be saved");
     s.view.busy = false;
     s.view.connected = result.connected;
     s.view.session_id = result.session.id;
@@ -359,7 +420,9 @@ void ChatController::poll() {
         s.view.metrics = std::move(result.result.metrics);
         if (s.view.error_code.empty())
             s.view.error_code = result.error;
-        s.view.phase = result.error == "Cancelled" ? "interrupted" : "failed";
+        s.view.phase = choose_model                  ? "choosing_model"
+                       : result.error == "Cancelled" ? "interrupted"
+                                                     : "failed";
         if (auto* message = s.assistant(); message && result.action == "generating")
             message->interrupted = true;
     } else {

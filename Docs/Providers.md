@@ -1,4 +1,4 @@
-# Connecteurs IA — 0.5.4
+# Connecteurs IA — 0.5.5
 
 ## Détection automatique
 
