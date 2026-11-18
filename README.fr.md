@@ -37,17 +37,17 @@ SDK JSON ou serveur MCP local authentifié. Connecter un fournisseur IA à ces o
 ou utiliser le client MCP pour transférer des outils choisis depuis une autre application.
 
 Les conversations utilisent des agents CLI, API natives ou services de modèles locaux existants.
-Le registre contient 22 profils extensibles, dont Codex, Claude Code, OpenCode, Antigravity,
+Le registre contient 23 profils extensibles, dont Codex, Claude Code, OpenCode, Antigravity,
 les agents ACP, Responses, Messages, OpenRouter et Ollama. Les modèles et capacités réels
 viennent du fournisseur configuré. Les identifiants et poids des modèles sont fournis séparément.
 
 Chat Lab propose les messages progressifs, Markdown/code/tableaux, pièces jointes, annulation,
 reconnexion exacte et historique optionnel. Son compteur de démonstration est utilisable par
 une IA ou un autre client MCP/SDK. L'anglais est le défaut ; le français et cinq thèmes CyUI
-sont disponibles. **Aide (F1)** ouvre le manuel local fourni.
-Les onglets **Tchat**, **Fournisseurs** et **Journal** séparent les usages : catalogue recherchable,
-réglages propres à chaque fournisseur et événements horodatés, avec un fichier privé de session.
-Voir le [journal de connexion](assets/screenshots/logs-fr.png) et la [connexion automatique à Codex](assets/screenshots/chat-auto-fr.png).
+sont disponibles. Le tchat s’ouvre directement. **Paramètres** donne accès aux **Fournisseurs**,
+au **Journal** en tableau ou en JSONL brut et à l’**Aide**. **F1** ouvre l’aide et **Fermer**
+ramène à la conversation.
+Voir le [journal d’un refus de modèle simulé](assets/screenshots/logs-fr.png) et la [capture historique d’une connexion automatique à Codex](assets/screenshots/chat-auto-fr.png).
 Les fournisseurs natifs proposent **Se connecter** lorsqu'une authentification est nécessaire.
 Le mode manuel préremplit les paramètres conventionnels ; les API distantes affichent leur
 catalogue pour un choix explicite du modèle.

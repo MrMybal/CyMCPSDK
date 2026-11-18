@@ -1,6 +1,13 @@
 #include <cymcp/ai.hpp>
+#include "provider_error.hpp"
 #include <set>
 namespace cymcp {
+namespace {
+// A rejected RPC or a terminal provider turn leaves the transport usable.
+struct CodexRejection final : Error {
+    using Error::Error;
+};
+} // namespace
 struct CodexProvider::Impl {
     CodexOptions options;
     std::unique_ptr<Process> process;
@@ -13,6 +20,104 @@ struct CodexProvider::Impl {
     std::map<std::string, std::string> tool_names;
     std::string active_session;
     explicit Impl(CodexOptions config) : options(std::move(config)) {}
+    [[noreturn]] void reject(const Json& error, const CallContext& context, std::string fallback,
+                             bool interrupted = false) const {
+        const auto info = error.find("codexErrorInfo");
+        std::string category;
+        int status = 0;
+        if (info != error.end()) {
+            if (info->is_string())
+                category = info->get<std::string>();
+            else if (info->is_object() && info->size() == 1) {
+                category = info->begin().key();
+                const auto& details = info->begin().value();
+                const auto http = details.find("httpStatusCode");
+                if (http != details.end() && http->is_number_integer() && *http >= 100 &&
+                    *http <= 599)
+                    status = http->get<int>();
+            }
+        }
+        static const std::set<std::string_view> native_codes = {"contextWindowExceeded",
+                                                                "sessionBudgetExceeded",
+                                                                "usageLimitExceeded",
+                                                                "rateLimitExceeded",
+                                                                "serverOverloaded",
+                                                                "cyberPolicy",
+                                                                "misalignmentPolicyViolation",
+                                                                "internalServerError",
+                                                                "unauthorized",
+                                                                "badRequest",
+                                                                "threadRollbackFailed",
+                                                                "sandboxError",
+                                                                "other",
+                                                                "httpConnectionFailed",
+                                                                "responseStreamConnectionFailed",
+                                                                "responseStreamDisconnected",
+                                                                "responseTooManyFailedAttempts",
+                                                                "activeTurnNotSteerable"};
+        if (!native_codes.contains(category))
+            category.clear();
+        const auto secrets = process_error_secrets(options.process);
+        std::string upstream_code;
+        const auto explanation = [&](const char* name) -> std::string {
+            const auto field = error.find(name);
+            if (field == error.end() || !field->is_string())
+                return {};
+            const auto& text = field->get_ref<const std::string&>();
+            const auto start = text.find_first_not_of(" \r\n\t");
+            if (start == text.npos)
+                return {};
+            if (text[start] != '{')
+                return redact_error_message(text, secrets);
+            // Some App Server builds stringify the upstream error object in TurnError.message.
+            const auto body = detail::parse_provider_error_body(text);
+            if (!body.is_object() || body.value("type", Json()) != "error")
+                return {};
+            const auto reason = body.find("error");
+            if (reason == body.end() || !reason->is_object())
+                return {};
+            const auto http = body.find("status");
+            if (!status && http != body.end() && http->is_number_integer() &&
+                *http >= 100 && *http <= 599)
+                status = http->get<int>();
+            const auto decoded = detail::structured_provider_error(*reason, "code", secrets, "", "");
+            upstream_code = decoded.provider_code;
+            return decoded.what();
+        };
+        auto message = explanation("message");
+        if (message.empty())
+            message = explanation("additionalDetails");
+        const std::string code =
+            interrupted                   ? "Cancelled"
+            : upstream_code == "model_not_found" ? "UnknownModel"
+            : category == "unauthorized" || status == 401 || status == 403
+                ? "AuthenticationRequired"
+            : category == "rateLimitExceeded" || category == "usageLimitExceeded" || status == 429
+                ? "RateLimited"
+            : category == "contextWindowExceeded" ? "ContextTooLarge"
+                                                  : "ProviderError";
+        if (message.empty()) {
+            message = std::move(fallback);
+            if (!category.empty())
+                message += ": " + category;
+            if (status)
+                message += " (HTTP " + std::to_string(status) + ")";
+        }
+        auto provider_code = upstream_code.empty() ? category : upstream_code;
+        if (!interrupted) {
+            Json event = {{"code", code}, {"message", message},
+                          {"native_code", category.empty() ? "other" : category},
+                          {"http_status", status}};
+            const auto rpc_code = error.find("code");
+            if (rpc_code != error.end() && rpc_code->is_number_integer()) {
+                event["rpc_code"] = *rpc_code;
+                if (upstream_code.empty())
+                    provider_code = rpc_code->dump();
+            }
+            context.emit("ProviderError", std::move(event));
+        }
+        throw CodexRejection(code, std::move(message), std::move(provider_code));
+    }
     CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
         auto context = input;
         context.cancellation = input.cancellation.child();
@@ -96,7 +201,7 @@ struct CodexProvider::Impl {
             }
             if (value.value("id", Json()) == id) {
                 if (value.contains("error"))
-                    throw Error("ProviderError", "Provider RPC rejected: " + method);
+                    reject(value.at("error"), context, "Codex RPC rejected: " + method);
                 if (!value.contains("result"))
                     throw Error("ProtocolError", "Missing provider RPC result");
                 return value["result"];
@@ -122,7 +227,7 @@ CodexProvider::CodexProvider(CodexOptions options)
 CodexProvider::~CodexProvider() = default;
 ProviderCapabilities CodexProvider::capabilities() const {
     return {true,  true, static_cast<bool>(impl_->options.tools), true, true, true, false,
-            false, true};
+            false, true, true};
 }
 void CodexProvider::connect(const CallContext& input) {
     auto& p = *impl_;
@@ -243,12 +348,17 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
     std::vector<std::string> order;
     std::map<std::string, std::string> final_items;
     try {
-        auto turn = p.rpc("turn/start",
-                          {{"threadId", session.id},
-                           {"input", content},
-                           {"approvalPolicy", p.options.approval_policy}},
-                          context);
-        turn_id = turn.at("turn").at("id").get<std::string>();
+        Json turn_params = {{"threadId", session.id}, {"input", content},
+                            {"approvalPolicy", p.options.approval_policy}};
+        if (!session.model.empty())
+            turn_params["model"] = session.model;
+        auto turn = p.rpc("turn/start", std::move(turn_params), context);
+        const auto& started = turn.at("turn");
+        turn_id = started.at("id").get<std::string>();
+        const auto initial_status = started.value("status", std::string());
+        if (initial_status == "failed" || initial_status == "interrupted")
+            p.reject(started.value("error", Json()), context, "Codex turn " + initial_status,
+                     initial_status == "interrupted");
         while (true) {
             context.cancellation.check();
             auto value = p.next(context.cancellation);
@@ -285,42 +395,13 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
                 result.usage = params.value("tokenUsage", Json::object());
                 context.emit("UsageUpdated", result.usage);
             } else if (method == "turn/completed" && params.at("turn").at("id") == turn_id) {
-                auto final = params.at("turn");
-                if (final.value("status", std::string()) != "completed") {
-                    auto error = final.value("error", Json());
-                    auto info = error.is_object() ? error.value("codexErrorInfo", Json()) : Json();
-                    std::string category = "other";
-                    int status = 0;
-                    if (info.is_string())
-                        category = info.get<std::string>();
-                    else if (info.is_object() && info.size() == 1) {
-                        category = info.begin().key();
-                        auto details = info.begin().value();
-                        if (details.is_object() &&
-                            details.value("httpStatusCode", Json()).is_number_integer())
-                            status = details.at("httpStatusCode").get<int>();
-                    }
-                    // Only protocol identifiers and numeric HTTP status leave the transport.
-                    if (category.size() > 80 ||
-                        category.find_first_not_of(
-                            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") !=
-                            std::string::npos)
-                        category = "other";
-                    std::string code = category == "unauthorized" || status == 401 || status == 403
-                                           ? "AuthenticationRequired"
-                                       : category == "rateLimitExceeded" ||
-                                               category == "usageLimitExceeded" || status == 429
-                                           ? "RateLimited"
-                                       : category == "contextWindowExceeded" ? "ContextTooLarge"
-                                       : final.value("status", std::string()) == "interrupted"
-                                           ? "Cancelled"
-                                           : "ProviderError";
-                    context.emit(
-                        "ProviderError",
-                        {{"code", code}, {"native_code", category}, {"http_status", status}});
-                    throw Error(code, "Codex turn failed: " + category +
-                                          (status ? " (HTTP " + std::to_string(status) + ")" : ""));
-                }
+                const auto& final = params.at("turn");
+                const auto status = final.value("status", std::string());
+                if (status != "completed")
+                    p.reject(final.value("error", Json()), context,
+                             status == "interrupted" ? "Codex turn interrupted"
+                                                     : "Codex turn failed",
+                             status == "interrupted");
                 for (const auto& id : order)
                     result.text += final_items[id];
                 if (order.empty())
@@ -329,9 +410,18 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
                 messages.push_back({{"role", "assistant"}, {"content", result.text}});
                 context.emit("TurnCompleted", {{"text", result.text}});
                 return result;
-            } else if (method == "error")
-                context.emit("ProviderError", {{"code", "CodexNotification"}});
+            } else if (method == "error" && !params.value("willRetry", true))
+                p.reject(params.value("error", Json()), context, "Codex turn failed");
         }
+    } catch (const CodexRejection&) {
+        // Some servers return complete items without deltas, including before an error.
+        // Forward only the unseen suffix before Conversation closes the failed turn.
+        std::string completed_text;
+        for (const auto& id : order)
+            completed_text += final_items[id];
+        if (completed_text.size() > streamed.size() && completed_text.starts_with(streamed))
+            context.emit("TextDelta", {{"text", completed_text.substr(streamed.size())}});
+        throw;
     } catch (const Error& e) {
         if ((e.code == "Cancelled" || e.code == "Timeout") && !turn_id.empty()) {
             try {

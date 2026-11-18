@@ -5,7 +5,7 @@ description: Connect an existing service or supervise an installed llama.cpp-com
 section: SDK
 parent: integration
 order: 3
-revision: 1
+revision: 2
 ---
 
 ## Use an existing service {#service}
@@ -54,5 +54,23 @@ an elevation callback handles installers that need it.
 
 Keep manifests under application control, never model output. Artifact paths stay in the configured
 cache; HTTPS and declared redirect hosts constrain downloads. External packages retain their own
-licenses. Automatic archive extraction, HTTP Range resumption and GPU package catalogues remain
-outside the current implementation.
+licenses. A host may declare individual regular archive members with their destination, size and
+SHA-256. The system tar reader extracts them into a private staging area before publication.
+
+On Windows x64, select a local service in Chat Lab's **Providers** tab, open **Installation and
+connection** and choose **Install NVIDIA CUDA 12 runtime**. Chat Lab downloads NVIDIA CUDART
+12.8.90 and its license to the user's private dependency cache. It shows the runtime directory
+when verification succeeds. A compatible NVIDIA driver and any other libraries required by the
+chosen engine are separate prerequisites.
+
+Windows and Linux x64 hosts can run the same installation on a worker and supply the directory
+to an owned engine. The supervisor applies the library search path to that child process.
+
+```cpp
+cymcp::DependencyManager dependencies({private_cache, host_policy});
+auto installed = dependencies.install(cymcp::cuda_runtime_package(), context);
+options.cuda_runtime_directory = installed / "runtime"; // LocalEngineOptions
+```
+
+The runtime is pinned to NVIDIA's [CUDA 12.8.1 redistribution manifest](https://developer.download.nvidia.com/compute/cuda/redist/redistrib_12.8.1.json).
+The installed package includes NVIDIA's license. HTTP Range resume and automatic GPU selection remain future work.

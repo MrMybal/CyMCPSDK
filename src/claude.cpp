@@ -163,7 +163,7 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
             p.process->close_input();
         }
         ChatResult result;
-        std::string reported_error;
+        std::string reported_error, native_error;
         ProcessLine line;
         bool completed = false;
         while (p.process->next(line, context.cancellation)) {
@@ -188,18 +188,19 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
             }
             auto type = value.value("type", std::string());
             if (type == "assistant" && value.contains("error") && value.at("error").is_string()) {
-                auto native = value.at("error").get<std::string>();
+                native_error = value.at("error").get<std::string>();
                 reported_error =
-                    native == "authentication_failed" || native == "cloud_credential_error"
+                    native_error == "authentication_failed" ||
+                            native_error == "cloud_credential_error"
                         ? "AuthenticationRequired"
-                    : native == "rate_limit"    ? "RateLimited"
-                    : native == "billing_error" ? "BillingError"
-                    : native == "oauth_org_not_allowed" || native == "account_on_hold"
+                    : native_error == "rate_limit"    ? "RateLimited"
+                    : native_error == "billing_error" ? "BillingError"
+                    : native_error == "oauth_org_not_allowed" || native_error == "account_on_hold"
                         ? "AccessDenied"
-                    : native == "model_not_found"   ? "UnknownModel"
-                    : native == "invalid_request"   ? "InvalidRequest"
-                    : native == "max_output_tokens" ? "TurnLimitExceeded"
-                                                    : "ProviderError";
+                    : native_error == "model_not_found"   ? "UnknownModel"
+                    : native_error == "invalid_request"   ? "InvalidRequest"
+                    : native_error == "max_output_tokens" ? "TurnLimitExceeded"
+                                                          : "ProviderError";
             }
             if (type == "system" && value.contains("model") && value.at("model").is_string())
                 session.model = value.at("model").get<std::string>();
@@ -220,10 +221,33 @@ ChatResult ClaudeProvider::send(Session& session, Json& messages, const CallCont
                     context.emit("ThinkingDelta",
                                  {{"text", delta.value("thinking", std::string())}});
             } else if (type == "result") {
-                if (value.value("is_error", false) ||
-                    value.value("subtype", std::string()) != "success")
+                const auto subtype = value.value("subtype", std::string());
+                if (value.value("is_error", false) || subtype != "success") {
+                    const auto secrets = process_error_secrets(p.options.process);
+                    std::string detail;
+                    const auto errors = value.find("errors");
+                    if (errors != value.end() && errors->is_array()) {
+                        for (const auto& entry : *errors) {
+                            if (!entry.is_string())
+                                continue;
+                            const auto message =
+                                redact_error_message(entry.get_ref<const std::string&>(), secrets);
+                            if (message.empty())
+                                continue;
+                            if (!detail.empty())
+                                detail += " ";
+                            detail += message;
+                            if (detail.size() >= 4096)
+                                break;
+                        }
+                    }
+                    if (native_error.empty() && subtype != "success")
+                        native_error = subtype;
                     throw Error(reported_error.empty() ? "ProviderError" : reported_error,
-                                "Native Claude turn failed");
+                                detail.empty() ? "Native Claude turn failed"
+                                               : redact_error_message(detail, secrets),
+                                redact_error_message(native_error, secrets));
+                }
                 result.text = value.at("result").get<std::string>();
                 result.usage = value.value("usage", Json::object());
                 result.finish_reason = "stop";

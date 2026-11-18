@@ -2,6 +2,7 @@
 #include "content.hpp"
 #include "http.hpp"
 #include "process.hpp"
+#include <optional>
 namespace cymcp {
 struct Session {
     std::string id, model;
@@ -15,19 +16,33 @@ struct ProviderCapabilities {
     bool streaming = false, resume = false, tools = false, model_catalogue = false,
          multimodal = false;
     bool image_input = false, audio_input = false, file_input = false, persistent_process = false;
+    bool turn_model_selection = false;
 };
 class Provider {
     friend class ProviderRegistry;
     std::string identity_;
+    std::vector<std::string> error_secrets_;
 
   public:
     explicit Provider(std::string identity = "custom") : identity_(std::move(identity)) {}
     const std::string& identity() const noexcept {
         return identity_;
     }
+    std::string error_message(std::string_view message) const {
+        return redact_error_message(message, error_secrets_);
+    }
     virtual ~Provider() = default;
     virtual bool uses_host_history() const noexcept {
         return false;
+    }
+    // Native transports can opt into receiving only system instructions and the new user
+    // message. Other providers continue to receive the complete editable history.
+    virtual bool uses_native_turn_context() const noexcept {
+        return false;
+    }
+    // Check input locally, without starting a session, sending a message or executing an action.
+    virtual void validate_user_content(const Json& content) const {
+        validate_content(content);
     }
     // True for a loopback model service (Ollama, LM Studio, llama.cpp...). Only these
     // may have a model chosen automatically: a cloud catalogue order implies no price.
@@ -60,6 +75,7 @@ class HttpChatProvider final : public Provider {
 
   public:
     explicit HttpChatProvider(HttpChatOptions);
+    void validate_user_content(const Json&) const override;
     bool uses_host_history() const noexcept override {
         return true;
     }
@@ -89,6 +105,9 @@ class CodexProvider final : public Provider {
 
   public:
     explicit CodexProvider(CodexOptions);
+    bool uses_native_turn_context() const noexcept override {
+        return true;
+    }
     ~CodexProvider();
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
@@ -113,6 +132,9 @@ class ClaudeProvider final : public Provider {
 
   public:
     explicit ClaudeProvider(ClaudeOptions);
+    bool uses_native_turn_context() const noexcept override {
+        return true;
+    }
     ~ClaudeProvider();
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
@@ -131,6 +153,7 @@ struct ApiOptions {
     int max_output_tokens = 0;                 // 0 = the model's maximum output
     std::chrono::milliseconds timeout{600000}; // idle timeout of each HTTP request
     std::chrono::milliseconds turn_timeout{0}; // optional whole-turn deadline; 0 = none
+    Json ollama_think = nullptr; // omitted, on/off, or a reasoning level supported by the model
 };
 class ApiProvider final : public Provider {
     ApiOptions options_;
@@ -140,6 +163,7 @@ class ApiProvider final : public Provider {
 
   public:
     explicit ApiProvider(ApiOptions);
+    void validate_user_content(const Json&) const override;
     bool uses_host_history() const noexcept override {
         return true;
     }
@@ -152,7 +176,7 @@ class ApiProvider final : public Provider {
     ChatResult send(Session&, Json&, const CallContext&) override;
     void disconnect() noexcept override {}
 };
-enum class AgentCliProtocol { OpenCode, Antigravity, CommandCode, CodeBuddy };
+enum class AgentCliProtocol { OpenCode, Antigravity, CommandCode, CodeBuddy, CodexExec };
 struct AgentCliOptions {
     AgentCliProtocol protocol = AgentCliProtocol::OpenCode;
     ProcessOptions process;
@@ -177,6 +201,9 @@ class AgentCliProvider final : public Provider {
 
   public:
     explicit AgentCliProvider(AgentCliOptions);
+    bool uses_native_turn_context() const noexcept override {
+        return true;
+    }
     ~AgentCliProvider();
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
@@ -204,6 +231,9 @@ class AcpProvider final : public Provider {
 
   public:
     explicit AcpProvider(AcpOptions);
+    bool uses_native_turn_context() const noexcept override {
+        return true;
+    }
     ~AcpProvider();
     ProviderCapabilities capabilities() const override;
     void connect(const CallContext& = {}) override;
@@ -280,7 +310,8 @@ class Conversation {
     struct State;
     std::shared_ptr<State> state_;
     CallContext reserve(const CallContext&);
-    ChatResult send_reserved(Json, const CallContext&);
+    ChatResult send_reserved(Json, const CallContext&, Clock::time_point submitted);
+    void change_user_turn(std::size_t, std::optional<std::string>);
 
   public:
     Conversation(std::shared_ptr<Provider>, std::string model, std::string system_prompt = {});
@@ -288,6 +319,8 @@ class Conversation {
                  Json* models = nullptr);
     ChatResult send(Json user_content, const CallContext& = {});
     std::future<ChatResult> send_async(Executor&, Json user_content, CallContext = {});
+    // Use a different model on the next explicit send, keeping the same conversation.
+    void select_model(std::string model);
     void cancel() noexcept;
     void disconnect() noexcept;
     // Reconnect the exact native session, or restore host history for stateless APIs.
@@ -297,6 +330,13 @@ class Conversation {
     void restore(const Json&, const CallContext& = {});
     Json status() const;
     Json history() const;
+    // Zero-based user-turn ordinals exclude systems, assistant messages and tool results.
+    // Edits preserve attachments. Deleting a turn also removes its replies and tool exchanges.
+    std::size_t user_turn_count() const;
+    void edit_message(std::size_t user_turn, std::string text);
+    void delete_turn(std::size_t user_turn);
+    // Display history including failed/cancelled turns. Diagnostics are never sent to a model.
+    Json transcript() const;
     Session session() const;
 };
 // Optional private, atomic on-disk storage. Keys/configuration are never included.

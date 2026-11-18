@@ -35,7 +35,7 @@ class DemoProvider final : public cymcp::Provider {
             french_
                 ? "## Le tchat natif est prêt\n\n"
                   "Cette réponse est une **démonstration locale**, sans appel à une IA. "
-                  "Choisissez un fournisseur dans l’onglet Fournisseurs pour utiliser un vrai "
+                  "Choisissez un fournisseur dans **Paramètres → Fournisseurs** pour utiliser un vrai "
                   "modèle.\n\n"
                   "### Ce que vous pouvez tester\n\n"
                   "- Le texte **en gras**, *en italique* et le `code en ligne`.\n"
@@ -51,7 +51,7 @@ class DemoProvider final : public cymcp::Provider {
                   "[Documentation du projet](https://github.com/MrMybal/CyMCPSDK)"
                 : "## Native chat is ready\n\n"
                   "This response is a **local demonstration**, with no AI request. "
-                  "Choose a provider in the Providers tab to use a real model.\n\n"
+                  "Choose a provider in **Settings → Providers** to use a real model.\n\n"
                   "### What you can try\n\n"
                   "- **Bold**, *italic* and `inline code`.\n"
                   "- Scrolling while text streams, selection and copying.\n"

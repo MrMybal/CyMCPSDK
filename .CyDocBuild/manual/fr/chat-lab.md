@@ -5,12 +5,13 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 5
+sourceRevision: 8
 ---
 
 ## Se connecter {#connect}
 
-Les onglets **Tchat**, **Fournisseurs** et **Journal** séparent les conversations, les paramètres et les diagnostics.
+Le tchat s’ouvre directement. La roue **Paramètres** donne accès aux onglets **Fournisseurs**,
+**Journal** et **Aide**. **Fermer** revient à la conversation et à son brouillon. **F1** ouvre l’aide.
 Dans Fournisseurs, rechercher le catalogue, sélectionner une carte et modifier ses propres champs.
 Les réglages des autres fournisseurs restent en mémoire pour cette exécution. **Connecter / Nouveau tchat**
 ouvre la connexion et revient au tchat ; un double-clic sur une carte connecte directement.
@@ -46,7 +47,7 @@ Choisir un fournisseur préremplit son adresse conventionnelle, sa variable de c
 paramètres, ainsi que l'installation détectée.
 
 ```image
-{"id":"automatic-connection","src":"assets/chat-auto-fr.png","alt":"Chat Lab en français après détection et connexion automatiques, sans message envoyé","controls":"minimal"}
+{"id":"automatic-connection","src":"assets/chat-auto-fr.png","alt":"Capture historique de l’interface après détection et connexion automatiques, sans message envoyé","controls":"minimal"}
 ```
 
 **Installation et connexion** contient l'exécutable et le dossier de travail ou les champs API.
@@ -65,22 +66,36 @@ transcript Markdown ; l'activité et la réflexion apparaissent lorsque le fourn
 
 La saisie grandit avec le brouillon. Sélectionner du texte pour la barre de formatage, ou utiliser
 Ctrl+B/I/U/E. Le brouillon reste modifiable pendant une réponse ; un envoi pendant ce temps le conserve.
+Dans le menu **…** du tchat, activer l’aperçu Markdown du brouillon. **Ctrl+F** recherche
+dans les messages. La flèche **↑** dans une saisie vide reprend le dernier message utilisateur.
+Pour les conversations gérées par le SDK, on peut aussi modifier un message envoyé ou supprimer
+son tour après confirmation. Ces actions attendent un nouvel envoi explicite.
 Survoler un message ou faire un clic droit pour **Copier le message** ou **Répondre** : répondre insère
 une citation dans le brouillon et attend l’envoi. L’historique natif reste sous le contrôle du fournisseur.
 
 Les pièces jointes ont leurs propres cartes. Les images se chargent en arrière-plan et s’agrandissent
 dans l’app. Cliquer sur un texte pour son aperçu, ou **Enregistrer la pièce jointe** pour choisir une
-destination pour les octets embarqués. Les fichiers copiés dans l’Explorateur se collent dans la saisie.
+destination pour les octets embarqués. Pour inclure une image dans un document Markdown,
+joindre les deux fichiers au même message, puis utiliser le nom unique de l’image, par exemple
+`![Résultat](./graphe.png)`. Les définitions de référence fonctionnent aussi.
+Collez une image du presse-papiers ou les fichiers copiés dans l’Explorateur avec **Ctrl+V**.
+Vérifiez la vignette et retirez au besoin la pièce jointe avant l’envoi.
 Les aperçus ne chargent pas les URL d’images arbitraires du Markdown. Un format sans décodeur conserve
 sa carte et son action d’enregistrement.
 
-**Arrêter** demande l'annulation. La réponse partielle reste marquée interrompue.
+Pendant la génération, **Arrêter** apparaît à côté d’**Envoyer**. Une annulation conserve la réponse partielle.
+Si le fournisseur refuse le tour, la réponse affiche son explication, le code d’erreur du SDK
+et le code du fournisseur lorsqu’il est disponible. Le texte déjà reçu reste visible.
+Le **Journal** conserve le même diagnostic après masquage des secrets. Vous pouvez ensuite
+changer de modèle et envoyer un nouveau message.
 **Reconnecter** reprend explicitement la session actuelle, sans renvoyer le message interrompu.
 Consulter les [conversations et l'historique](doc:conversations).
 
 ## Lire le journal {#logs}
 
-Ouvrir **Journal**, ou utiliser **Voir le journal** après une erreur. Les lignes indiquent l'heure locale,
+Ouvrir **Paramètres → Journal**. **JSONL brut** affiche les mêmes événements que le fichier.
+La molette permet de lire les entrées précédentes pendant que le journal reçoit de nouvelles lignes.
+Les lignes indiquent l'heure locale,
 le fournisseur, l'opération, le code d'événement ou d'erreur, l'explication et la durée. La connexion native
 précise l'initialisation du protocole, le contrôle du compte et la création de session. La génération
 indique le début de la réponse et sa fin.
@@ -94,7 +109,7 @@ La vue garde les 2 000 dernières lignes. Chaque fichier est limité à 8 Mio ; 
 signale sa saturation ou un problème d'écriture. Le journal n'annule jamais une conversation.
 
 ```image
-{"id":"connection-journal","src":"assets/logs-fr.png","alt":"Journal de Chat Lab avec les étapes et la fin d’une connexion native à Codex","controls":"minimal"}
+{"id":"connection-journal","src":"assets/logs-fr.png","alt":"Journal de Chat Lab affichant le refus de modèle reproduit avec un simulateur de Codex","controls":"minimal"}
 ```
 
 ## Permettre à une IA d'utiliser les commandes {#commands}

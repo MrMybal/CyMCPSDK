@@ -65,6 +65,10 @@ envelopper une liste ou une valeur dans un champ nommé pour préserver le contr
 `McpServer::serve_stdio()` sert les outils et permet des appels concurrents bornés.
 Le serveur répond à `server/discover` et aux métadonnées par requête de la révision `2026-07-28`.
 Il accepte aussi l'initialisation `2025-11-25` et `2025-06-18` pour les clients existants.
+Sur HTTP, cette initialisation renvoie `Mcp-Session-Id`. Le client le renvoie pour les
+appels suivants et pour `notifications/cancelled`. Des clients distincts peuvent donc utiliser le
+même identifiant JSON-RPC. `DELETE /mcp` termine la session désignée. Après un redémarrage
+ou l’expiration d’une session inactive, un HTTP 404 indique qu’il faut réinitialiser la session.
 Le serveur n'annonce ni ressources, ni prompts, ni souscriptions : uniquement les outils implémentés.
 
 Le client utilise d'abord la découverte moderne, puis l'initialisation historique si le serveur la refuse.
@@ -187,10 +191,34 @@ Le callback `ElevationHandler` appartient à l'app, qui fournit son parcours UAC
 Les codes de redémarrage sont exposés. Le SDK ne choisit ni n'installe arbitrairement un pilote.
 `uninstall()` retire le cache géré correspondant au reçu ; il ne désinstalle pas un pilote du système.
 
-Cette première version installe des fichiers individuels ou un installeur natif. L'extraction ZIP/tar, la reprise
-HTTP Range, les catalogues NVIDIA/AMD maintenus et les procédures système par distribution sont à compléter.
-Il ne faut pas annoncer un bouton universel « installer CUDA » sur la seule présence du gestionnaire.
+Les membres réguliers déclarés d’une archive ZIP ou tar sont extraits après vérification dans le
+dossier temporaire de l’installation. Le gestionnaire vérifie également la taille et l’empreinte de
+chaque fichier extrait. Les anciens manifestes de fichiers individuels restent acceptés.
+Le profil `cuda_runtime_package()` déploie CUDART 12.8.90 et sa licence dans le cache privé
+sur Windows/Linux x64. Renseigner `LocalEngineOptions::cuda_runtime_directory` avec le sous-dossier
+`runtime/` pour qu’un moteur enfant trouve la bibliothèque. Chat Lab expose ce téléchargement dans
+les paramètres des services locaux. La reprise HTTP Range et les autres paquets GPU restent à compléter.
+
+Avec un GPU NVIDIA et un pilote compatible, ce test matériel facultatif utilise Python 3.9+
+et le binaire de tests compilé avec le module Local. Le dernier argument désigne un dossier
+réservé au cache privé du SDK. Le vérificateur y installe ou réutilise le runtime officiel et
+valide ses empreintes. La sonde charge cette bibliothèque, compte les GPU et vérifie un
+aller-retour de 4 096 octets en mémoire GPU, suivi de la libération. Le pilote système doit
+déjà être installé.
+
+```powershell
+python tests/cuda_device.py build/cymcp_cuda_tests.exe build/cuda-device-cache
+```
+
+Sous Linux x64, utiliser le binaire `build/cymcp_cuda_tests`. Avec un générateur CMake
+multi-configuration, ajuster le chemin du binaire, par exemple `build/Release/cymcp_cuda_tests.exe`.
+Le test charge `cudart64_12.dll` sous Windows ou `libcudart.so.12` sous Linux.
+[API mémoire du runtime CUDA](https://docs.nvidia.com/cuda/archive/12.8.1/cuda-runtime-api/group__CUDART__MEMORY.html)
+
 Les droits `dependencies.install`, `dependencies.runInstaller` et `dependencies.uninstall` suivent la politique hôte.
+Pour `dependencies.runInstaller`, la décision reçoit aussi le chemin relatif `installer`,
+les arguments `arguments` et le booléen `requires_elevation`. L’hôte peut ainsi autoriser
+une invocation précise d’un paquet vérifié.
 
 ## Références de protocole
 

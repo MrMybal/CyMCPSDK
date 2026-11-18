@@ -1,14 +1,25 @@
 #include <cstdlib>
 #include <cymcp/core.hpp>
+#include <fstream>
 #include <iostream>
 #include <iterator>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
 #ifdef CYMCP_FIXTURE_HTTP
-#include <fstream>
 #include <httplib.h>
 #endif
 using namespace cymcp;
 void send(Json value) {
     std::cout << value.dump() << '\n' << std::flush;
+}
+constexpr char model_refusal[] =
+    "The 'gpt-6.2-sol' model is not supported when using Codex with a ChatGPT account.";
+void count_codex_turn() {
+    if (const char* path = std::getenv("CYMCP_FIXTURE_TURNS_FILE"))
+        std::ofstream(std::filesystem::u8path(path), std::ios::app) << "turn/start\n";
 }
 #ifdef _WIN32
 int wmain(int argc, wchar_t** argv) {
@@ -22,8 +33,63 @@ int main(int argc, char** argv) {
     auto has = [&](const std::string& s) {
         return std::find(args.begin(), args.end(), s) != args.end();
     };
+#ifndef _WIN32
+    if (args.size() == 2 && args.front() == "--exit-with-descendant") {
+        const int lock = open(args[1].c_str(), O_RDWR | O_CREAT | O_EXCL, 0600);
+        if (lock < 0 || flock(lock, LOCK_EX) < 0)
+            return 1;
+        const auto child = fork();
+        if (child < 0)
+            return 1;
+        if (child == 0) {
+            sleep(8);
+            _exit(0);
+        }
+        // The inherited open file description holds the lock for the child's lifetime.
+        close(lock);
+        return 0;
+    }
+#endif
     if (has("--silent")) {
         std::this_thread::sleep_for(std::chrono::minutes(5));
+        return 0;
+    }
+    if (has("--codex-exec-fixture")) {
+        if (has("--version")) {
+            std::cout << "codex-cli fixture\n";
+            return 0;
+        }
+        const bool resume = has("resume");
+        std::vector<std::string> expected = {"--codex-exec-fixture", "--sandbox", "read-only",
+                                             "--ask-for-approval",   "never",     "exec"};
+        if (resume)
+            expected.push_back("resume");
+        expected.insert(expected.end(),
+                        {"--json", "--skip-git-repo-check", "--model", "fixture", "--"});
+        if (resume)
+            expected.push_back("codex-exec-thread");
+        expected.push_back("-");
+        if (args != expected)
+            return 2;
+        std::string input{std::istreambuf_iterator<char>(std::cin),
+                          std::istreambuf_iterator<char>()};
+        count_codex_turn();
+        send({{"type", "thread.started"}, {"thread_id", "codex-exec-thread"}});
+        if (input == "exec-error" || input == "exec-turn-failed") {
+            const std::string message =
+                std::string(model_refusal) + " Authorization: Bearer fixture-sensitive-token";
+            if (input == "exec-turn-failed") {
+                send({{"type", "error"}, {"message", "Connection attempt failed"}});
+                send({{"type", "turn.failed"}, {"error", {{"message", message}}}});
+            } else
+                send({{"type", "error"}, {"message", message}});
+            return 1;
+        }
+        if (input == "exec-recovered")
+            send({{"type", "error"}, {"message", "Reconnecting"}});
+        send({{"type", "item.completed"}, {"item", {{"type", "agent_message"}, {"text", input}}}});
+        if (input != "truncated")
+            send({{"type", "turn.completed"}, {"usage", {{"output_tokens", 2}}}});
         return 0;
     }
     if (has("--overflow")) {
@@ -254,7 +320,11 @@ int main(int argc, char** argv) {
                     if (has("--fixture-fail")) {
                         send({{"jsonrpc", "2.0"},
                               {"id", message.at("id")},
-                              {"error", {{"code", -32603}, {"message", "failure"}}}});
+                              {"error",
+                               {{"code", -32603},
+                                {"message",
+                                 "The selected model is unavailable for account fixture-acp-17."},
+                                {"data", {{"trace", "unrelated-private-trace"}}}}}});
                         continue;
                     }
                     result["stopReason"] = has("--fixture-max-turns") ? "max_turn_requests"
@@ -304,6 +374,10 @@ int main(int argc, char** argv) {
         } else {
             send({{"type", "event"}, {"event", {{"type", "run_start"}, {"sessionId", sid}}}});
             send({{"type", "event"}, {"event", {{"type", "text_delta"}, {"delta", "Partial"}}}});
+            if (has("--fixture-native-interrupt")) {
+                send({{"type", "event"}, {"event", {{"type", "interrupted"}}}});
+                return 0;
+            }
         }
         if (has("--fixture-truncated"))
             return 0;
@@ -396,6 +470,18 @@ int main(int argc, char** argv) {
             auto it = std::find(args.begin(), args.end(), name);
             return it == args.end() || ++it == args.end() ? std::string() : *it;
         };
+        if (has("--expect-runtime")) {
+#ifdef _WIN32
+            const char* env = std::getenv("PATH");
+            const char separator = ';';
+#else
+            const char* env = std::getenv("LD_LIBRARY_PATH");
+            const char separator = ':';
+#endif
+            const auto expected = option("--expect-runtime") + separator + "host-extra";
+            if (!env || std::string(env) != expected)
+                return 35;
+        }
         std::ifstream credentials(option("--api-key-file"));
         std::string token;
         credentials >> token;
@@ -487,13 +573,17 @@ int main(int argc, char** argv) {
                                                      {"text", "Private account diagnostic"}}})}}}});
                 send({{"type", "stream_event"},
                       {"event", {{"delta", {{"type", "text_delta"}, {"text", text}}}}}});
-                send({{"type", "result"},
-                      {"subtype", has("--fixture-fail") || has("--fixture-auth-failure") ||
-                                          has("--fixture-rate-limit")
-                                      ? "error_during_execution"
-                                      : "success"},
-                      {"result", text},
-                      {"usage", usage}});
+                const bool diagnosed = has("--fixture-auth-failure") || has("--fixture-rate-limit");
+                Json terminal = {{"type", "result"},
+                                 {"subtype", diagnosed || has("--fixture-fail")
+                                                 ? "error_during_execution"
+                                                 : "success"},
+                                 {"result", text},
+                                 {"usage", usage}};
+                if (diagnosed)
+                    terminal["errors"] = {"The provider refused this generation.",
+                                          "Credential: claude-fixture-secret"};
+                send(terminal);
             }
         }
         return 0;
@@ -559,14 +649,98 @@ int main(int argc, char** argv) {
             if (method == "account/read")
                 result = {{"account", {{"type", "fixture"}}}};
             else if (method == "model/list")
-                result = {{"data", Json::array({{{"id", "fixture-model"}}})},
+                result = {{"data", has("--fixture-account-stale-default")
+                                      ? Json::array({{{"model", "gpt-6-luna"}, {"isDefault", true}}})
+                                      : has("--fixture-account-models")
+                                      ? Json::array({{{"model", "gpt-6.2-sol"}, {"isDefault", true}},
+                                                      {{"model", "gpt-6-luna"}}})
+                                      : Json::array({{{"id", "fixture-model"}}})},
                           {"nextCursor", nullptr}};
             else if (method == "thread/start" || method == "thread/resume")
-                result = {{"thread", {{"id", "fixture-thread"}}}, {"model", "fixture-model"}};
+                result = {{"thread", {{"id", "fixture-thread"}}},
+                          {"model", value.at("params").value("model",
+                              std::string(has("--fixture-account-stale-default") ? "gpt-6.2-sol" : "fixture-model"))}};
             else if (method == "turn/start") {
                 active = "turn-" + std::to_string(++turn);
-                send({{"id", id}, {"result", {{"turn", {{"id", active}}}}}});
                 auto prompt = value["params"]["input"][0]["text"].get<std::string>();
+                count_codex_turn();
+                const std::string refusal = model_refusal;
+                if (prompt == "rpc-model-refusal") {
+                    send({{"id", id},
+                          {"error",
+                           {{"code", -32602},
+                            {"message", refusal},
+                            {"data", {{"private", "rpc-private-payload"}}}}}});
+                    continue;
+                }
+                send({{"id", id}, {"result", {{"turn", {{"id", active}}}}}});
+                if ((has("--fixture-account-models") || has("--fixture-account-stale-default")) &&
+                    value.at("params").value("model", std::string()) != "gpt-6-luna") {
+                    const Json upstream = {{"type", "error"}, {"status", 400},
+                                           {"error", {{"type", "invalid_request_error"},
+                                                      {"message", refusal},
+                                                      {"code", "model_not_found"}}},
+                                           {"account", "fixture-private-account"}};
+                    send({{"method", "error"},
+                          {"params", {{"threadId", "fixture-thread"}, {"turnId", active},
+                                      {"willRetry", false},
+                                      {"error", {{"message", upstream.dump()}, {"codexErrorInfo", "other"}}}}}});
+                    continue;
+                }
+                if (prompt == "partial-model-refusal") {
+                    send({{"method", "item/agentMessage/delta"},
+                          {"params",
+                           {{"threadId", "fixture-thread"},
+                            {"turnId", active},
+                            {"delta", "Partial "}}}});
+                    send({{"method", "item/completed"},
+                          {"params",
+                           {{"threadId", "fixture-thread"},
+                            {"turnId", active},
+                            {"item",
+                             {{"type", "agentMessage"},
+                              {"id", "partial"},
+                              {"text", "Partial answer."}}}}}});
+                    send({{"method", "error"},
+                          {"params",
+                           {{"threadId", "fixture-thread"},
+                            {"turnId", active},
+                            {"willRetry", false},
+                            {"error",
+                             {{"message",
+                               refusal + " Authorization: Bearer fixture-sensitive-token"},
+                              {"codexErrorInfo", "badRequest"}}}}}});
+                    // The provider may send a second, less specific terminal status for the turn.
+                    send(
+                        {{"method", "turn/completed"},
+                         {"params",
+                          {{"threadId", "fixture-thread"},
+                           {"turn", {{"id", active}, {"status", "failed"}, {"error", nullptr}}}}}});
+                    continue;
+                }
+                if (prompt == "completed-model-refusal" || prompt == "native-interrupt") {
+                    const bool cancelled = prompt == "native-interrupt";
+                    send({{"method", "turn/completed"},
+                          {"params",
+                           {{"threadId", "fixture-thread"},
+                            {"turn",
+                             {{"id", active},
+                              {"status", cancelled ? "interrupted" : "failed"},
+                              {"error", cancelled ? Json(nullptr)
+                                                  : Json{{"message", refusal},
+                                                         {"codexErrorInfo", "badRequest"}}}}}}}});
+                    continue;
+                }
+                if (prompt == "retry-then-success") {
+                    send({{"method", "error"},
+                          {"params",
+                           {{"threadId", "fixture-thread"},
+                            {"turnId", active},
+                            {"willRetry", true},
+                            {"error", {{"message", "Reconnecting"}}}}}});
+                    complete();
+                    continue;
+                }
                 if (has("--fixture-check-image")) {
                     auto image = value.at("params").at("input").at(1);
                     if (image.at("type") != "image" ||

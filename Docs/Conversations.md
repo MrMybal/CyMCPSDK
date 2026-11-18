@@ -5,6 +5,17 @@ transfère les événements vers sa boucle UI. Utiliser `send_async` pour ne pas
 Ne pas rappeler une méthode verrouillante du fournisseur depuis son callback ; mettre les commandes
 dans la file de l'hôte. `Conversation::cancel()` peut être appelé directement, y compris depuis un callback.
 
+## Échecs et annulations
+
+Lorsqu’un fournisseur refuse un tour, `Error::code` identifie la catégorie SDK et
+`Error::provider_code` expose le code natif disponible. `what()` contient l’explication
+expurgée. L’événement `TurnFailed` transmet les mêmes informations dans `code`,
+`provider_code` et `message`. Une annulation déclenche `TurnCancelled`.
+
+`Conversation::transcript()` réunit les messages et les échecs de génération pour l’affichage.
+Le checkpoint conserve les diagnostics de ces tours et leurs réponses partielles. L’historique
+envoyé au modèle reste accessible avec `history()`. Les checkpoints plus anciens restent lisibles.
+
 ## Processus persistants et transports
 
 Le registre utilise par défaut Claude Code en entrée/sortie `stream-json` et Antigravity en entrée
@@ -151,6 +162,29 @@ cymcp_chat benchmark CONFIG.json
 Le benchmark effectue trois petits échanges successifs avec le fournisseur configuré (1 à 20 via
 `benchmark_turns`). Il rapporte connexion, tour froid, tours chauds, processus lancés et résultat attendu.
 Il utilise le compte ou la clé configurés et peut donc consommer son quota. Aucun essai n'est relancé en erreur.
+
+Le banc apparié Ollama compare le premier texte visible à la sortie de `cymcp_chat` avec le
+premier texte de la réponse NDJSON de l’API native locale. Un même prompt synthétique, un
+modèle déjà installé et les mêmes réglages servent aux deux chemins. Chaque mesure démarre
+une conversation neuve. Le chronométrage commence à l’envoi du message, après le démarrage
+du processus client. Un échauffement par chemin précède six paires, exécutées en ordre alterné.
+
+```sh
+python benchmarks/chat_latency.py build/cymcp_chat --model qwen3:0.6b
+```
+
+Le 18 novembre 2026, sous Windows x64 avec Ollama 0.40.5, Qwen3 0.6b et CUDA, les douze
+réponses mesurées ont donné le texte attendu. La réflexion était désactivée et le plafond
+de sortie était de 96 tokens.
+
+| Médiane sur six mesures par chemin | Premier texte visible | Réponse terminée |
+| --- | ---: | ---: |
+| SDK C++ via `cymcp_chat` | 15,0 ms | 18,1 ms |
+| Client HTTP direct sur `/api/chat` | 13,4 ms | 16,5 ms |
+
+Ces valeurs caractérisent un échange court sur la machine testée, avec le cache du modèle
+chaud et le même préfixe à chaque requête. Le rendu graphique, le chargement à froid, les
+longs historiques et les fournisseurs distants demandent des mesures distinctes.
 
 L'exemple de tchat accepte aussi `{"content":[...]}` ou `{"text":"Analyse", "attachments":[{"path":"..."}]}`.
 Configuration de stockage facultative : `"history":{"directory":"...","id":"main","restore":false}`.

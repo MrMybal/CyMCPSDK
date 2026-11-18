@@ -64,12 +64,37 @@ int main(int argc, char** argv) {
                 std::filesystem::remove_all(p, ec);
             }
         } cleanup{directory};
+#ifdef __APPLE__
+        {
+            const auto alias_store =
+                std::filesystem::path("/tmp") / ("cymcp-alias-" + random_token(16));
+            ConversationStore alias(alias_store);
+            const auto resolved = std::filesystem::canonical(alias_store);
+            check(resolved.parent_path() == std::filesystem::canonical("/tmp"),
+                  "macOS system temporary alias accepts a private conversation directory");
+            std::filesystem::remove(resolved);
+        }
+#endif
+#ifndef _WIN32
+        {
+            const auto link = directory / "history-alias";
+            std::filesystem::create_directory_symlink(directory, link);
+            expect_error("UnsafePath", [&] { ConversationStore store(link / "history"); });
+            std::filesystem::remove(link);
+        }
+#endif
         {
             std::ofstream file(directory / "image.png", std::ios::binary);
             file << "hello";
         }
         auto file = attachment_from_file(directory / "image.png");
         check(file == image, "File snapshot preserves exact base64 bytes and MIME type");
+        auto named_image = detail::content_from_files("", {directory / "image.png"}, {});
+        check(
+            named_image.at(0).at("name") == "image.png" &&
+                detail::content_for(named_image, detail::ContentFormat::Acp) ==
+                    Json::array({image}),
+            "Markdown keeps the local image filename while ACP receives its portable image block");
         expect_error("ContextTooLarge",
                      [&] { attachment_from_file(directory / "image.png", "", 4); });
         {
@@ -122,14 +147,55 @@ int main(int argc, char** argv) {
                          [&] { registry.create("claude-code", unavailable)->connect(); });
             for (const auto& [flag, code] : std::vector<std::pair<std::string, std::string>>{
                      {"--fixture-auth-failure", "AuthenticationRequired"},
-                     {"--fixture-rate-limit", "RateLimited"}}) {
+                     {"--fixture-rate-limit", "RateLimited"},
+                     {"--fixture-fail", "ProviderError"}}) {
                 auto failed = config;
                 failed.process.arguments = {"--conversation-fixture", flag};
+                failed.process.environment["ANTHROPIC_API_KEY"] = "claude-fixture-secret";
                 Conversation rejected(registry.create("claude-code", failed), "fixture-model");
                 rejected.connect();
                 expect_error(code, [&] { rejected.send("native failure"); });
-                check(rejected.status().at("last_error") == code,
-                      "Native Claude error categories survive in conversation diagnostics");
+                const auto row = rejected.transcript().back();
+                const auto detail = row.at("error_message").get<std::string>();
+                const auto native = code == "RateLimited"              ? "rate_limit"
+                                    : code == "AuthenticationRequired" ? "authentication_failed"
+                                                                       : "error_during_execution";
+                check(row.at("provider_code") == native &&
+                          rejected.status().at("last_error") == code &&
+                          row.at("content") == "native failure" &&
+                          detail.find("native failure") == std::string::npos &&
+                          detail.find("Private account diagnostic") == std::string::npos,
+                      "Claude reports the native cause without copying content from the account or "
+                      "turn");
+                if (code != "ProviderError")
+                    check(detail.starts_with("The provider refused this generation.") &&
+                              detail.find("Credential:") != std::string::npos &&
+                              detail.find("claude-fixture-secret") == std::string::npos,
+                          "Claude terminal errors preserve the explanations and redact configured "
+                          "secrets");
+            }
+        }
+        for (const std::string id : {"command-code", "codebuddy"}) {
+            ProviderConfig config;
+            config.process = {fixture, {"--extension-fixture", "--fixture-fail"}};
+            if (id == "codebuddy")
+                config.process.arguments.push_back("--buddy");
+            Conversation failed(registry.create(id, config), "fixture-model");
+            failed.connect();
+            expect_error("ProviderError", [&] { failed.send("private CLI output"); });
+            const auto row = failed.transcript().back();
+            check(row.at("provider_code") == "error" && row.at("content") == "Partial" &&
+                      row.at("error_message").get<std::string>().find("private CLI output") ==
+                          std::string::npos,
+                  "Native CLI terminal failure keeps its subtype and partial reply");
+            if (id == "command-code") {
+                config.process.arguments.back() = "--fixture-native-interrupt";
+                Conversation cancelled(registry.create(id, config), "fixture-model");
+                cancelled.connect();
+                expect_error("Cancelled", [&] { cancelled.send("cancelled turn"); });
+                check(cancelled.transcript().back().at("content") == "Partial",
+                      "A native Command Code interruption is cancelled and retains the partial "
+                      "response");
             }
         }
         for (bool agy : {false, true}) {
@@ -242,6 +308,29 @@ int main(int argc, char** argv) {
             chat.reconnect();
             check(chat.send("next").text == "next", "ACP preset resumes its exact session");
         }
+        {
+            AcpOptions options;
+            options.process = {fixture, {"--extension-fixture", "--acp-fixture", "--fixture-fail"}};
+            options.process.environment["ACP_ACCESS_TOKEN"] = "fixture-acp-17";
+            Conversation chat(std::make_shared<AcpProvider>(options), "fixture-model");
+            chat.connect();
+            try {
+                chat.send("Partial answer");
+                check(false, "ACP prompt rejection fails the turn");
+            } catch (const Error& error) {
+                const std::string detail = error.what();
+                check(error.code == "ProviderError" && error.provider_code == "-32603" &&
+                          detail.starts_with("The selected model is unavailable for account ") &&
+                          detail.find("fixture-acp-17") == std::string::npos &&
+                          detail.find("unrelated-private-trace") == std::string::npos,
+                      "ACP RPC errors retain their explanation and mask process credentials");
+                const auto row = chat.transcript().back();
+                check(row.at("error_code") == error.code && row.at("provider_code") == "-32603" &&
+                          row.at("error_message") == detail &&
+                          row.at("content") == "Partial answer",
+                      "ACP rejection reaches the failed turn alongside its partial response");
+            }
+        }
         ProviderConfig unsupported;
         unsupported.process = {fixture, {"--extension-fixture", "--acp-fixture"}};
         Conversation text_only(registry.create("acp", unsupported), "fixture-model");
@@ -296,10 +385,109 @@ int main(int argc, char** argv) {
         {
             CodexOptions options;
             options.process = {fixture, {"--codex-fixture"}};
+            const auto turns = directory / "attempts.txt";
+            options.process.environment["CYMCP_FIXTURE_TURNS_FILE"] = path_utf8(turns);
+            Conversation codex(std::make_shared<CodexProvider>(options), "fixture-model");
+            codex.connect();
+            const std::string refusal =
+                "The 'gpt-6.2-sol' model is not supported when using Codex with a ChatGPT account.";
+            std::vector<Json> errors;
+            std::string partial;
+            CallContext observed;
+            observed.events = [&](const Event& event) {
+                if (event.type == "ProviderError")
+                    errors.push_back(event.data);
+                if (event.type == "TextDelta")
+                    partial += event.data.at("text").get<std::string>();
+            };
+            for (const std::string prompt :
+                 {"rpc-model-refusal", "partial-model-refusal", "completed-model-refusal"}) {
+                errors.clear();
+                partial.clear();
+                try {
+                    codex.send(prompt, observed);
+                    throw std::runtime_error("Expected the model refusal");
+                } catch (const Error& error) {
+                    const std::string explanation = error.what();
+                    check(error.code == "ProviderError" && explanation.starts_with(refusal),
+                          "Both RPC and generation errors retain Codex's model refusal");
+                    check(errors.size() == 1 && errors[0].at("code") == error.code &&
+                              errors[0].at("message") == explanation &&
+                              errors[0].dump().find("rpc-private-payload") == std::string::npos &&
+                              explanation.find("fixture-sensitive-token") == std::string::npos,
+                          "Only the sanitized provider explanation reaches error observers");
+                    if (prompt == "rpc-model-refusal")
+                        check(error.provider_code == "-32602" &&
+                                  errors[0].at("rpc_code") == -32602 && explanation == refusal,
+                              "Codex keeps the JSON-RPC error number alongside its message");
+                    else
+                        check(error.provider_code == "badRequest" &&
+                                  errors[0].at("native_code") == "badRequest",
+                              "Codex keeps the native error category alongside its message");
+                    check(partial == (prompt == "partial-model-refusal" ? "Partial answer." : ""),
+                          "A failed turn preserves exactly the text delivered before the failure");
+                }
+            }
+            errors.clear();
+            check(codex.send("retry-then-success", observed).text == "Hello fixture" &&
+                      errors.empty(),
+                  "A transient provider retry does not fail or resubmit the generation");
+            expect_error("Cancelled", [&] { codex.send("native-interrupt", observed); });
+            check(errors.empty() && codex.send("next").text == "Hello fixture",
+                  "A native interruption is distinct from failure and leaves the session usable");
+            std::ifstream attempts(turns);
+            check(std::count(std::istreambuf_iterator<char>(attempts),
+                             std::istreambuf_iterator<char>(), '\n') == 6,
+                  "Codex receives exactly one turn/start per explicit send, including failures");
+        }
+        {
+            CodexOptions options;
+            options.process = {fixture, {"--codex-fixture", "--fixture-account-stale-default"}};
+            Conversation codex(std::make_shared<CodexProvider>(options), "");
+            codex.connect("", {}, true);
+            check(codex.session().model == "gpt-6-luna" && codex.send("test").text == "Hello fixture",
+                  "Automatic Codex startup uses the listed default when the profile model is absent");
+        }
+        {
+            ProviderConfig config;
+            config.process = {fixture, {"--codex-exec-fixture"}};
+            const auto turns = directory / "exec-attempts.txt";
+            config.process.environment["CYMCP_FIXTURE_TURNS_FILE"] = path_utf8(turns);
+            Conversation chat(registry.create("codex-exec", config), "fixture");
+            chat.connect();
+            for (const std::string prompt : {"exec-error", "exec-turn-failed"}) {
+                try {
+                    chat.send(prompt);
+                    throw std::runtime_error("Expected an exec model refusal");
+                } catch (const Error& e) {
+                    const std::string message = e.what();
+                    check(e.code == "ProviderError" &&
+                              message.find(
+                                  "not supported when using Codex with a ChatGPT account.") !=
+                                  std::string::npos &&
+                              message.find("fixture-sensitive-token") == std::string::npos,
+                          "Codex exec preserves the redacted reason from error and turn.failed");
+                }
+            }
+            check(chat.send("exec-recovered").text == "exec-recovered",
+                  "A recovered Codex exec error does not hide the successful result");
+            std::ifstream attempts(turns);
+            check(std::count(std::istreambuf_iterator<char>(attempts),
+                             std::istreambuf_iterator<char>(), '\n') == 3,
+                  "Codex exec only receives the requested generations");
+        }
+        {
+            CodexOptions options;
+            options.process = {fixture, {"--codex-fixture"}};
             auto provider = std::make_shared<CodexProvider>(options);
             Conversation codex(provider, "fixture-model");
             codex.connect();
             expect_error("RateLimited", [&] { codex.send("native-failure"); });
+            const auto native_messages = codex.history();
+            expect_error("Unsupported", [&] { codex.edit_message(0, "edit"); });
+            expect_error("Unsupported", [&] { codex.delete_turn(0); });
+            check(codex.history() == native_messages,
+                  "Native provider history is unchanged by edit and delete requests");
             codex.reconnect();
             Executor executor(1);
             auto pending = codex.send_async(executor, "silent");
@@ -432,8 +620,47 @@ int main(int argc, char** argv) {
             }
             check(body.at(id == "openai" ? "input" : "messages").size() >= 3,
                   "API reconnect carries complete prior context");
-            if (id == "ollama" || id == "anthropic" || id == "openai")
-                expect_error("UnsupportedContent", [&] { restored.send(Json::array({audio})); });
+            const auto incompatible =
+                Json::array({(id == "openrouter" || id == "openai-compatible") ? pdf : audio});
+            const auto successful = restored.history();
+            const auto before_refusal = generations.load();
+            expect_error("UnsupportedContent", [&] { restored.send(incompatible); });
+            check(restored.history() == successful && generations.load() == before_refusal,
+                  "A rejected attachment changes neither committed history nor the server");
+            auto rejected_checkpoint = restored.checkpoint();
+            check(restored.send("text after rejection").text == "answer",
+                  "A text turn succeeds immediately after a rejected attachment");
+            restored.restore(rejected_checkpoint);
+            check(restored.send("text after restoring rejection").text == "answer",
+                  "A checkpoint saved after a rejected attachment remains usable");
+
+            // Earlier versions persisted both the incompatible input and later unsent retries.
+            auto legacy = rejected_checkpoint;
+            legacy["messages"].push_back({{"role", "user"}, {"content", incompatible}});
+            legacy["messages"].push_back({{"role", "user"}, {"content", "never delivered"}});
+            const auto before_repair = generations.load();
+            restored.restore(legacy);
+            check(restored.history() == successful && generations.load() == before_repair,
+                  "Restore repairs only the rejected legacy suffix without generation");
+            check(restored.send("next after migration").text == "answer",
+                  "Migrated conversation accepts a new turn");
+
+            if (id == "ollama") {
+                Executor worker(1);
+                std::promise<void> release;
+                auto gate = release.get_future();
+                worker.post([&] { gate.wait(); });
+                auto pending = restored.send_async(worker, "queued turn");
+                const auto queued = Clock::now();
+                std::this_thread::sleep_for(std::chrono::milliseconds(25));
+                const auto waited =
+                    std::chrono::duration<double, std::milli>(Clock::now() - queued).count();
+                release.set_value();
+                const auto metrics = pending.get().metrics;
+                check(metrics.at("first_token_ms").get<double>() >= waited &&
+                          metrics.at("total_ms").get<double>() >= waited,
+                      "First token and total timing include work queued before dispatch");
+            }
         }
         std::cout << checks << " conversation checks passed\n";
         return 0;

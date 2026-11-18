@@ -4,6 +4,9 @@
 
 ## 0.5.6 — In development
 
+- Fix the fifteen issues recorded in the conformance audit and add regression coverage.
+  All twelve Windows suites and all eight Linux suites pass. [Fixes and verification (French)](Docs/Audit-0.5.6.md)
+- Add the resumable `codex-exec` profile and private NVIDIA CUDART 12.8.90 installation on Windows and Linux x64.
 - Use the updated native CyUI message composer: growing input, formatting, Enter/Shift+Enter, and retained drafts during generation.
 - Render conversations through TranscriptSource with bounded visible-row caches, without copying the full transcript on each streamed delta.
 - Show native attachment cards, cached asynchronous image previews and local file previews; save embedded attachments after choosing a destination.
@@ -58,17 +61,17 @@
 
 ### Known issues
 
-- Linux builds currently encounter a GCC error in a core test declaration.
-- On macOS, the conversation-store test fails when the temporary directory has a symlinked ancestor.
-  Full Linux/macOS distributions are not offered yet. The graphical example uses Win32/DX11.
+- The core test declaration now builds with GCC 15.2. The macOS conversation store recognizes
+  the system aliases for temporary directories. Validation on a macOS runner is still pending.
+  The graphical example uses Win32/DX11.
 - Provider availability depends on the installed CLI/API version, account and selected model.
   The included provider profiles do not guarantee authentication with every service.
 
 ### Current limits
 
 - The SDK does not include models, provider CLIs, inference engines, GPU runtimes or drivers.
-- Local dependency downloads verify host-supplied manifests; automatic archive extraction,
-  GPU package catalogues and HTTP Range resumption remain to be implemented.
+- Local dependencies support verified archive members and a pinned NVIDIA CUDART 12.8.90
+  package on Windows/Linux x64. Additional GPU packages and HTTP Range resumption remain open.
 - Direct Chat Lab operation attachment is available for Codex and supported API transports;
   other CLIs use their native MCP settings. ACP filesystem/terminal services require host callbacks.
 - MCP tools support stdio and authenticated loopback HTTP JSON. Persistent subscriptions,

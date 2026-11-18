@@ -5,20 +5,23 @@ description: Sélectionner CLI, API native ou service local avec ses vrais modè
 section: Guides
 parent: chat-lab
 order: 1
-sourceRevision: 4
+sourceRevision: 5
 ---
 
 ## Profils intégrés {#profiles}
 
 | Type | Identifiants du registre |
 | --- | --- |
-| Agents natifs | `codex`, `claude-code`, `antigravity`, `command-code`, `codebuddy` |
+| Agents natifs | `codex`, `codex-exec`, `claude-code`, `antigravity`, `command-code`, `codebuddy` |
 | Agents ACP v1 | `opencode`, `gemini`, `qwen-code`, `kimi`, `goose`, `devin`, `command-code-acp`, `codebuddy-acp`, `acp` |
 | OpenCode historique 1.x | `opencode-cli` |
 | API natives | `openai` (Responses), `anthropic` (Messages), `openrouter`, `ollama` |
 | Serveurs HTTP compatibles | `openai-compatible`, `llama.cpp`, `lmstudio` |
 
-Ces 22 profils décrivent des transports et des recettes de lancement. La version installée, le
+Choisir `codex` pour une session App Server persistante et les outils de l’hôte. Le
+profil `codex-exec` lit le texte sur stdin et peut reprendre un thread par son identifiant.
+
+Ces 23 profils décrivent des transports et des recettes de lancement. La version installée, le
 serveur et le modèle déterminent les capacités réelles. ACP v1 négocie le chargement des sessions,
 les modèles, modes et contenus acceptés. `opencode-cli` est l'ancien transport JSONL ; OpenCode
 actuel utilise `opencode` avec ACP.

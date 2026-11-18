@@ -4,7 +4,7 @@ title: CyMCPSDK
 description: Add AI conversations and application tools to a native C++ application.
 section: Guides
 order: 0
-revision: 1
+revision: 2
 ---
 
 ## Choose your workflow {#workflows}
@@ -48,4 +48,4 @@ Linux/macOS distribution work is still in progress; Android is deferred.
 
 Use the page tree or search field; **Ctrl+K** opens search. Switch between English and
 French in the reader. The complete `Documentation` folder opens directly from disk.
-In Chat Lab, **Help (F1)** opens the chat guide in the selected application language.
+In Chat Lab, **F1** opens Help. Choose **Open full manual** for the offline guide in the selected language.

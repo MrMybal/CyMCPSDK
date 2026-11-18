@@ -44,7 +44,8 @@ ChatAttachment attachment_view(const Json& block, std::uint64_t id, std::string 
     return result;
 }
 std::size_t row_bytes(const ChatMessage& row) {
-    auto bytes = row.markdown.size();
+    auto bytes = row.markdown.size() + row.error_code.size() + row.error_message.size() +
+                 row.provider_code.size();
     for (const auto& attachment : row.attachments)
         bytes += static_cast<std::size_t>(attachment.bytes) * 2 + attachment.name.size();
     return bytes;
@@ -52,12 +53,14 @@ std::size_t row_bytes(const ChatMessage& row) {
 } // namespace
 struct ChatController::Impl {
     struct Completion {
-        std::string action, error, storage_error;
+        std::string action, error, error_message, provider_code, storage_error;
         Session session;
         ChatResult result;
         Json history = nullptr, models = nullptr;
-        bool connected = false;
+        bool connected = false, editable_history = false, turn_model_selection = false;
         std::uint64_t user_id = 0;
+        std::optional<std::size_t> user_count;
+        std::optional<std::string> edited_text;
         std::vector<ChatAttachment> attachments;
     };
     std::shared_ptr<ProviderRegistry> registry;
@@ -102,16 +105,16 @@ struct ChatController::Impl {
     Clock::time_point operation_started{};
     bool response_started = false;
     void diagnose(std::string level, std::string operation, std::string code, std::string message,
-                  double elapsed = 0) {
+                  double elapsed = 0, std::string provider_code = {}) {
         if (view.diagnostics.size() == 1000)
             view.diagnostics.pop_front();
         const auto now = std::chrono::system_clock::now().time_since_epoch();
         view.diagnostics.push_back(
             {next_diagnostic++, std::chrono::duration_cast<std::chrono::milliseconds>(now).count(),
              std::move(level), view.provider_id, std::move(operation), std::move(code),
-             std::move(message), elapsed});
+             std::move(message), elapsed, std::move(provider_code)});
     }
-    std::size_t displayed_bytes = 0;
+    std::size_t displayed_bytes = 0, committed_users = 0;
     // Last member: joins before the worker's captured resources are destroyed.
     Executor worker{1, 2};
 
@@ -132,6 +135,13 @@ struct ChatController::Impl {
             throw Error("Busy", "Chat already has an active operation");
         if (connected && !view.connected)
             throw Error("InvalidState", "Connect the chat first");
+    }
+    std::string error_detail(std::string_view message) const {
+        if (provider)
+            return provider->error_message(message);
+        auto secrets = process_error_secrets(connection.provider.process);
+        secrets.push_back(connection.provider.api_key);
+        return redact_error_message(message, secrets);
     }
     void start(std::string action, std::function<void(Completion&, const CallContext&)> work) {
         require_idle();
@@ -171,10 +181,20 @@ struct ChatController::Impl {
                 work(result, context);
             } catch (const Error& error) {
                 result.error = error.code;
+                result.error_message = error_detail(error.what());
+                result.provider_code = error_detail(error.provider_code);
+            } catch (const std::exception& error) {
+                result.error = "ProviderError";
+                result.error_message = error_detail(error.what());
             } catch (...) {
                 result.error = "ProviderError";
             }
             if (chat) {
+                result.turn_model_selection = provider->capabilities().turn_model_selection;
+                result.editable_history =
+                    provider->uses_host_history() && !provider->uses_native_turn_context();
+                if (action == "generating" && result.editable_history)
+                    result.user_count = chat->user_turn_count();
                 result.session = chat->session();
                 auto status = chat->status();
                 // needs_reconnect (failed restore/reconnect) is not a usable connection.
@@ -191,6 +211,8 @@ struct ChatController::Impl {
         view.busy = true;
         view.phase = std::move(action);
         view.error_code.clear();
+        view.error_message.clear();
+        view.provider_code.clear();
         view.storage_error.clear();
         operation_started = Clock::now();
         response_started = false;
@@ -275,6 +297,7 @@ struct ChatController::Impl {
         view.messages.clear();
         view.thinking.clear();
         displayed_bytes = 0;
+        committed_users = 0;
         for (const auto& message : messages) {
             const auto role = message.at("role").get<std::string>();
             if (role != "user" && role != "assistant")
@@ -287,6 +310,21 @@ struct ChatController::Impl {
                 text = text.substr(0, keep) + display_cut;
             }
             ChatMessage row{next_id++, role, std::move(text)};
+            if (role == "user" && view.editable_history) {
+                if (row.markdown.size() <= text_limit)
+                    row.user_turn = committed_users;
+                ++committed_users;
+            }
+            if (role == "assistant") {
+                const auto code = message.value("error_code", std::string());
+                if (code == "Cancelled")
+                    row.interrupted = true;
+                else if (!code.empty()) {
+                    row.error_code = code;
+                    row.error_message = error_detail(message.value("error_message", std::string()));
+                    row.provider_code = error_detail(message.value("provider_code", std::string()));
+                }
+            }
             if (message.at("content").is_array())
                 for (const auto& block : message.at("content")) {
                     const auto type = block.value("type", std::string());
@@ -298,6 +336,57 @@ struct ChatController::Impl {
         }
         trim_view();
         ++view.revision;
+    }
+    void change_user_turn(std::uint64_t id, std::optional<std::string> text) {
+        require_idle(true);
+        if (!view.editable_history)
+            throw Error("Unsupported", "The provider owns this conversation history");
+        const auto row = std::find_if(view.messages.begin(), view.messages.end(),
+                                      [id](const auto& item) { return item.id == id; });
+        if (row == view.messages.end() || !row->user_turn)
+            throw Error("InvalidParameters", "Choose a committed user message");
+        if (text && text->size() > text_limit)
+            throw Error("InvalidContent", "Edited text exceeds the display limit");
+        const auto turn = *row->user_turn;
+        const std::string action = text ? "editing" : "deleting";
+        start(action,
+              [this, id, turn, text = std::move(text)](Completion& result, const auto&) mutable {
+                  if (text)
+                      chat->edit_message(turn, *text);
+                  else
+                      chat->delete_turn(turn);
+                  result.user_id = id;
+                  result.edited_text = std::move(text);
+                  persist(result);
+              });
+    }
+    void apply_mutation(const Completion& result) {
+        auto first = std::find_if(view.messages.begin(), view.messages.end(),
+                                  [&](const auto& item) { return item.id == result.user_id; });
+        if (first == view.messages.end())
+            return;
+        if (result.edited_text) {
+            displayed_bytes -= first->markdown.size();
+            first->markdown = *result.edited_text;
+            displayed_bytes += first->markdown.size();
+            trim_view();
+            return;
+        }
+        const auto next = std::find_if(first + 1, view.messages.end(),
+                                       [](const auto& item) { return item.role == "user"; });
+        if (*first->user_turn + 1 == committed_users) {
+            displayed_bytes -= view.thinking.size();
+            view.thinking.clear();
+            view.activity.clear();
+            view.metrics = Json::object();
+            view.usage = Json::object();
+        }
+        for (auto it = first; it != next; ++it)
+            displayed_bytes -= row_bytes(*it);
+        for (auto it = view.messages.erase(first, next); it != view.messages.end(); ++it)
+            if (it->user_turn)
+                --*it->user_turn;
+        --committed_users;
     }
 };
 ChatController::ChatController(std::shared_ptr<ProviderRegistry> registry)
@@ -322,6 +411,7 @@ void ChatController::open(ChatConnection options) {
     s.view.provider_id = s.connection.provider_id;
     s.view.model = s.connection.model;
     s.displayed_bytes = 0;
+    s.committed_users = 0;
     s.assistant_id = 0;
     s.start("connecting", [&s](auto& result, const auto& context) {
         if (s.chat)
@@ -335,12 +425,20 @@ void ChatController::open(ChatConnection options) {
                                                 s.connection.system_prompt);
         if (!s.connection.history_directory.empty())
             s.store = std::make_unique<ConversationStore>(s.connection.history_directory);
-        if (s.connection.restore)
+        const bool can_select_model = s.provider->capabilities().turn_model_selection;
+        if (s.connection.restore) {
             s.chat->restore(s.store->load(s.connection.history_id), context);
-        else
+            if (can_select_model) {
+                try {
+                    result.models = s.provider->list_models(context);
+                } catch (const Error&) {
+                    context.cancellation.check();
+                }
+            }
+        } else
             s.chat->connect(s.connection.resume_id, context, s.connection.automatic_model,
-                            s.connection.automatic_model ? &result.models : nullptr);
-        result.history = s.chat->history();
+                            s.connection.automatic_model || can_select_model ? &result.models : nullptr);
+        result.history = s.chat->transcript();
     });
 }
 void ChatController::send(std::string text, std::vector<std::filesystem::path> attachments) {
@@ -368,20 +466,19 @@ void ChatController::send(std::string text, std::vector<std::filesystem::path> a
                            user_id, pending_attachments = std::move(pending_attachments)](
                               auto& result, const auto& context) {
         result.user_id = user_id;
-        Json content = text;
+        Json content;
         if (!attachments.empty()) {
-            content = Json::array({text_block(text)});
+            content =
+                detail::content_from_files(std::move(text), attachments, context.cancellation);
+            const auto first = content.size() - attachments.size();
             for (std::size_t n = 0; n < attachments.size(); ++n) {
                 context.cancellation.check();
-                auto block = attachment_from_file(attachments[n]);
-                if (block.at("type") != "resource")
-                    block["name"] = pending_attachments[n].name;
+                const auto& item = pending_attachments[n];
                 result.attachments.push_back(
-                    attachment_view(block, pending_attachments[n].id, pending_attachments[n].name));
-                content.push_back(std::move(block));
+                    attachment_view(content[first + n], item.id, item.name));
             }
-            validate_content(content);
-        }
+        } else
+            content = std::move(text);
         try {
             result.result = s.chat->send(std::move(content), context);
         } catch (...) {
@@ -398,6 +495,20 @@ void ChatController::refresh_models() {
         result.models = s.provider->list_models(context);
     });
 }
+void ChatController::select_model(std::string model) {
+    auto& s = *impl_;
+    s.require_idle(true);
+    s.start("selecting_model", [&s, model = std::move(model)](auto& result, const auto&) {
+        s.chat->select_model(model);
+        s.persist(result);
+    });
+}
+void ChatController::edit_message(std::uint64_t id, std::string text) {
+    impl_->change_user_turn(id, std::move(text));
+}
+void ChatController::delete_turn(std::uint64_t user_id) {
+    impl_->change_user_turn(user_id, std::nullopt);
+}
 void ChatController::reconnect() {
     auto& s = *impl_;
     s.require_idle();
@@ -405,7 +516,7 @@ void ChatController::reconnect() {
         throw Error("InvalidState", "No session to reconnect");
     s.start("reconnecting", [&s](auto& result, const auto& context) {
         s.chat->reconnect(context);
-        result.history = s.chat->history();
+        result.history = s.chat->transcript();
     });
 }
 void ChatController::save() {
@@ -436,6 +547,12 @@ void ChatController::poll() {
     // A producer may have queued its final deltas after this frame's drain.
     s.consume(s.drain_events());
     auto result = s.pending.get();
+    if (result.user_count && *result.user_count > s.committed_users) {
+        for (auto& row : s.view.messages)
+            if (row.id == result.user_id && row.markdown.size() <= text_limit)
+                row.user_turn = *result.user_count - 1;
+        s.committed_users = *result.user_count;
+    }
     if (!result.attachments.empty())
         for (auto& row : s.view.messages)
             if (row.id == result.user_id) {
@@ -453,27 +570,43 @@ void ChatController::poll() {
         : result.error == "Cancelled" ? "warning"
                                       : "error",
         result.action, result.error.empty() ? "Completed" : result.error,
-        result.error.empty() ? "Operation completed"
-        : choose_model       ? "Model selection required"
-                             : "Operation failed",
-        std::chrono::duration<double, std::milli>(Clock::now() - s.operation_started).count());
+        result.error.empty()          ? "Operation completed"
+        : !result.error_message.empty() ? result.error_message
+        : choose_model                  ? "Model selection required"
+        : result.error == "Cancelled"   ? "Operation cancelled"
+                                        : "Operation failed",
+        std::chrono::duration<double, std::milli>(Clock::now() - s.operation_started).count(),
+        result.provider_code);
     if (!result.storage_error.empty())
         s.diagnose("error", "saving", result.storage_error, "Conversation could not be saved");
     s.view.busy = false;
     s.view.connected = result.connected;
+    s.view.editable_history = result.connected && result.editable_history;
+    s.view.turn_model_selection = result.connected && result.turn_model_selection;
     s.view.session_id = result.session.id;
     if (!result.session.model.empty())
         s.view.model = result.session.model;
     s.view.storage_error = result.storage_error;
     if (!result.error.empty()) {
         s.view.metrics = std::move(result.result.metrics);
-        if (s.view.error_code.empty())
-            s.view.error_code = result.error;
+        s.view.error_code = result.error;
+        s.view.error_message = result.error_message;
+        s.view.provider_code = result.provider_code;
         s.view.phase = choose_model                  ? "choosing_model"
                        : result.error == "Cancelled" ? "interrupted"
                                                      : "failed";
-        if (auto* message = s.assistant(); message && result.action == "generating")
-            message->interrupted = true;
+        if (auto* message = s.assistant(); message && result.action == "generating") {
+            if (result.error == "Cancelled")
+                message->interrupted = true;
+            else {
+                message->error_code = std::move(result.error);
+                message->error_message = std::move(result.error_message);
+                message->provider_code = std::move(result.provider_code);
+                s.displayed_bytes += message->error_code.size() + message->error_message.size() +
+                                     message->provider_code.size();
+                s.trim_view();
+            }
+        }
     } else {
         s.view.phase = s.view.connected ? "ready" : "disconnected";
         if (result.action == "generating") {
@@ -488,6 +621,8 @@ void ChatController::poll() {
         }
         if (!result.history.is_null())
             s.restore_rows(result.history);
+        if (result.action == "editing" || result.action == "deleting")
+            s.apply_mutation(result);
     }
     // A failed automatic connection may still return the catalogue to choose from.
     if (!result.models.is_null())

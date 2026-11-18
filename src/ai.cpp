@@ -1,3 +1,5 @@
+#include "provider_error.hpp"
+#include <algorithm>
 #include <cymcp/ai.hpp>
 #include <limits>
 #include <set>
@@ -81,6 +83,9 @@ bool HttpChatProvider::local_service() const noexcept {
 ProviderCapabilities HttpChatProvider::capabilities() const {
     return {true, false, static_cast<bool>(options_.tools), true, true, true, true, false, false};
 }
+void HttpChatProvider::validate_user_content(const Json& content) const {
+    detail::content_for(content, detail::ContentFormat::ChatCompletions);
+}
 void HttpChatProvider::connect(const CallContext& context) {
     context.cancellation.check();
     parse_url(options_.base_url);
@@ -129,6 +134,7 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
         request.idle_timeout = options_.timeout;
         request.timeout = std::chrono::milliseconds(0);
         request.max_response_bytes = std::numeric_limits<std::size_t>::max();
+        request.error_body_limit = detail::provider_error_body_limit;
         auto wire_messages = messages;
         for (auto& message : wire_messages) {
             message.erase("_cymcp_native");
@@ -174,8 +180,10 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
                 return;
             }
             auto event = parse_json(data, provider_message_limit);
-            if (event.contains("error"))
-                throw Error("ProviderError", "Provider returned an error");
+            if (auto error = event.find("error"); error != event.end() && !error->is_null())
+                throw detail::structured_provider_error(*error, "code", options_.api_key,
+                                                        "ProviderError",
+                                                        "Provider returned an error");
             if (event.contains("usage") && !event["usage"].is_null()) {
                 result.usage = event["usage"];
                 context.emit("UsageUpdated", result.usage);
@@ -222,24 +230,21 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
                 }
             }
         });
-        std::exception_ptr failure;
         auto response = HttpClient().perform(request, context.cancellation,
                                              [&](const char* data, std::size_t size) {
-                                                 if (!failure)
-                                                     try {
-                                                         decoder.feed(data, size);
-                                                     } catch (...) {
-                                                         failure = std::current_exception();
-                                                     }
+                                                 decoder.feed(data, size);
                                                  return true;
                                              });
-        if (response.status < 200 || response.status >= 300)
-            throw Error(response.status == 401 || response.status == 403 ? "AuthenticationRequired"
-                        : response.status == 429                         ? "RateLimited"
-                                                                         : "ProviderError",
-                        "Chat request rejected with HTTP " + std::to_string(response.status));
-        if (failure)
-            std::rethrow_exception(failure);
+        if (response.status < 200 || response.status >= 300) {
+            const auto body = detail::parse_provider_error_body(response.body);
+            const auto category = detail::provider_http_error_code(response.status);
+            const auto fallback =
+                "Chat request rejected with HTTP " + std::to_string(response.status);
+            if (auto error = body.find("error"); error != body.end())
+                throw detail::structured_provider_error(*error, "code", options_.api_key, category,
+                                                        fallback);
+            throw Error(category, fallback);
+        }
         decoder.finish();
         if (!terminal || !done)
             throw Error("UnexpectedEOF", "Provider stream ended before completion");
@@ -308,11 +313,14 @@ struct Conversation::State {
     std::string model;
     Session session;
     bool connected = false;
-    std::string phase = "disconnected", last_error;
+    std::string phase = "disconnected", last_error, last_error_message, last_provider_code;
+    Json failed_turns = Json::array(); // display records anchored in committed model history
     Json metrics = Json::object();
     std::atomic_bool reserved{false};
     std::atomic_bool disconnect_requested{false};
     Json messages = Json::array();
+    Json native_system_messages = Json::array();
+    std::size_t native_history_bytes = 2; // compact JSON size including the array brackets
     std::mutex turn, history, cancellation_mutex;
     Cancellation active;
     State(std::shared_ptr<Provider> p, std::string m)
@@ -323,8 +331,14 @@ Conversation::Conversation(std::shared_ptr<Provider> provider, std::string model
     : state_(std::make_shared<State>(std::move(provider), std::move(model))) {
     if (!state_->provider)
         throw Error("InvalidOptions", "Provider required");
-    if (!system.empty())
+    if (!system.empty()) {
         state_->messages.push_back({{"role", "system"}, {"content", std::move(system)}});
+        if (state_->provider->uses_native_turn_context()) {
+            state_->native_system_messages = state_->messages;
+            state_->native_history_bytes =
+                detail::json_size(state_->messages, std::numeric_limits<std::size_t>::max());
+        }
+    }
 }
 void Conversation::connect(std::string resume, const CallContext& input, bool automatic_model,
                            Json* models) {
@@ -385,12 +399,36 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
                     system += message["content"].get<std::string>() + "\n";
         }
         context.emit("ConnectionStage", {{"code", "SessionStart"}});
+        const bool automatic_native_model = automatic_model && s.model.empty() && resume.empty() &&
+                                            s.provider->capabilities().turn_model_selection;
         auto session = s.provider->start_session(s.model, std::move(resume), context, system);
-        if (models) {
+        if (models || automatic_native_model) {
             if (catalogue.empty() && s.provider->capabilities().model_catalogue)
                 catalogue = optional_catalogue();
-            *models = std::move(catalogue);
         }
+        if (automatic_native_model && catalogue.is_array()) {
+            // The CLI's profile may name a model from a different client build. Prefer the
+            // active catalogue's advertised default when the profile model isn't listed.
+            std::string recommended;
+            bool listed = false;
+            for (const auto& entry : catalogue) {
+                if (!entry.is_object() || entry.value("hidden", Json(false)) == true)
+                    continue;
+                auto model = entry.find("model");
+                if (model == entry.end() || !model->is_string())
+                    model = entry.find("id");
+                if (model == entry.end() || !model->is_string())
+                    continue;
+                const auto& id = model->get_ref<const std::string&>();
+                listed |= id == session.model;
+                if (recommended.empty() && entry.value("isDefault", Json(false)) == true)
+                    recommended = id;
+            }
+            if (!listed && !recommended.empty())
+                session.model = std::move(recommended);
+        }
+        if (models)
+            *models = std::move(catalogue);
         std::lock_guard lock(s.history);
         context.cancellation.check();
         if (s.disconnect_requested.load())
@@ -399,6 +437,8 @@ void Conversation::connect(std::string resume, const CallContext& input, bool au
         s.connected = true;
         s.phase = "ready";
         s.last_error.clear();
+        s.last_error_message.clear();
+        s.last_provider_code.clear();
         s.metrics["connect_ms"] =
             std::chrono::duration<double, std::milli>(Clock::now() - started).count();
     } catch (...) {
@@ -420,9 +460,11 @@ CallContext Conversation::reserve(const CallContext& original) {
     return context;
 }
 ChatResult Conversation::send(Json content, const CallContext& original) {
-    return send_reserved(std::move(content), reserve(original));
+    const auto submitted = Clock::now();
+    return send_reserved(std::move(content), reserve(original), submitted);
 }
-ChatResult Conversation::send_reserved(Json content, const CallContext& context) {
+ChatResult Conversation::send_reserved(Json content, const CallContext& context,
+                                       Clock::time_point started) {
     auto& s = *state_;
     struct Release {
         State& state;
@@ -434,34 +476,73 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
     if (!turn.owns_lock())
         throw Error("Busy", "Conversation busy");
     context.cancellation.check();
-    Json messages;
+    const bool native_turn = s.provider->uses_native_turn_context();
+    std::size_t prefix_bytes = 0;
+    Json messages = Json::array();
     Session session;
     {
         std::lock_guard lock(s.history);
         if (!s.connected)
             throw Error("InvalidState", "Connect conversation first");
-        messages = s.messages;
+        if (native_turn) {
+            prefix_bytes = s.native_history_bytes + (s.messages.empty() ? 0 : 1);
+            messages = s.native_system_messages;
+        } else {
+            messages = s.messages;
+        }
         session = s.session;
     }
     validate_content(content);
-    messages.push_back({{"role", "user"}, {"content", std::move(content)}});
-    // Memory guard only: the model context window is the real limit, enforced by the provider.
-    if (messages.dump().size() > provider_message_limit)
+    const std::size_t user_index = messages.size();
+    Json user = {{"role", "user"}};
+    user["content"] = std::move(content);
+    if (prefix_bytes > provider_message_limit)
         throw Error("ContextTooLarge", "Conversation exceeds the memory guard");
+    const auto user_bytes =
+        native_turn ? detail::json_size(user, provider_message_limit - prefix_bytes) : 0;
+    messages.push_back(std::move(user));
+    if (!native_turn)
+        detail::json_size(messages, provider_message_limit);
+    bool committed = false;
     auto commit = [&] {
+        if (committed)
+            return;
         std::lock_guard lock(s.history);
-        s.messages = messages;
-        s.session = session;
+        if (native_turn) {
+            auto bytes = s.native_history_bytes;
+            for (std::size_t i = user_index; i < messages.size(); ++i) {
+                bytes += (i != user_index || !s.messages.empty()) ? 1 : 0;
+                bytes +=
+                    i == user_index
+                        ? user_bytes
+                        : detail::json_size(messages[i], std::numeric_limits<std::size_t>::max());
+            }
+            auto& committed_messages = s.messages.get_ref<Json::array_t&>();
+            const auto needed = committed_messages.size() + (messages.size() - user_index);
+            if (needed > committed_messages.capacity())
+                committed_messages.reserve(std::max(needed, committed_messages.capacity() * 2));
+            for (std::size_t i = user_index; i < messages.size(); ++i)
+                s.messages.push_back(std::move(messages[i]));
+            s.native_history_bytes = bytes;
+        } else {
+            s.messages = std::move(messages);
+        }
+        s.session = std::move(session);
+        committed = true;
     };
-    const auto started = Clock::now();
     double first_token = -1;
     std::size_t event_count = 0;
+    std::string partial;
     CallContext measured = context;
     measured.events = [&](const Event& event) {
         ++event_count;
-        if (first_token < 0 && event.type == "TextDelta" &&
-            !event.data.value("text", std::string()).empty())
-            first_token = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+        if (event.type == "TextDelta" && event.data.contains("text") &&
+            event.data.at("text").is_string()) {
+            const auto& delta = event.data.at("text").get_ref<const std::string&>();
+            if (first_token < 0 && !delta.empty())
+                first_token = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+            partial += delta;
+        }
         context.emit(event.type, event.data);
     };
     auto metrics = [&] {
@@ -474,7 +555,32 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
         std::lock_guard lock(s.history);
         s.phase = "busy";
         s.last_error.clear();
+        s.last_error_message.clear();
+        s.last_provider_code.clear();
     }
+    auto failed = [&](const std::string& code, std::string_view reason, std::string_view native = {}) {
+        const auto detail = s.provider->error_message(reason);
+        const auto provider_code = s.provider->error_message(native);
+        // A locally rejected attachment must not become a future provider input.
+        if (code != "UnsupportedContent" || messages.size() != user_index + 1)
+            commit();
+        {
+            std::lock_guard lock(s.history);
+            s.metrics = metrics();
+            s.last_error = code;
+            s.last_error_message = detail;
+            s.last_provider_code = provider_code;
+            s.phase = s.disconnect_requested.load() ? "disconnected"
+                      : code == "Cancelled" ? "interrupted" : "failed";
+            if (committed)
+                s.failed_turns.push_back({{"after", s.messages.size()}, {"code", code}, {"provider_code", provider_code},
+                                          {"message", detail}, {"partial", std::move(partial)}});
+        }
+        if (context.events)
+            context.events({code == "Cancelled" ? "TurnCancelled" : "TurnFailed",
+                            {{"code", code}, {"message", detail}, {"provider_code", provider_code}}});
+        return Error(code, detail, provider_code);
+    };
     try {
         measured.emit("TurnStarted", {{"sessionId", session.id}});
         auto result = s.provider->send(session, messages, measured);
@@ -489,40 +595,26 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context)
         context.emit("TurnMetrics", result.metrics);
         return result;
     } catch (const Error& e) {
-        commit();
-        {
-            std::lock_guard lock(s.history);
-            s.metrics = metrics();
-            s.last_error = e.code;
-            s.phase = s.disconnect_requested.load() ? "disconnected"
-                      : e.code == "Cancelled"       ? "interrupted"
-                                                    : "failed";
-        }
-        if (context.events)
-            context.events(
-                {e.code == "Cancelled" ? "TurnCancelled" : "TurnFailed", {{"code", e.code}}});
-        throw;
+        throw failed(e.code, e.what(), e.provider_code);
+    } catch (const Json::exception&) {
+        // Parser diagnostics can contain fragments of the raw provider payload.
+        throw failed("ProviderError", "Invalid provider response");
+    } catch (const std::exception& e) {
+        throw failed("ProviderError", e.what());
     } catch (...) {
-        commit();
-        {
-            std::lock_guard lock(s.history);
-            s.metrics = metrics();
-            s.last_error = "ProviderError";
-            s.phase = s.disconnect_requested.load() ? "disconnected" : "failed";
-        }
-        if (context.events)
-            context.events({"TurnFailed", {{"code", "ProviderError"}}});
-        throw;
+        throw failed("ProviderError", "Provider generation failed");
     }
 }
 std::future<ChatResult> Conversation::send_async(Executor& executor, Json content,
                                                  CallContext context) {
+    const auto submitted = Clock::now();
     context = reserve(context);
     try {
         auto self = *this;
         auto task = std::make_shared<std::packaged_task<ChatResult()>>(
-            [self, content = std::move(content), context = std::move(context)]() mutable {
-                return self.send_reserved(std::move(content), context);
+            [self, content = std::move(content), context = std::move(context),
+             submitted]() mutable {
+                return self.send_reserved(std::move(content), context, submitted);
             });
         auto result = task->get_future();
         executor.post([task] { (*task)(); });
@@ -536,9 +628,146 @@ void Conversation::cancel() noexcept {
     std::lock_guard lock(state_->cancellation_mutex);
     state_->active.cancel();
 }
+void Conversation::select_model(std::string model) {
+    auto& s = *state_;
+    std::unique_lock turn(s.turn, std::try_to_lock);
+    if (!turn.owns_lock() || s.reserved.load())
+        throw Error("Busy", "Conversation has an active operation");
+    if (model.empty())
+        throw Error("UnknownModel", "Select an exact model ID");
+    std::lock_guard lock(s.history);
+    if (!s.connected)
+        throw Error("InvalidState", "Connect conversation first");
+    if (!s.provider->capabilities().turn_model_selection)
+        throw Error("Unsupported", "This provider requires a new session to select another model");
+    s.session.model = std::move(model);
+    s.phase = "ready";
+    s.last_error.clear();
+    s.last_error_message.clear();
+    s.last_provider_code.clear();
+}
 Json Conversation::history() const {
     std::lock_guard lock(state_->history);
     return state_->messages;
+}
+std::size_t Conversation::user_turn_count() const {
+    std::lock_guard lock(state_->history);
+    return static_cast<std::size_t>(
+        std::count_if(state_->messages.begin(), state_->messages.end(),
+                      [](const Json& row) { return row.at("role") == "user"; }));
+}
+void Conversation::edit_message(std::size_t user_turn, std::string text) {
+    change_user_turn(user_turn, std::move(text));
+}
+void Conversation::delete_turn(std::size_t user_turn) {
+    change_user_turn(user_turn, std::nullopt);
+}
+void Conversation::change_user_turn(std::size_t user_turn, std::optional<std::string> text) {
+    auto& s = *state_;
+    std::unique_lock turn(s.turn, std::try_to_lock);
+    if (!turn.owns_lock() || s.reserved.load())
+        throw Error("Busy", "Conversation has an active operation");
+    std::lock_guard lock(s.history);
+    if (!s.connected)
+        throw Error("InvalidState", "Connect conversation first");
+    if (!s.provider->uses_host_history() || s.provider->uses_native_turn_context())
+        throw Error("Unsupported", "The provider owns this conversation history");
+    const auto is_user = [](const Json& row) { return row.at("role") == "user"; };
+    auto first = std::find_if(s.messages.begin(), s.messages.end(), is_user);
+    while (user_turn && first != s.messages.end()) {
+        first = std::find_if(first + 1, s.messages.end(), is_user);
+        --user_turn;
+    }
+    if (first == s.messages.end())
+        throw Error("InvalidParameters", "Unknown user turn");
+    if (text) {
+        auto& original = first->at("content");
+        Json replacement = *text;
+        if (original.is_array()) {
+            replacement = Json::array();
+            bool inserted = false;
+            for (const auto& block : original) {
+                if (block.at("type") != "text")
+                    replacement.push_back(block);
+                else if (!inserted && !text->empty()) {
+                    replacement.push_back(text_block(*text));
+                    inserted = true;
+                }
+            }
+            if (!inserted && !text->empty())
+                replacement.insert(replacement.begin(), text_block(*text));
+        }
+        if (text->find_first_not_of(" \t\r\n") == std::string::npos &&
+            (!replacement.is_array() ||
+             std::none_of(replacement.begin(), replacement.end(),
+                          [](const Json& block) { return block.at("type") != "text"; })))
+            throw Error("InvalidContent", "A message needs text or an attachment");
+        s.provider->validate_user_content(replacement);
+        original.swap(replacement);
+        try {
+            detail::json_size(s.messages, provider_message_limit);
+        } catch (...) {
+            original.swap(replacement);
+            throw;
+        }
+        return;
+    }
+    const auto next = std::find_if(first + 1, s.messages.end(), is_user);
+    const auto begin = static_cast<std::size_t>(first - s.messages.begin());
+    const auto end = static_cast<std::size_t>(next - s.messages.begin());
+    const bool latest = next == s.messages.end();
+    const auto is_turn_message = [](const Json& row) { return row.at("role") != "system"; };
+    const auto removed = static_cast<std::size_t>(std::count_if(first, next, is_turn_message));
+    auto failures = Json::array();
+    for (auto failure : s.failed_turns) {
+        auto after = failure.at("after").get<std::size_t>();
+        if (after > begin && after <= end)
+            continue;
+        if (after > end)
+            failure["after"] = after - removed;
+        failures.push_back(std::move(failure));
+    }
+    s.messages.erase(std::remove_if(first, next, is_turn_message), next);
+    s.failed_turns.swap(failures);
+    if (latest) {
+        s.metrics = Json::object();
+        s.phase = "ready";
+        s.last_error.clear();
+        s.last_error_message.clear();
+        s.last_provider_code.clear();
+        if (!s.failed_turns.empty() && s.failed_turns.back().at("after") == s.messages.size()) {
+            const auto& previous = s.failed_turns.back();
+            s.last_error = previous.at("code").get<std::string>();
+            s.last_error_message = previous.at("message").get<std::string>();
+            s.last_provider_code = previous.value("provider_code", std::string());
+            s.phase = s.last_error == "Cancelled" ? "interrupted" : "failed";
+        }
+    }
+}
+Json Conversation::transcript() const {
+    std::lock_guard lock(state_->history);
+    if (state_->failed_turns.empty())
+        return state_->messages;
+    Json rows = Json::array();
+    auto failure = state_->failed_turns.begin();
+    for (std::size_t i = 0; i < state_->messages.size(); ++i) {
+        rows.push_back(state_->messages[i]);
+        if (failure == state_->failed_turns.end() || failure->at("after") != i + 1)
+            continue;
+        // Cancellation can arrive immediately after a provider commits its final answer.
+        const auto& partial = failure->at("partial").get_ref<const std::string&>();
+        if (rows.back().at("role") != "assistant" || rows.back().contains("tool_calls")) {
+            rows.push_back({{"role", "assistant"}, {"content", partial}});
+        } else if (auto& content = rows.back().at("content"); content.is_string() &&
+                   partial.starts_with(content.get_ref<const std::string&>())) {
+            content = partial;
+        }
+        rows.back()["error_code"] = failure->at("code");
+        rows.back()["error_message"] = failure->at("message");
+        rows.back()["provider_code"] = failure->value("provider_code", std::string());
+        ++failure;
+    }
+    return rows;
 }
 Session Conversation::session() const {
     std::lock_guard lock(state_->history);
@@ -555,8 +784,9 @@ void Conversation::disconnect() noexcept {
 }
 Json Conversation::status() const {
     std::lock_guard lock(state_->history);
-    return {
-        {"state", state_->phase}, {"last_error", state_->last_error}, {"metrics", state_->metrics}};
+    return {{"state", state_->phase}, {"last_error", state_->last_error},
+            {"last_error_message", state_->last_error_message}, {"last_provider_code", state_->last_provider_code},
+            {"metrics", state_->metrics}};
 }
 Json Conversation::checkpoint() const {
     auto& s = *state_;
@@ -571,6 +801,9 @@ Json Conversation::checkpoint() const {
             {"model", s.model},
             {"messages", s.messages},
             {"last_error", s.last_error},
+            {"last_error_message", s.last_error_message},
+            {"last_provider_code", s.last_provider_code},
+            {"failed_turns", s.failed_turns},
             {"metrics", s.metrics}};
 }
 void Conversation::restore(const Json& snapshot, const CallContext& input) {
@@ -586,10 +819,13 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
     if (!turn.owns_lock())
         throw Error("Busy", "Conversation busy");
     Json messages;
-    std::string id, model, native_model, system, previous_error;
+    std::string id, model, native_model, system, previous_error, previous_message, previous_provider_code;
+    Json failed_turns;
+    Json native_system_messages = Json::array();
+    const bool native_turn = s.provider->uses_native_turn_context();
+    std::size_t native_history_bytes = 2;
     try {
-        if (snapshot.dump().size() > provider_message_limit)
-            throw Error("ContextTooLarge", "Checkpoint exceeds limit");
+        detail::json_size(snapshot, provider_message_limit);
         if (snapshot.at("format") != "cymcp-conversation" || snapshot.at("version") != 1)
             throw Error("UnsupportedVersion", "Unsupported conversation checkpoint");
         if (snapshot.at("provider") != s.provider->identity() ||
@@ -605,8 +841,11 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
             if (role != "system" && role != "user" && role != "assistant" && role != "tool")
                 throw Error("InvalidCheckpoint", "Invalid message role");
             validate_content(message.at("content"));
-            if (role == "system")
+            if (role == "system") {
                 system += detail::content_text(message.at("content")) + "\n";
+                if (native_turn)
+                    native_system_messages.push_back(message);
+            }
             if (role == "tool")
                 message.at("tool_call_id").get<std::string>();
         }
@@ -614,10 +853,45 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
         native_model = snapshot.at("session").at("model").get<std::string>();
         id = snapshot.at("session").at("id").get<std::string>();
         previous_error = snapshot.value("last_error", std::string());
+        previous_message = s.provider->error_message(snapshot.value("last_error_message", std::string()));
+        previous_provider_code = s.provider->error_message(snapshot.value("last_provider_code", std::string()));
+        failed_turns = snapshot.value("failed_turns", Json::array());
+        if (!failed_turns.is_array())
+            throw Error("InvalidCheckpoint", "Invalid failed turns");
+        std::size_t previous_index = 0;
+        for (auto& failure : failed_turns) {
+            const auto& after = failure.at("after");
+            if (!after.is_number_integer() || after <= previous_index || after > messages.size() ||
+                !failure.at("partial").is_string() || !failure.at("code").is_string())
+                throw Error("InvalidCheckpoint", "Invalid failed turn");
+            previous_index = after.get<std::size_t>();
+            failure["message"] =
+                s.provider->error_message(failure.at("message").get_ref<const std::string&>());
+            failure["provider_code"] = s.provider->error_message(failure.value("provider_code", std::string()));
+        }
+        // Older versions saved locally rejected inputs and later unsuccessful retries. Only
+        // repair the unanswered user suffix, preserving completed messages and tool results.
+        if (previous_error == "UnsupportedContent" && s.provider->uses_host_history()) {
+            auto first = messages.end();
+            while (first != messages.begin() && (first - 1)->at("role") == "user")
+                --first;
+            for (auto it = first; it != messages.end(); ++it) {
+                try {
+                    s.provider->validate_user_content(it->at("content"));
+                } catch (const Error& e) {
+                    if (e.code != "UnsupportedContent")
+                        throw;
+                    messages.erase(it, messages.end());
+                    break;
+                }
+            }
+        }
         if (!s.model.empty() && s.model != model)
             throw Error("SessionInvalid", "Checkpoint model differs from requested model");
         if (!s.provider->uses_host_history() && id.empty())
             throw Error("SessionInvalid", "Native checkpoint has no exact session ID");
+        if (native_turn)
+            native_history_bytes = detail::json_size(messages, provider_message_limit);
     } catch (const Json::exception&) {
         throw Error("InvalidCheckpoint", "Invalid conversation checkpoint");
     }
@@ -648,10 +922,15 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
             s.model = model;
             s.session = std::move(session);
             s.messages = std::move(messages);
+            s.native_system_messages = std::move(native_system_messages);
+            s.native_history_bytes = native_history_bytes;
             s.metrics = snapshot.value("metrics", Json::object());
             s.connected = true;
             s.phase = "ready";
             s.last_error = previous_error;
+            s.last_error_message = std::move(previous_message);
+            s.last_provider_code = std::move(previous_provider_code);
+            s.failed_turns = std::move(failed_turns);
         }
         context.emit("ConversationRestored",
                      {{"sessionId", s.session.id}, {"previous_error", previous_error}});

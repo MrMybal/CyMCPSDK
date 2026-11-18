@@ -1,4 +1,41 @@
-# Validation de Chat Lab 0.5.1 dans les deux sens
+# Validation de Chat Lab dans les deux sens
+
+## Reprise de l’audit 0.5.6 du 18 novembre 2026
+
+Sur Windows x64 avec une GeForce RTX 3090, Chat Lab et `ollama run` ont répondu
+exactement `OK` dans six paires de tours alternées. Les deux clients ont utilisé le
+même service Ollama 0.40.5 sur loopback, le modèle local `qwen3:0.6b`, la consigne
+`Reply with only the single word OK.`, `think=false` et la limite de sortie par
+défaut du modèle. Chaque client a effectué un tour d’échauffement. Chaque mesure
+utilise une nouvelle conversation, avec le modèle chargé et son cache de préfixes chaud.
+
+| Client | Départ | Premier texte, médiane | Fin, médiane |
+|---|---|---:|---:|
+| Chat Lab, onglet Chat dans une fenêtre cachée | Appel d’envoi sur une session connectée | 16,12 ms jusqu’à la première trame de texte rendue par le GPU | 16,12 ms jusqu’à la trame rendue après la fin du tour |
+| `ollama run`, sortie redirigée | Juste avant le lancement du processus | 78,58 ms jusqu’au premier octet de texte sur stdout | 82,09 ms jusqu’à la fermeture de stdout |
+
+Une requête événement DX11 confirme la fin du rendu de chaque trame chronométrée.
+Une réponse courte peut apparaître en entier dans la première trame. Une précédente
+série de six paires a donné 15,99 et 31,00 ms pour Chat Lab, 109,48 et 114,88 ms
+pour le CLI.
+La mesure graphique s’arrête avant la présentation à l’écran. La mesure CLI inclut
+le démarrage du processus et sa préparation de la requête. Le journal du serveur
+montre que Chat Lab utilise `/api/chat` et le CLI `/api/generate`. Ces durées
+décrivent les deux parcours, chacun avec son propre format de requête. Le rendu
+de l’application de bureau Ollama et celui d’un émulateur de terminal restent hors mesure.
+
+Pour reproduire la campagne avec le modèle déjà installé et un service local démarré,
+exécuter la commande suivante depuis la racine du dépôt.
+
+```powershell
+python benchmarks/chat_latency.py --chat-lab build/audit-20261118/cymcp_chat_app.exe --ollama-cli ollama.exe --model qwen3:0.6b --pairs 6
+```
+
+Le rapport JSON contient l’ordre et les mesures individuelles. Le test d’intégration
+de Chat Lab utilise également un serveur Ollama simulé qui retarde la fin du flux
+et vérifie que la première trame de texte précède la trame finale.
+
+## Campagne 0.5.1
 
 Essais du **14 novembre 2026**, Windows x64, Release MSVC 19.40, Win32/DX11 et CyUI fourni
 depuis une copie locale de CyUI. Les scénarios tournent dans la boucle graphique réelle,

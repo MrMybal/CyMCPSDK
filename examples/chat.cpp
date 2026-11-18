@@ -171,8 +171,11 @@ int main(int argc, char** argv) {
             } catch (const Error& error) {
                 if (store)
                     store->save(storage_id, chat);
-                std::cout << Json({{"type", "Error"}, {"code", error.code}}).dump() << '\n'
-                          << std::flush;
+                Json diagnostic = {{"type", "Error"}, {"code", error.code},
+                                   {"message", provider->error_message(error.what())}};
+                if (!error.provider_code.empty())
+                    diagnostic["provider_code"] = provider->error_message(error.provider_code);
+                std::cout << diagnostic.dump() << '\n' << std::flush;
                 continue; // the host explicitly chooses reconnect/new messages; no implicit retry
             }
             if (store)
@@ -186,7 +189,10 @@ int main(int argc, char** argv) {
         chat.disconnect();
         return 0;
     } catch (const Error& error) {
-        std::cerr << Json({{"error", error.code}, {"message", error.what()}}).dump() << '\n';
+        Json diagnostic = {{"error", error.code}, {"message", redact_error_message(error.what())}};
+        if (!error.provider_code.empty())
+            diagnostic["provider_code"] = redact_error_message(error.provider_code);
+        std::cerr << diagnostic.dump() << '\n';
         return 1;
     } catch (const std::exception&) {
         std::cerr << "Invalid chat configuration or provider event\n";

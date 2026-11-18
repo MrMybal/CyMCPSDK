@@ -5,6 +5,8 @@
 namespace cymcp {
 Error::Error(std::string value, std::string message)
     : std::runtime_error(std::move(message)), code(std::move(value)) {}
+Error::Error(std::string value, std::string message, std::string native)
+    : std::runtime_error(std::move(message)), code(std::move(value)), provider_code(std::move(native)) {}
 std::string path_utf8(const std::filesystem::path& path) {
     auto text = path.u8string();
     return std::string(reinterpret_cast<const char*>(text.data()), text.size());

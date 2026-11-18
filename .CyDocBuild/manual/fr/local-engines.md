@@ -5,7 +5,7 @@ description: Connecter un service existant ou superviser un moteur compatible ll
 section: SDK
 parent: integration
 order: 3
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Utiliser un service existant {#service}
@@ -55,5 +55,25 @@ un callback d'élévation gère les installateurs qui en ont besoin.
 
 L'application contrôle les manifestes, jamais la sortie d'un modèle. Les chemins restent dans le cache
 configuré ; HTTPS et les hôtes de redirection déclarés encadrent les téléchargements. Les paquets
-externes gardent leurs licences. L'extraction automatique d'archives, la reprise HTTP Range et les
-catalogues de paquets GPU ne sont pas encore implémentés.
+externes gardent leurs licences. L’hôte peut déclarer des fichiers ordinaires dans une archive avec
+leur destination, leur taille et leur SHA-256. Le lecteur tar du système les extrait dans un dossier
+privé avant publication.
+
+Sous Windows x64, sélectionner un service local dans **Fournisseurs** de Chat Lab, ouvrir
+**Installation et connexion** puis choisir **Installer le runtime NVIDIA CUDA 12**. Chat Lab
+télécharge NVIDIA CUDART 12.8.90 et sa licence dans le cache privé de l’utilisateur. Il affiche le
+dossier du runtime après vérification. Un pilote NVIDIA compatible et les éventuelles autres
+bibliothèques exigées par le moteur choisi sont des prérequis distincts.
+
+Les applications Windows et Linux x64 peuvent exécuter la même installation sur un worker et
+fournir le dossier à un moteur supervisé. Le superviseur applique le chemin de recherche des
+bibliothèques au processus enfant.
+
+```cpp
+cymcp::DependencyManager dependencies({cache_prive, politique_hote});
+auto installation = dependencies.install(cymcp::cuda_runtime_package(), contexte);
+options.cuda_runtime_directory = installation / "runtime"; // LocalEngineOptions
+```
+
+Les empreintes proviennent du [manifeste de redistribution NVIDIA CUDA 12.8.1](https://developer.download.nvidia.com/compute/cuda/redist/redistrib_12.8.1.json).
+Le paquet installé contient la licence NVIDIA. La reprise HTTP Range et la sélection automatique du GPU restent à réaliser.

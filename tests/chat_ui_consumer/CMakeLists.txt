@@ -9,3 +9,5 @@ add_subdirectory("${CYMCP_CYUI_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/cyui" E
 find_package(CyMCPSDK 0.5 CONFIG REQUIRED COMPONENTS ChatUI)
 add_executable(chat_ui_consumer main.cpp)
 target_link_libraries(chat_ui_consumer PRIVATE CyMCP::ChatUI)
+enable_testing()
+add_test(NAME installed_chat_ui COMMAND chat_ui_consumer)

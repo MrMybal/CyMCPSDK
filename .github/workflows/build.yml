@@ -18,12 +18,23 @@ jobs:
         run: cmake --build build --config Release --parallel 4
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Exercise long-running tools over stdio and HTTP
+        if: runner.os == 'Linux'
+        run: ./build/cymcp_mcp_transport_tests --long-call
+      - name: Check stdio and HTTP with the official MCP client
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m venv build/interop
+          build/interop/bin/pip install mcp==1.30.0
+          build/interop/bin/python tests/mcp_official.py ./build/cymcp_example
       - name: Install
         run: cmake --install build --config Release --prefix build/install
       - name: Configure installed consumer
         run: cmake -S tests/consumer -B build/consumer -DCMAKE_PREFIX_PATH=${{ github.workspace }}/build/install
       - name: Build installed consumer
         run: cmake --build build/consumer --config Release
+      - name: Run installed consumer
+        run: ctest --test-dir build/consumer -C Release --output-on-failure
   minimal:
     runs-on: ubuntu-latest
     steps:

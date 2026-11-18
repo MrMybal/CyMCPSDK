@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cymcp/process.hpp>
+#include "error_credentials.hpp"
 #include <fstream>
 #ifdef _WIN32
 #include <windows.h>
@@ -16,6 +17,23 @@
 extern char** environ;
 #endif
 namespace cymcp {
+std::vector<std::string> process_error_secrets(const ProcessOptions& options) {
+    std::vector<std::string> values;
+    for (const auto& [key, value] : options.environment)
+        if (!value.empty() && detail::credential_name(key))
+            values.push_back(value);
+    for (std::size_t i = 0; i < options.arguments.size(); ++i) {
+        std::string_view arg = options.arguments[i];
+        const auto separator = arg.find('=');
+        if (!arg.starts_with('-') || !detail::credential_name(arg.substr(0, separator)))
+            continue;
+        if (separator != arg.npos && separator + 1 < arg.size())
+            values.emplace_back(arg.substr(separator + 1));
+        else if (separator == arg.npos && i + 1 < options.arguments.size())
+            values.push_back(options.arguments[++i]);
+    }
+    return values;
+}
 namespace {
 #ifdef _WIN32
 std::wstring wide(const std::string& s) {
@@ -146,6 +164,7 @@ std::filesystem::path find_executable(const std::string& name) {
 }
 struct Process::Impl {
     ProcessOptions options;
+    StdoutFormat stdout_format;
     std::mutex mutex, write_mutex, status_mutex;
     std::condition_variable wake, space;
     std::deque<ProcessLine> lines;
@@ -160,9 +179,21 @@ struct Process::Impl {
 #else
     pid_t pid = -1;
     int input = -1;
-    bool reaped = false;
+    bool exited = false;
 #endif
-    explicit Impl(ProcessOptions opts) : options(std::move(opts)) {}
+    Impl(ProcessOptions opts, StdoutFormat format)
+        : options(std::move(opts)), stdout_format(format) {}
+#ifndef _WIN32
+    int peek_exit(siginfo_t& info) {
+        int result;
+        do {
+            result = waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOHANG | WNOWAIT);
+        } while (result < 0 && errno == EINTR);
+        if (result < 0 && errno == ECHILD)
+            pid = -1; // A host-provided child reaper may already have released this PID.
+        return result;
+    }
+#endif
     void stop() noexcept {
         stopping.store(true);
         space.notify_all();
@@ -173,7 +204,8 @@ struct Process::Impl {
             TerminateProcess(process.value, 130);
 #else
         std::lock_guard lock(status_mutex);
-        if (pid > 0 && !reaped)
+        siginfo_t info{};
+        if (pid > 0 && peek_exit(info) == 0)
             kill(-pid, SIGKILL);
 #endif
         wake.notify_all();
@@ -202,12 +234,19 @@ struct Process::Impl {
     }
     template <typename F> void read_stream(bool err, F read_chunk) {
         std::array<char, 8192> buffer{};
+        const bool binary = !err && stdout_format == StdoutFormat::Binary;
+        const auto capacity =
+            binary ? std::min(buffer.size(), options.max_line_bytes) : buffer.size();
         std::string partial;
         try {
             while (!stopping.load()) {
-                auto n = read_chunk(buffer.data(), buffer.size());
+                auto n = read_chunk(buffer.data(), capacity);
                 if (n <= 0)
                     break;
+                if (binary) {
+                    push(false, std::string(buffer.data(), static_cast<std::size_t>(n)));
+                    continue;
+                }
                 for (std::size_t i = 0; i < static_cast<std::size_t>(n); ++i) {
                     if (buffer[i] == '\n') {
                         if (!partial.empty() && partial.back() == '\r')
@@ -255,18 +294,17 @@ struct Process::Impl {
         exit_code = static_cast<int>(code);
         return false;
 #else
-        if (reaped)
+        if (exited)
             return false;
-        int status = 0;
-        auto result = waitpid(pid, &status, WNOHANG);
-        if (result == 0)
-            return true;
-        if (result < 0 && errno == EINTR)
-            return true;
-        if (result < 0)
+        // Keep the leader's PID reserved until destruction. Descendants may still own
+        // pipes or be running after their parent exits, and the group ID must stay ours.
+        siginfo_t info{};
+        if (pid <= 0 || peek_exit(info) < 0)
             throw Error("ProcessError", "Cannot wait for process");
-        reaped = true;
-        exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+        if (info.si_pid == 0)
+            return true;
+        exited = true;
+        exit_code = info.si_code == CLD_EXITED ? info.si_status : 128 + info.si_status;
         return false;
 #endif
     }
@@ -276,11 +314,10 @@ struct Process::Impl {
         if (process.value)
             WaitForSingleObject(process.value, 5000);
 #else
-        if (pid > 0 && !reaped) {
+        if (pid > 0) {
             int status = 0;
             while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
             }
-            reaped = true;
         }
 #endif
         if (output.joinable())
@@ -293,7 +330,9 @@ struct Process::Impl {
 #endif
     }
 };
-Process::Process(const ProcessOptions& options) : impl_(std::make_unique<Impl>(options)) {
+Process::Process(const ProcessOptions& options) : Process(options, StdoutFormat::Lines) {}
+Process::Process(const ProcessOptions& options, StdoutFormat format)
+    : impl_(std::make_unique<Impl>(options, format)) {
     auto& p = *impl_;
     if (!options.max_line_bytes || !options.max_queue_bytes)
         throw Error("InvalidOptions", "Process limits cannot be zero");
@@ -493,8 +532,7 @@ Process::Process(const ProcessOptions& options) : impl_(std::make_unique<Impl>(o
         throw Error("ProcessError", "Cannot fork process");
     if (child == 0) {
         close(exec_error[0]);
-        setpgid(0, 0);
-        if (dup2(in[0], STDIN_FILENO) < 0 || dup2(out[1], STDOUT_FILENO) < 0 ||
+        if (setpgid(0, 0) < 0 || dup2(in[0], STDIN_FILENO) < 0 || dup2(out[1], STDOUT_FILENO) < 0 ||
             dup2(err[1], STDERR_FILENO) < 0 || (!cwd.empty() && chdir(cwd.c_str()) != 0)) {
             int e = errno;
             ::write(exec_error[1], &e, sizeof(e));

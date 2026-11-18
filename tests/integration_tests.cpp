@@ -4,6 +4,12 @@
 #include <cymcp/mcp.hpp>
 #include <fstream>
 #include <httplib.h>
+#ifndef _WIN32
+#include <cerrno>
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
 using namespace cymcp;
 struct FixtureServer {
     httplib::Server server;
@@ -28,6 +34,27 @@ int main(int argc, char** argv) {
         if (argc != 2)
             return 2;
         std::string fixture = argv[1];
+#ifndef _WIN32
+        {
+            auto marker =
+                std::filesystem::temp_directory_path() / ("cymcp-group-" + random_token(16));
+            int lock = -1;
+            {
+                Process process({fixture, {"--exit-with-descendant", path_utf8(marker)}});
+                check(process.wait() == 0 && !process.running(), "Group leader has exited");
+                lock = open(marker.c_str(), O_RDWR);
+                check(lock >= 0 && flock(lock, LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK,
+                      "Descendant keeps its resource after the group leader exits");
+            }
+            const auto until = Clock::now() + std::chrono::seconds(2);
+            int acquired;
+            while ((acquired = flock(lock, LOCK_EX | LOCK_NB)) < 0 && Clock::now() < until)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            close(lock);
+            std::filesystem::remove(marker);
+            check(acquired == 0, "Destroying the owner also terminates surviving descendants");
+        }
+#endif
         {
             Process process(
                 {fixture,
@@ -235,6 +262,10 @@ int main(int argc, char** argv) {
             fake.server.Get("/component", [&](const auto&, auto& res) {
                 res.set_content(component, "application/octet-stream");
             });
+            fake.server.Get("/rejected", [](const auto&, auto& res) {
+                res.status = 400;
+                res.set_content("rejected body", "text/plain");
+            });
             fake.server.Get("/v1/models", [](const auto&, auto& res) {
                 res.set_content("{\"data\":[{\"id\":\"fixture-model\"}]}", "application/json");
             });
@@ -273,6 +304,33 @@ int main(int argc, char** argv) {
                 res.set_content(stream, "text/event-stream");
             });
             fake.start();
+            {
+                HttpRequest request;
+                request.url = fake.base + "/rejected";
+                std::string streamed;
+                const auto receive = [&](const char* data, std::size_t size) {
+                    streamed.append(data, size);
+                    return true;
+                };
+                auto response = HttpClient().perform(request, {}, receive);
+                check(response.status == 400 && response.body.empty() &&
+                          streamed == "rejected body",
+                      "Default HTTP sink still receives error bodies");
+                streamed.clear();
+                request.error_body_limit = 64;
+                response = HttpClient().perform(request, {}, receive);
+                check(response.status == 400 && streamed.empty() &&
+                          response.body == "rejected body",
+                      "Streaming HTTP errors are buffered separately from generation output");
+                request.error_body_limit = 3;
+                response = HttpClient().perform(request, {}, receive);
+                check(response.status == 400 && streamed.empty() && response.body.empty(),
+                      "Oversized error retains its status and discards its untrusted body");
+                request.url = fake.base + "/component";
+                response = HttpClient().perform(request, {}, receive);
+                check(response.status == 200 && response.body.empty() && streamed == component,
+                      "Successful content streams past the error-body limit");
+            }
             HttpChatOptions options;
             options.base_url = fake.base + "/v1";
             options.tools = operations;
@@ -319,6 +377,34 @@ int main(int argc, char** argv) {
             installer.installer = "setup.exe";
             installer.requires_elevation = true;
             manager.install(installer);
+            auto scoped_options = dependencies;
+            scoped_options.policy =
+                Policy([](const CallContext&, const std::string& operation, const Json& request) {
+                    return operation == "dependencies.runInstaller" &&
+                                   request.at("installer") == "setup.exe" &&
+                                   request.at("arguments") == Json::array({"--runtime"}) &&
+                                   request.at("requires_elevation") == true
+                               ? Decision::allow
+                               : Decision::deny;
+                });
+            DependencyManager scoped(scoped_options);
+            installer.installer_arguments = {"--runtime"};
+            bool launched = false;
+            auto elevate = [&](const ProcessOptions& process, const CallContext&) {
+                launched = process.executable.filename() == "setup.exe" &&
+                           process.arguments == std::vector<std::string>{"--runtime"};
+                return 0;
+            };
+            check(scoped.run_installer(installer, {}, elevate) == 0 && launched,
+                  "Installer policy and elevation receive the approved invocation");
+            launched = false;
+            auto alternate = installer;
+            alternate.installer_arguments = {"--different"};
+            expect_error("AccessDenied", [&] { scoped.run_installer(alternate, {}, elevate); });
+            alternate = installer;
+            alternate.requires_elevation = false;
+            expect_error("AccessDenied", [&] { scoped.run_installer(alternate, {}, elevate); });
+            check(!launched, "Denied installer variants never reach elevation");
             expect_error("NeedsElevation", [&] { manager.run_installer(installer); });
             bool restart = false;
             CallContext install_context;

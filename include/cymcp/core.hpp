@@ -2,6 +2,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -12,6 +13,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -24,11 +26,18 @@ Json parse_json(const std::string&, std::size_t max_bytes = 1024 * 1024, int max
 // tool outputs, diffs and file contents.
 inline constexpr std::size_t provider_message_limit = 256 * 1024 * 1024;
 std::string path_utf8(const std::filesystem::path&);
+// Format an error explanation for display or diagnostics. Masks credential values and
+// conventional authorization fields, removes control characters and bounds the UTF-8 text.
+std::string redact_error_message(std::string_view message,
+                                 const std::vector<std::string>& secrets = {});
 inline constexpr const char* version = "0.5.6";
 class Error : public std::runtime_error {
   public:
     std::string code;
+    // Optional identifier from the provider, e.g. a JSON-RPC number or an error enum.
+    std::string provider_code;
     Error(std::string code, std::string message);
+    Error(std::string code, std::string message, std::string provider_code);
 };
 struct Cancellation {
     std::shared_ptr<std::atomic_bool> flag = std::make_shared<std::atomic_bool>(false);
@@ -63,6 +72,8 @@ struct CallContext {
     std::string request_id;
     Cancellation cancellation;
     EventSink events;
+    // Transport-local namespace for correlating peer request IDs, separate from authorization.
+    std::string transport_scope;
     void emit(std::string type, Json data = Json::object()) const;
 };
 enum class Decision { allow, deny };
@@ -131,5 +142,9 @@ bool constant_time_equal(const std::string&, const std::string&) noexcept;
 std::string sha256_file(const std::filesystem::path&, const Cancellation& = {});
 std::string sha256(const std::string&);
 void private_directory(const std::filesystem::path&);
+using PrivateOutputFile = std::unique_ptr<std::FILE, decltype(&std::fclose)>;
+// Replace the destination with a new owner-only file and keep its writable stream open.
+// The parent directory's permissions are preserved.
+PrivateOutputFile open_private_output_file(const std::filesystem::path&);
 std::string platform_id();
 } // namespace cymcp

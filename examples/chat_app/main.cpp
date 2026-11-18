@@ -5,20 +5,24 @@
 #include "journal.hpp"
 
 // Include Windows definitions before the dependent SDK headers.
+#include <shellapi.h>
 #include <windows.h>
 
 #include "attachments.hpp"
+#include "clipboard.hpp"
 #include "workspace_ui.hpp"
 #include <array>
 #include <commdlg.h>
 #include <cstdlib>
 #include <cymcp/chat_ui.hpp>
+#ifdef CYMCP_CHAT_HAS_LOCAL
+#include <cymcp/local.hpp>
+#endif
 #include <cyui/Core.h>
 #include <d3d11.h>
 #include <fstream>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
-#include <shellapi.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 
@@ -94,11 +98,16 @@ bool capture_png(const std::filesystem::path& path) {
                                         static_cast<BYTE*>(mapped.pData))) &&
            SUCCEEDED(frame->Commit()) && SUCCEEDED(encoder->Commit());
 }
+void receive_files(HWND window, HDROP drop);
 LRESULT WINAPI window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
     if (ImGui::GetCurrentContext() &&
         ImGui_ImplWin32_WndProcHandler(window, message, wparam, lparam))
         return 1;
     switch (message) {
+    case WM_DROPFILES:
+        receive_files(window, reinterpret_cast<HDROP>(wparam));
+        DragFinish(reinterpret_cast<HDROP>(wparam));
+        return 0;
     case WM_SIZE:
         if (wparam != SIZE_MINIMIZED) {
             resize_width = LOWORD(lparam);
@@ -302,6 +311,7 @@ struct App {
     HWND window;
     std::shared_ptr<ProviderRegistry> registry = chat_example::providers();
     chat_example::Commands commands;
+    chat_example::ClipboardAttachments clipboard;
     ChatController chat{registry};
     chat_example::Attachments attachment_host;
     cyui::DocumentServices document_services;
@@ -311,8 +321,14 @@ struct App {
     chat_example::Journal journal;
     std::filesystem::path log_path;
     std::uint64_t last_diagnostic = 0;
-    int page = 0; // Chat, Providers, Logs
-    bool page_changed = false, log_errors_only = false, log_follow = true;
+    int page = 0, last_settings_page = 1; // Chat, Providers, Logs, Help
+    bool page_changed = false, log_errors_only = false, log_follow = true, log_raw = false;
+    bool log_jump = true;
+    std::uint64_t log_last_id = 0;
+    cyui::Document help_document;
+    cyui::DocumentState help_view;
+    std::uint64_t delete_request = 0;
+    bool confirm_delete = false;
     cyui::TextFilter log_filter;
     struct ProviderFields {
         std::vector<std::string> text;
@@ -332,13 +348,65 @@ struct App {
     DiscoveryOptions discovery_options;
     Cancellation discovery_cancel;
     Clock::time_point discovery_started{};
+#ifdef CYMCP_CHAT_HAS_LOCAL
+    std::filesystem::path dependency_cache, cuda_directory;
+    std::future<std::filesystem::path> cuda_installation;
+    Cancellation cuda_cancel;
+    void install_cuda() {
+        if (cuda_installation.valid())
+            return;
+        cuda_cancel = Cancellation();
+        CallContext context;
+        context.cancellation = cuda_cancel;
+        cuda_installation = std::async(std::launch::async, [cache = dependency_cache, context] {
+            DependencyManager manager({cache, Policy::allow_all()});
+            return manager.install(cuda_runtime_package(), context) / "runtime";
+        });
+    }
+    void poll_cuda() {
+        if (cuda_installation.valid() &&
+            cuda_installation.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            action([&] {
+                cuda_directory = cuda_installation.get();
+                journal.add("info", "", "dependencies", "Installed", "CUDA runtime 12.8.90");
+            });
+    }
+#endif
     std::future<std::vector<DiscoveredConnection>> discovery_task;
     ~App() {
+        DragAcceptFiles(window, FALSE);
+        SetWindowLongPtrW(window, GWLP_USERDATA, 0);
         discovery_cancel.cancel();
+#ifdef CYMCP_CHAT_HAS_LOCAL
+        cuda_cancel.cancel();
+#endif
+    }
+    void open_link(const std::string& target) {
+        if (auto* file = chat_example::Attachments::find(chat.state(), target)) {
+            attachment_host.open(*file, false);
+            return;
+        }
+        if (target.size() > 8192 || std::any_of(target.begin(), target.end(),
+                [](unsigned char c) { return c <= 32 || c == 127 || c == '\\'; }))
+            throw Error("InvalidUrl", "Invalid link");
+        if (!target.starts_with("mailto:"))
+            parse_url(target.substr(0, target.find('#')));
+        const auto url = std::filesystem::u8path(target).wstring();
+        if (reinterpret_cast<INT_PTR>(ShellExecuteW(window, L"open", url.c_str(), nullptr,
+                                                   nullptr, SW_SHOWNORMAL)) <= 32)
+            throw Error("FileError", "Cannot open link");
     }
     ChatPanelOptions panel_options() {
         ChatPanelOptions options;
         options.pick_attachments = [this] { return choose_files(window); };
+        options.open_settings = [this] { show_page(last_settings_page); };
+        options.require_editable_history = true;
+        options.edit_message = [this](auto id, const auto& text) { chat.edit_message(id, text); };
+        options.delete_message = [this](auto id) {
+            delete_request = id;
+            confirm_delete = true;
+        };
+        options.open_link = [this](const std::string& target) { open_link(target); };
         options.document_services = &document_services;
         document_services.image = [this](const std::string& source) {
             try {
@@ -351,28 +419,10 @@ struct App {
         options.open_attachment = [this](const auto& attachment, bool save) {
             attachment_host.open(attachment, save);
         };
-        options.paste = [this](std::string&, std::vector<std::filesystem::path>& paths) {
-            if (!IsClipboardFormatAvailable(CF_HDROP) || !OpenClipboard(window))
-                return false;
-            struct Clipboard {
-                ~Clipboard() {
-                    CloseClipboard();
-                }
-            } clipboard;
-            auto files = static_cast<HDROP>(GetClipboardData(CF_HDROP));
-            if (!files)
-                return false;
-            const auto count = DragQueryFileW(files, 0xffffffff, nullptr, 0);
-            if (count > 256)
-                throw Error("InvalidContent", "At most 256 attachments");
-            for (UINT n = 0; n < count; ++n) {
-                std::wstring path(DragQueryFileW(files, n, nullptr, 0) + 1, L'\0');
-                DragQueryFileW(files, n, path.data(), static_cast<UINT>(path.size()));
-                path.resize(path.size() - 1);
-                paths.emplace_back(path);
-            }
-            return !paths.empty();
+        options.paste = [this](std::string& text, std::vector<std::filesystem::path>& paths) {
+            return clipboard.paste(window, text, paths);
         };
+        options.preview_attachment = [this](const auto& path) { return attachment_host.preview(path); };
         return options;
     }
     explicit App(HWND w)
@@ -386,6 +436,9 @@ struct App {
         const auto folder =
             count && count < 32768 ? std::filesystem::path(local) : std::filesystem::current_path();
         assign(history_folder, path_utf8(folder / "CyMCPSDK" / "ChatLab" / "conversations"));
+#ifdef CYMCP_CHAT_HAS_LOCAL
+        dependency_cache = folder / "CyMCPSDK" / "ChatLab" / "dependencies";
+#endif
     }
     template <class F> void action(F&& fn) {
         try {
@@ -411,15 +464,20 @@ struct App {
             if (row.id <= last_diagnostic)
                 continue;
             journal.add(row.level, row.provider_id, row.operation, row.code,
-                        row.level == "error" ? chat_example::diagnostic_help(row.code)
-                                             : row.message,
-                        row.elapsed_ms);
+                        row.level == "error" && row.message.empty()
+                            ? chat_example::diagnostic_help(row.code)
+                            : row.message,
+                        row.elapsed_ms, row.provider_code);
             last_diagnostic = row.id;
             if (row.code == "UnknownModel" && chat.state().phase == "choosing_model")
                 show_page(1);
         }
     }
     void show_page(int value) {
+        if (value < 0 || value > 3)
+            throw Error("InvalidOptions", "Unknown settings page");
+        if (value)
+            last_settings_page = value;
         page = value;
         page_changed = true;
     }
@@ -600,6 +658,7 @@ struct App {
     void apply_defaults(const std::string& id) {
         provider_id = id;
         assign(model, id == "demo" ? "demo-markdown" : "");
+        assign(system, "");
         assign(resume, "");
         assign(key, "");
         assign(executable, "");
@@ -641,9 +700,12 @@ struct App {
             assign(key, row.config.api_key);
     }
     void use_detected(const DiscoveredConnection& row, bool preserve_options = false) {
-        const std::string kept_model = model.data(), kept_resume = resume.data();
+        select_provider(row.provider_id);
+        const std::string kept_model = model.data(), kept_resume = resume.data(),
+                          kept_system = system.data();
         apply_defaults(row.provider_id);
         apply_detected(row);
+        assign(system, kept_system);
         if (preserve_options) {
             assign(model, kept_model);
             assign(resume, kept_resume);
@@ -760,49 +822,100 @@ struct App {
     void draw() {
         chat.poll();
         poll_discovery();
+#ifdef CYMCP_CHAT_HAS_LOCAL
+        poll_cuda();
+#endif
         sync_diagnostics();
         if (ImGui::IsKeyPressed(ImGuiKey_F1))
-            action([&] { open_help(); });
+            show_page(3);
+        else if (page && ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsAnyItemActive() &&
+                 !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+            show_page(0);
         const auto viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
         ImGui::Begin("CyMCPSDK Chat Lab", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
-        const auto subtitle = std::string(version) + "  ·  " + cyui::tr("Chat and AI providers");
-        cyui::panelHeader("CyMCPSDK Chat Lab", subtitle.c_str());
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - cyui::dp(100));
-        if (cyui::button(cyui::trLabel("Help (F1)").c_str()))
-            action([&] { open_help(); });
-        cyui::divider();
-        attachment_host.draw();
-        const bool requested = page_changed;
-        const int requested_page = page;
-        page_changed = false;
-        if (ImGui::BeginTabBar("##workspace-tabs")) {
-            const char* names[]{"Chat", "Providers", "Logs"};
-            for (int index = 0; index != 3; ++index) {
-                if (ImGui::BeginTabItem(
-                        cyui::trLabel(names[index]).c_str(), nullptr,
-                        requested && requested_page == index ? ImGuiTabItemFlags_SetSelected : 0)) {
-                    page = index;
-                    ImGui::BeginChild("##workspace-content");
-                    if (index == 0)
-                        chat_example::draw_chat(*this);
-                    else if (index == 1)
-                        chat_example::draw_providers(*this);
-                    else
-                        chat_example::draw_logs(*this);
-                    ImGui::EndChild();
-                    ImGui::EndTabItem();
-                }
+        if (confirm_delete) {
+            ImGui::OpenPopup("###delete-turn");
+            confirm_delete = false;
+        }
+        const auto delete_title = cyui::tr("Delete this turn?") + "###delete-turn";
+        if (ImGui::BeginPopupModal(delete_title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextUnformatted(cyui::tr("The message and its reply will be removed from the conversation history.").c_str());
+            if (cyui::button(cyui::trLabel("Cancel").c_str()) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+                ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (cyui::button(cyui::trLabel("Delete turn").c_str())) {
+                action([&] { chat.delete_turn(delete_request); });
+                ImGui::CloseCurrentPopup();
             }
-            ImGui::EndTabBar();
+            ImGui::EndPopup();
+        }
+        attachment_host.draw(chat.state(), [this](const std::string& link) {
+            action([&] { open_link(link); });
+        });
+        if (!chat.state().busy)
+            clipboard.discard_unused(panel.pending_attachments());
+        if (page == 0) {
+            if (!error.empty())
+                chat_example::draw_error(*this);
+            panel.draw();
+        } else {
+            const int requested = page_changed ? page : 0;
+            page_changed = false;
+            const auto close_label = cyui::trLabel("Close");
+            const float close_width = ImGui::CalcTextSize(close_label.c_str(), nullptr, true).x +
+                                      2 * ImGui::GetStyle().FramePadding.x;
+            const float tabs_width = std::max(1.f, ImGui::GetContentRegionAvail().x - close_width -
+                                                   ImGui::GetStyle().ItemSpacing.x);
+            const auto fixed = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+            ImGui::BeginChild("##settings-tabs", {tabs_width, ImGui::GetFrameHeight()}, ImGuiChildFlags_None, fixed);
+            if (ImGui::BeginTabBar("##settings")) {
+                const char* labels[]{"Providers", "Logs", "Help"};
+                for (int index = 1; index <= 3; ++index) {
+                    if (ImGui::BeginTabItem(cyui::trLabel(labels[index - 1]).c_str(), nullptr,
+                                            requested == index ? ImGuiTabItemFlags_SetSelected : 0)) {
+                        if (!requested || requested == index)
+                            last_settings_page = page = index;
+                        ImGui::EndTabItem();
+                    }
+                }
+                ImGui::EndTabBar();
+            }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            if (cyui::button(close_label.c_str(), cyui::Variant::secondary,
+                             {close_width, ImGui::GetFrameHeight()}))
+                show_page(0);
+            if (page) {
+                ImGui::BeginChild("##settings-content", {}, ImGuiChildFlags_None, fixed);
+                if (page == 1)
+                    chat_example::draw_providers(*this);
+                else if (page == 2)
+                    chat_example::draw_logs(*this);
+                else
+                    chat_example::draw_help(*this);
+                ImGui::EndChild();
+            }
         }
         ImGui::End();
         cyui::renderNotifications();
     }
 };
+void receive_files(HWND window, HDROP drop) {
+    auto* app = reinterpret_cast<App*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (app)
+        app->action([&] {
+            auto paths = chat_example::ClipboardAttachments::dropped(drop);
+            if (!paths.empty()) {
+                app->panel.add_attachments(std::move(paths));
+                app->show_page(0);
+            }
+        });
+}
 } // namespace
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     bool smoke = false, hidden = false, test_ready = false;
@@ -903,6 +1016,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     int result = 0;
     {
         App app(window);
+        SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&app));
+        DragAcceptFiles(window, TRUE);
         app.testing = static_cast<bool>(exercise);
         if (log_file.empty())
             log_file = exercise ? report_path.parent_path() / "application.log"
@@ -968,14 +1083,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
             app.draw();
-            if (exercise) {
-                exercise->tick(app);
-                if (exercise->done) {
-                    if (result == 0)
-                        result = exercise->passed ? 0 : 7;
-                    done = true;
-                }
-            }
             if (!exercise && (smoke || !capture.empty()) && !sent && app.chat.state().connected &&
                 !app.chat.state().busy) {
                 app.action([&] {
@@ -991,6 +1098,34 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             renderer->OMSetRenderTargets(1, &render_target, nullptr);
             renderer->ClearRenderTargetView(render_target, clear);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+            if (exercise) {
+                if (exercise->needs_frame_time(app)) {
+                    D3D11_QUERY_DESC desc{D3D11_QUERY_EVENT, 0};
+                    ComPtr<ID3D11Query> fence;
+                    if (FAILED(device->CreateQuery(&desc, &fence))) {
+                        result = 3;
+                        break;
+                    }
+                    renderer->End(fence.Get());
+                    renderer->Flush();
+                    const auto deadline = Clock::now() + std::chrono::seconds(5);
+                    HRESULT status;
+                    while ((status = renderer->GetData(fence.Get(), nullptr, 0, 0)) == S_FALSE &&
+                           Clock::now() < deadline)
+                        std::this_thread::yield();
+                    if (status != S_OK) {
+                        result = 3;
+                        break;
+                    }
+                    exercise->frame_completed(!app.chat.state().busy);
+                }
+                exercise->tick(app);
+                if (exercise->done) {
+                    if (result == 0)
+                        result = exercise->passed ? 0 : 7;
+                    done = true;
+                }
+            }
             if (exercise && done && !capture.empty() && !capture_png(capture))
                 result = 5;
             if (!exercise && (smoke || !capture.empty()) && sent && !app.chat.state().busy) {

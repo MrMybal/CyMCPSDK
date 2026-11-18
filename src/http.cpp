@@ -145,11 +145,18 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
         if (size > request.max_response_bytes - std::min(received, request.max_response_bytes))
             throw Error("ResponseTooLarge", "HTTP response exceeds limit");
         received += size;
-        if (sink) {
+        if (sink && request.error_body_limit && (result.status < 200 || result.status >= 300)) {
+            if (received > request.error_body_limit) {
+                result.body.clear();
+                return false;
+            }
+            result.body.append(data, size);
+        } else if (sink) {
             if (!sink(data, size))
                 throw Error("Cancelled", "Response consumer stopped");
         } else
             result.body.append(data, size);
+        return true;
     };
 #ifdef _WIN32
     auto user_agent = wide_http(std::string("CyMCPSDK/") + version);
@@ -160,8 +167,8 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     // WinHTTP send/receive timeouts are per operation: they bound silence, not a whole stream.
     // Zero means infinite; the total deadline is enforced by the watcher below.
     const auto idle = request.idle_timeout.count() > 0 ? request.idle_timeout : request.timeout;
-    auto timeout = static_cast<int>(
-        std::min<std::int64_t>(idle.count(), std::numeric_limits<int>::max()));
+    auto timeout =
+        static_cast<int>(std::min<std::int64_t>(idle.count(), std::numeric_limits<int>::max()));
     WinHttpSetTimeouts(session.get(), timeout ? std::min(timeout, 10000) : 10000,
                        timeout ? std::min(timeout, 10000) : 10000, timeout, timeout);
     Internet connection(WinHttpConnect(session.get(), wide_http(url.host).c_str(),
@@ -266,7 +273,8 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
             failed();
         if (!bytes)
             break;
-        accept(buffer.data(), bytes);
+        if (!accept(buffer.data(), bytes))
+            break;
     }
     watcher.request_stop();
     if (idle_expired.load())
@@ -290,19 +298,17 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
         decltype(accept)* receive;
         Cancellation cancel;
         HttpResponse* response;
+        CURL* handle;
+        std::atomic<std::int64_t>& activity;
+        curl_off_t uploaded = 0;
         std::exception_ptr error;
         std::size_t headers = 0;
-    } state{&accept, cancel, &result, {}, 0};
+        bool error_body_discarded = false;
+    } state{&accept, cancel, &result, handle, last_activity, 0, {}, 0, false};
     curl_easy_setopt(handle, CURLOPT_URL, request.url.c_str());
     curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, static_cast<long>(request.timeout.count()));
-    if (request.idle_timeout.count() > 0) {
-        // Abort only after a full idle interval below one byte per second.
-        curl_easy_setopt(handle, CURLOPT_LOW_SPEED_LIMIT, 1L);
-        curl_easy_setopt(handle, CURLOPT_LOW_SPEED_TIME,
-                         static_cast<long>((request.idle_timeout.count() + 999) / 1000));
-    }
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
     if (url.loopback)
         curl_easy_setopt(handle, CURLOPT_NOPROXY, "*");
@@ -322,7 +328,17 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
         +[](char* data, std::size_t size, std::size_t count, void* raw) -> std::size_t {
             auto& s = *static_cast<State*>(raw);
             try {
-                (*s.receive)(data, size* count);
+                if (!s.response->status) {
+                    long status = 0;
+                    if (curl_easy_getinfo(s.handle, CURLINFO_RESPONSE_CODE, &status) != CURLE_OK ||
+                        !status)
+                        throw Error("NetworkError", "Cannot read HTTP response status");
+                    s.response->status = static_cast<int>(status);
+                }
+                if (!(*s.receive)(data, size * count)) {
+                    s.error_body_discarded = true;
+                    return 0;
+                }
                 return size * count;
             } catch (...) {
                 s.error = std::current_exception();
@@ -335,6 +351,7 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
         +[](char* data, std::size_t size, std::size_t count, void* raw) -> std::size_t {
             auto& s = *static_cast<State*>(raw);
             auto n = size * count;
+            s.activity.store(Clock::now().time_since_epoch().count());
             s.headers += n;
             if (s.headers > 65536)
                 return 0;
@@ -354,16 +371,73 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(
         handle, CURLOPT_XFERINFOFUNCTION,
-        +[](void* raw, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+        +[](void* raw, curl_off_t, curl_off_t, curl_off_t, curl_off_t uploaded) -> int {
             auto& s = *static_cast<State*>(raw);
+            if (uploaded != s.uploaded) {
+                s.uploaded = uploaded;
+                s.activity.store(Clock::now().time_since_epoch().count());
+            }
             return s.cancel.cancelled() || Clock::now() >= s.cancel.deadline ? 1 : 0;
         });
     curl_easy_setopt(handle, CURLOPT_XFERINFODATA, &state);
-    auto code = curl_easy_perform(handle);
+    // curl_easy_perform may leave the progress callback idle for an entire second.
+    // Poll to the caller's millisecond deadline even when no bytes arrive.
+    struct Transfer {
+        CURLM* multi;
+        CURL* easy;
+        ~Transfer() {
+            if (multi) {
+                curl_multi_remove_handle(multi, easy);
+                curl_multi_cleanup(multi);
+            }
+        }
+    } transfer{curl_multi_init(), handle};
+    if (!transfer.multi || curl_multi_add_handle(transfer.multi, handle) != CURLM_OK)
+        throw Error("NetworkError", "Cannot initialize HTTP transfer");
+    int running = 0;
+    do {
+        cancel.check();
+        auto now = Clock::now();
+        auto deadline = cancel.deadline;
+        if (request.idle_timeout.count() > 0) {
+            auto last = Clock::time_point(Clock::duration(last_activity.load()));
+            deadline = std::min(deadline, last + request.idle_timeout);
+            if (now >= deadline)
+                throw Error("Timeout", "HTTP connection stayed silent beyond its idle timeout");
+        }
+        if (curl_multi_perform(transfer.multi, &running) != CURLM_OK)
+            throw Error("NetworkError", "HTTP transfer failed");
+        if (running) {
+            auto wait = std::chrono::milliseconds(40);
+            if (deadline != Clock::time_point::max())
+                wait = std::clamp(
+                    std::chrono::ceil<std::chrono::milliseconds>(deadline - Clock::now()),
+                    std::chrono::milliseconds(0), wait);
+#if LIBCURL_VERSION_NUM >= 0x074200
+            auto status = curl_multi_poll(transfer.multi, nullptr, 0,
+                                          static_cast<int>(wait.count()), nullptr);
+#else
+            int ready = 0;
+            auto status =
+                curl_multi_wait(transfer.multi, nullptr, 0, static_cast<int>(wait.count()), &ready);
+            if (!ready && status == CURLM_OK)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
+            if (status != CURLM_OK)
+                throw Error("NetworkError", "Cannot poll HTTP transfer");
+        }
+    } while (running);
     if (state.error)
         std::rethrow_exception(state.error);
     cancel.check();
-    if (code != CURLE_OK)
+    int queued = 0;
+    const auto* message = curl_multi_info_read(transfer.multi, &queued);
+    if (!message || message->msg != CURLMSG_DONE)
+        throw Error("NetworkError", "Missing HTTP transfer result");
+    const auto code = message->data.result;
+    if (code == CURLE_OPERATION_TIMEDOUT)
+        throw Error("Timeout", "HTTP request timed out");
+    if (code != CURLE_OK && !(state.error_body_discarded && code == CURLE_WRITE_ERROR))
         throw Error("NetworkError",
                     "HTTP request failed: " + std::string(curl_easy_strerror(code)));
     long status = 0;

@@ -18,31 +18,58 @@ le format portable utilisent un libellé générique. `open_attachment(attachmen
 activation explicite ; `document_services` fournit les textures déjà chargées sans bloquer le rendu.
 L’exemple Windows décode les images en arrière-plan, borne ses vignettes à 8 textures de 1024 pixels,
 prévisualise les textes et permet de choisir où enregistrer les octets embarqués.
-Les fichiers copiés dans l’Explorateur peuvent être collés comme pièces jointes dans la saisie.
+Un aperçu Markdown peut afficher une image jointe au même message. Par exemple,
+`![Résultat][figure]` peut désigner une définition `[figure]: ./resultat.png` quand une seule
+pièce jointe de ce message porte ce nom. Le décodage utilise les octets embarqués.
+Ctrl+V dans le compositeur accepte les images du presse-papiers Windows et les fichiers copiés
+dans l’Explorateur. Les vignettes des pièces en attente permettent de les vérifier avant l’envoi.
+
+Le transcript et le volet de réflexion utilisent les mêmes services Markdown de l’hôte.
+`ChatPanelOptions::open_link` reçoit les activations de liens. Pour afficher des cartes
+d’aperçu déjà disponibles, fournir `cyui::DocumentServices::preview` et activer
+`ChatPanelOptions::link_previews`. Le callback s’exécute sur le thread d’affichage et
+doit renvoyer immédiatement les données en cache. Compiler ChatUI et l’application
+contre la même révision de CyUI.
+
+Les mesures comparatives couvrent séparément le transport MCP et les trames Markdown sur
+deux révisions de CyUI. [Comparaison avec CyToolsCore](Comparaison-CyToolsCore.md)
 
 CyUI gère la copie native. Répondre cite le message dans le brouillon, sans envoyer automatiquement.
 Les actions de modification et suppression des messages utilisateur apparaissent lorsque l’hôte
 fournit **les deux** callbacks `edit_message` et `delete_message` ; l’éditeur natif applique alors
 sa proposition via le callback. L’hôte assure la compatibilité avec son historique fournisseur.
-Chat Lab ne propose pas ces mutations des sessions natives. Le hook `paste` facultatif de l’hôte
+Dans Chat Lab, les conversations dont l’historique est géré par le SDK (démo et API) permettent
+de modifier le texte d’un message envoyé ou de supprimer un tour après confirmation.
+La flèche ↑ dans un brouillon vide reprend le dernier message utilisateur. Pour une session native
+comme Codex, elle en place une copie dans le brouillon. Le hook `paste` facultatif de l’hôte
 importe du texte ou des chemins sélectionnés ; le collage texte natif fonctionne sans ce hook.
 
-Chat Lab utilise trois onglets : **Chat**, **Providers** et **Logs**. Le catalogue de fournisseurs
+Le tchat occupe la fenêtre de Chat Lab. La roue **Paramètres** ouvre **Fournisseurs**, **Journal**
+et **Aide**. **Fermer** revient au brouillon. Le catalogue de fournisseurs
 est filtrable ; ses cartes sélectionnent un éditeur de paramètres et un double-clic connecte.
 Les champs de chaque fournisseur sont conservés séparément en mémoire pendant l'exécution.
 La démo initiale est un état de départ hors ligne, sans priorité sur une IA détectée en mode automatique.
 
-`ChatViewState.diagnostics` contient au plus 1 000 événements structurés : identifiant croissant,
-horodatage système en millisecondes, niveau, fournisseur, opération, code, message fixe et durée.
-Les événements `ConnectionStage` n'acceptent que les étapes connues ; les données natives,
-messages, paramètres d'outils, clés et IDs de session n'entrent pas dans ces enregistrements.
+`ChatViewState.diagnostics` contient au plus 1 000 événements avec leur identifiant, horodatage,
+niveau, fournisseur, opération, code SDK, explication et durée. En cas de refus du fournisseur,
+le tour concerné et le journal affichent aussi son code natif s’il est disponible. Le détail provient
+du champ d’erreur du fournisseur. Les valeurs d’identification configurées et les formes courantes
+de secrets sont masquées avant affichage et journalisation. Les événements `ConnectionStage`
+conservent uniquement les étapes connues.
+
+Une réponse déjà commencée reste lisible avec le motif de l’échec. Une annulation est marquée
+« Interrompu ». La restauration et la reconnexion réaffichent le diagnostic enregistré et
+attendent un nouvel envoi explicite. `ChatMessage::error_code`, `provider_code` et
+`error_message` décrivent l’échec indépendamment du texte de la réponse.
 `choosing_model` distingue le choix du catalogue d'une panne lors d'une connexion API automatique.
 
 L'exemple rassemble ces événements avec ceux de la détection dans **Logs**, puis écrit un fichier
 privé par exécution sous `%LOCALAPPDATA%/CyMCPSDK/ChatLab/logs` sur un worker distinct.
 `--log-file PATH.log` choisit un emplacement explicite. La vue garde 2 000 lignes ; le fichier est
 borné à 8 Mio et signale les erreurs ou sa saturation sans annuler de génération. **Clear view**
-conserve le fichier ; **Copy log** copie les diagnostics et **Open log file** l'ouvre dans l'outil du système.
+conserve le fichier. **JSONL brut** affiche les enregistrements tels qu’ils sont écrits.
+**Copier le journal** copie les lignes filtrées au format affiché. La molette permet de remonter
+le journal pendant la réception de nouveaux événements.
 
 ## Application Windows de test
 
@@ -58,8 +85,8 @@ et rassemble l'exécutable et ses notices dans `out/ChatLab-windows-x64/`.
 Il ne télécharge ni moteur IA ni dépendance GPU.
 L'anglais est la langue de démarrage. Choisir Français dans Appearance pour changer
 la langue de l'interface, ou utiliser explicitement `--language fr`. La démonstration
-locale prend aussi la langue choisie à la connexion. **Help (F1)** ouvre le manuel
-CyDoc local fourni dans le dossier `Documentation/`, en anglais ou en français.
+locale prend aussi la langue choisie à la connexion. **F1** ouvre l’onglet d’aide.
+**Ouvrir le manuel complet** ouvre le manuel local fourni dans `Documentation/`.
 
 Pour une compilation CMake directe, dans un environnement C++ configuré :
 
@@ -81,7 +108,7 @@ des fichiers privés. Une erreur ne déclenche pas de changement silencieux de f
 Dans Providers, sélectionner **Demo / Markdown (no AI)** puis
 **Connect / New chat** et envoyer un message permet de vérifier le rendu sans compte.
 Cette démonstration produit du texte déterministe ; elle ne mesure pas un modèle.
-Les 22 profils du registre sont aussi accessibles, avec leurs exigences réelles de
+Les 23 profils du registre sont aussi accessibles, avec leurs exigences réelles de
 CLI installé, de compte, d'API ou de service local. Les modèles ne sont pas inventés :
 le catalogue provient du fournisseur connecté, et un ID peut être saisi manuellement.
 Le modèle choisi s'applique à la prochaine connexion.
@@ -189,8 +216,8 @@ le worker. `cancel()` signale l'annulation sans attendre.
 Le panneau propose Markdown, code coloré, tableaux, sélection/copie, suivi du
 défilement, saisie multiligne, pièces jointes, arrêt, reconnexion, sauvegarde,
 activité et réflexion lorsqu'elles sont émises. Le résultat final remplace les
-deltas sans les dupliquer. Une erreur conserve le texte partiel et le marque
-interrompu. Les durées viennent des événements réellement reçus.
+deltas sans les dupliquer. Après un refus, le tour affiche **Échec**, le texte partiel
+et l’explication du fournisseur. **Interrompu** indique une annulation.
 
 `ChatPanelOptions.pick_attachments` fournit le sélecteur de fichiers de l'hôte.
 `document_services` fournit les ressources natives déjà mises en cache ; ses

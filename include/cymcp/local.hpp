@@ -7,6 +7,9 @@ struct LocalEngineOptions {
     std::filesystem::path model, private_work_directory;
     int context_tokens = 4096, gpu_layers = 0;
     std::chrono::milliseconds startup_timeout{120000};
+    // Optional runtime/ directory returned under the installed CUDA package. Prepended
+    // to the library search path of this engine process only.
+    std::filesystem::path cuda_runtime_directory;
 };
 class LocalEngine {
     struct Impl;
@@ -20,10 +23,16 @@ class LocalEngine {
     std::string base_url() const;
     std::string token() const;
 };
+struct ArchiveMember {
+    std::string member_path, relative_path, sha256;
+    std::uint64_t size = 0;
+};
 struct Artifact {
     std::string relative_path, url, sha256;
     std::uint64_t size = 0;
     bool executable = false;
+    // Explicit regular files to extract after the archive itself passes verification.
+    std::vector<ArchiveMember> members;
 };
 struct Package {
     std::string id, version, platform;
@@ -33,6 +42,9 @@ struct Package {
     std::vector<std::string> installer_arguments;
     bool requires_elevation = false;
 };
+// NVIDIA CUDART 12 for Windows/Linux x64. install() returns a private package directory
+// containing runtime/ and the vendor license. No elevation or system driver changes.
+Package cuda_runtime_package();
 struct DependencyOptions {
     std::filesystem::path cache_directory;
     Policy policy;

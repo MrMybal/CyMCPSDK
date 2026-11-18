@@ -260,6 +260,7 @@ ProviderDiscoveryHints builtin_discovery(const std::string& id) {
     ProviderDiscoveryHints hints;
     const std::map<std::string, std::pair<std::vector<std::string>, std::vector<std::string>>> cli{
         {"codex", {{"codex"}, {"@openai/codex"}}},
+        {"codex-exec", {{"codex"}, {"@openai/codex"}}},
         {"claude-code", {{"claude"}, {"@anthropic-ai/claude-code"}}},
         {"claude", {{"claude"}, {"@anthropic-ai/claude-code"}}},
         {"antigravity", {{"agy"}, {}}},
@@ -282,7 +283,7 @@ ProviderDiscoveryHints builtin_discovery(const std::string& id) {
         hints.npm_packages = found->second.second;
     }
     // Documented sign-in subcommands; other CLIs sign in interactively on first launch.
-    if (id == "codex")
+    if (id == "codex" || id == "codex-exec")
         hints.login_arguments = {"login"};
     else if (id == "claude-code" || id == "claude")
         hints.login_arguments = {"auth", "login"};

@@ -1,3 +1,4 @@
+#include "provider_error.hpp"
 #include <cymcp/ai.hpp>
 #include <limits>
 #include <set>
@@ -9,10 +10,38 @@ constexpr int fallback_output_tokens = 64000;
 void http_status(int status) {
     if (status >= 200 && status < 300)
         return;
-    throw Error(status == 401 || status == 403 ? "AuthenticationRequired"
-                : status == 429                ? "RateLimited"
-                                               : "ProviderError",
+    throw Error(detail::provider_http_error_code(status),
                 "API request rejected with HTTP " + std::to_string(status));
+}
+Error generation_error(const Json& event, const ApiOptions& options, std::string fallback,
+                       std::string sdk_code = "ProviderError") {
+    // Read only the documented error fields. Adjacent output, account and tool
+    // metadata remain private, including when a proxy uses an unfamiliar error envelope.
+    if (!event.is_object())
+        return Error(std::move(sdk_code), std::move(fallback));
+    const Json* envelope = &event;
+    const auto type = event.find("type");
+    const auto response = event.find("response");
+    if (options.protocol == ApiProtocol::OpenAIResponses && type != event.end() &&
+        (*type == "response.failed" || *type == "response.completed" ||
+         *type == "response.incomplete") &&
+        response != event.end() && response->is_object() && response->contains("error"))
+        envelope = &*response;
+    const auto error = envelope->find("error");
+    if (error != envelope->end() && error->is_object())
+        return detail::structured_provider_error(
+            *error, options.protocol == ApiProtocol::AnthropicMessages ? "type" : "code",
+            options.api_key, std::move(sdk_code), std::move(fallback));
+    if (options.protocol == ApiProtocol::OpenAIResponses && type != event.end() && *type == "error")
+        return detail::structured_provider_error(event, "code", options.api_key,
+                                                 std::move(sdk_code), std::move(fallback));
+    if (options.protocol == ApiProtocol::Ollama && error != envelope->end() && error->is_string()) {
+        auto message =
+            redact_error_message(error->get_ref<const std::string&>(), {options.api_key});
+        if (!message.empty())
+            return Error(std::move(sdk_code), std::move(message));
+    }
+    return Error(std::move(sdk_code), std::move(fallback));
 }
 HttpRequest request_for(const ApiOptions& options, const std::string& path) {
     HttpRequest request;
@@ -100,22 +129,17 @@ void stream(HttpRequest request, const ApiOptions& options, const Json& body,
     request.idle_timeout = options.timeout;
     request.timeout = std::chrono::milliseconds(0);
     request.max_response_bytes = std::numeric_limits<std::size_t>::max();
+    request.error_body_limit = detail::provider_error_body_limit;
     Frames frames(options.protocol == ApiProtocol::Ollama, consume);
-    std::exception_ptr failure;
     auto response =
         HttpClient().perform(request, context.cancellation, [&](const char* p, std::size_t n) {
-            if (!failure)
-                try {
-                    frames.feed(p, n);
-                } catch (...) {
-                    failure = std::current_exception();
-                }
+            frames.feed(p, n);
             return true;
         });
-    // An error body is not a generation stream and may contain private account data.
-    http_status(response.status);
-    if (failure)
-        std::rethrow_exception(failure);
+    if (response.status < 200 || response.status >= 300)
+        throw generation_error(detail::parse_provider_error_body(response.body), options,
+                               "API request rejected with HTTP " + std::to_string(response.status),
+                               detail::provider_http_error_code(response.status));
     frames.finish();
 }
 struct Tools {
@@ -199,7 +223,7 @@ Json history_for(const Json& messages, ApiProtocol protocol, std::string& system
     Json history = Json::array();
     for (const auto& message : messages) {
         auto role = message.at("role").get<std::string>();
-        auto content = message.value("content", Json(""));
+        const auto& content = message.at("content");
         if (protocol == ApiProtocol::AnthropicMessages && role == "system") {
             system += detail::content_text(content) + "\n";
             continue;
@@ -296,6 +320,12 @@ ApiProvider::ApiProvider(ApiOptions options)
         options_.timeout.count() <= 0 || options_.timeout > std::chrono::hours(24) ||
         options_.turn_timeout.count() < 0)
         throw Error("InvalidOptions", "Invalid API options");
+    const auto& think = options_.ollama_think;
+    if (!think.is_null() &&
+        (options_.protocol != ApiProtocol::Ollama ||
+         !(think.is_boolean() ||
+           (think.is_string() && !think.get_ref<const std::string&>().empty()))))
+        throw Error("InvalidOptions", "Ollama think requires a boolean or a model reasoning level");
 }
 bool ApiProvider::local_service() const noexcept {
     try {
@@ -303,6 +333,14 @@ bool ApiProvider::local_service() const noexcept {
     } catch (...) {
         return false;
     }
+}
+void ApiProvider::validate_user_content(const Json& content) const {
+    if (options_.protocol == ApiProtocol::OpenRouter) {
+        detail::content_for(content, detail::ContentFormat::ChatCompletions);
+        return;
+    }
+    std::string system;
+    history_for(Json::array({{{"role", "user"}, {"content", content}}}), options_.protocol, system);
 }
 ProviderCapabilities ApiProvider::capabilities() const {
     bool chat = options_.protocol == ApiProtocol::OpenRouter;
@@ -438,6 +476,8 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
         } else {
             path = "/api/chat";
             body["messages"] = history;
+            if (!options_.ollama_think.is_null())
+                body["think"] = options_.ollama_think;
             if (options_.max_output_tokens > 0)
                 body["options"] = {{"num_predict", options_.max_output_tokens}};
         }
@@ -454,7 +494,7 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
             auto type = data.value("type", std::string());
             if (type == "error" || type == "response.failed" ||
                 (data.contains("error") && !data.at("error").is_null()))
-                throw Error("ProviderError", "API generation failed");
+                throw generation_error(data, options_, "API generation failed");
             if (terminal)
                 throw Error("ProtocolError", "API data after terminal result");
             std::string text;
@@ -467,7 +507,7 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
                     auto response = data.at("response");
                     const auto status = response.value("status", std::string());
                     if (status != "completed" && status != "incomplete")
-                        throw Error("ProviderError", "OpenAI response did not complete");
+                        throw generation_error(data, options_, "OpenAI response did not complete");
                     // A truncated answer is a result, like Messages max_tokens: keep its text.
                     const bool incomplete = status == "incomplete";
                     content = response.at("output");
@@ -571,12 +611,8 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
                     context.emit("ThinkingDelta", {{"text", delta}});
                 }
                 if (message.contains("tool_calls"))
-                    for (const auto& call : message.at("tool_calls")) {
+                    for (const auto& call : message.at("tool_calls"))
                         content.push_back(call);
-                        calls.push_back({{"id", "ollama_" + std::to_string(calls.size())},
-                                         {"name", call.at("function").at("name")},
-                                         {"arguments", call.at("function").at("arguments")}});
-                    }
                 terminal = data.value("done", false);
                 if (terminal) {
                     reason = data.value("done_reason", std::string("stop"));
@@ -593,6 +629,16 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
         });
         if (!terminal)
             throw Error("UnexpectedEOF", "API stream ended before its final result");
+        if (protocol == ApiProtocol::Ollama) {
+            // Only a completed generation may commit or execute tool calls. Truncated fragments
+            // may even lack their arguments; retain the text and finish reason in that case.
+            if (reason != "stop")
+                content.clear();
+            for (const auto& call : content)
+                calls.push_back({{"id", "ollama_" + std::to_string(calls.size())},
+                                 {"name", call.at("function").at("name")},
+                                 {"arguments", call.at("function").at("arguments")}});
+        }
         if (!calls.empty() &&
             ((protocol == ApiProtocol::AnthropicMessages && reason != "tool_use") ||
              (protocol == ApiProtocol::OpenAIResponses && reason != "tool_calls")))

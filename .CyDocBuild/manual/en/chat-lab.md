@@ -5,12 +5,13 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 5
+revision: 8
 ---
 
 ## Connect {#connect}
 
-The **Chat**, **Providers** and **Logs** tabs separate conversations, connection settings and diagnostics.
+Chat opens directly. **Settings** contains **Providers**, **Logs** and **Help**. **Close** returns
+to the conversation and its draft. **F1** opens Help.
 Open **Providers** to search the catalogue, select a provider and edit its own fields. Selecting
 a provider keeps the other providers' fields in memory for this run. Use **Connect / New chat**
 to open it and return to Chat, or double-click a provider card to connect directly.
@@ -43,7 +44,7 @@ Selecting a provider pre-fills its conventional endpoint, key variable and setti
 with any detected installation.
 
 ```image
-{"id":"automatic-connection","src":"assets/chat-auto-en.png","alt":"Automatic detection of installed CLIs and a real streamed Codex reply","controls":"minimal"}
+{"id":"automatic-connection","src":"assets/chat-auto-en.png","alt":"Earlier interface capture of automatic CLI detection and a real streamed Codex reply","controls":"minimal"}
 ```
 
 **Installation and connection** contains the CLI path and working directory or the API endpoint/key fields.
@@ -60,21 +61,33 @@ when emitted by the provider. **Follow responses** controls automatic scrolling.
 
 The native input grows with the draft. Select text for the formatting toolbar, or use
 Ctrl+B/I/U/E. Drafts remain editable during a response; sending while busy keeps the draft.
+Use the chat’s **…** menu for a rendered draft preview. **Ctrl+F** searches the conversation.
+Press **↑** in an empty composer to recall the last user message. In conversations whose history
+the SDK manages, you can edit a sent message or confirm deletion of its turn. Both actions leave
+generation idle.
 Hover or right-click a message to **Copy message** or **Reply**; Reply inserts a quote into
 the draft and waits for you to send it. Native session history stays under provider control.
 
 Attachments have their own cards. Images decode asynchronously and enlarge inside the app.
+To include an image in a Markdown preview, attach the document and image to the same message
+and use its unique filename, for example `![Result](./plot.png)`. Reference definitions also work.
 Click a text attachment to preview it, or **Save attachment** to choose a destination for its
-embedded bytes. Copied Explorer files can be pasted in the composer. Preview services never
+embedded bytes. Press **Ctrl+V** to paste a clipboard image or copied Explorer files. Check
+the thumbnail and remove an attachment before sending if needed. Preview services never
 fetch arbitrary Markdown image URLs. Formats without a decoder retain their file card and Save action.
 
-**Stop** requests cancellation. A partial answer remains marked interrupted.
+During generation **Stop** appears next to **Send**. Cancelling preserves the partial answer.
+If the provider rejects a turn, that reply shows the provider’s explanation, the SDK error code
+and the provider code when available. Text already received remains visible. The same diagnostic
+is available in **Logs**, with credentials masked. You can change the model and send another
+message when ready.
 **Reconnect** explicitly resumes the current session; it does not resend the interrupted message.
 See [conversations and history](doc:conversations).
 
 ## Read the journal {#logs}
 
-Open **Logs**, or use **View logs** after an error. Rows show the local time, provider, operation,
+Open **Settings → Logs**. **Raw JSONL** shows the same events as the session file. Scroll up
+to read earlier entries while new events arrive. Rows show the local time, provider, operation,
 event/error code, explanation and duration. Native connection stages include protocol initialization,
 account checks and session creation. Generation events show response start and completion.
 
@@ -87,7 +100,7 @@ The view retains the newest 2,000 rows. Each session file is limited to 8 MiB; a
 when it stops growing or cannot be written. Logging never cancels a conversation.
 
 ```image
-{"id":"connection-journal","src":"assets/logs-en.png","alt":"Chat Lab journal showing the stages and completion of a native Codex connection","controls":"minimal"}
+{"id":"connection-journal","src":"assets/logs-en.png","alt":"Chat Lab log showing a model refusal reproduced with a Codex simulator","controls":"minimal"}
 ```
 
 ## Let an AI use app commands {#commands}

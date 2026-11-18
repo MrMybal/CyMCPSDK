@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cymcp/local.hpp>
 #include <fstream>
 namespace cymcp {
@@ -50,6 +51,44 @@ void LocalEngine::start(const CallContext& context) {
             arg.rfind("--api-key", 0) == 0 || arg == "-m" || arg == "--model")
             throw Error("InvalidOptions",
                         "Engine connection/model arguments are owned by LocalEngine");
+    auto opts = p.options.process;
+    if (!p.options.cuda_runtime_directory.empty()) {
+        const auto& runtime = p.options.cuda_runtime_directory;
+#if defined(_WIN32)
+        const std::string key = "PATH";
+        constexpr char separator = ';';
+        const wchar_t* current = _wgetenv(L"PATH");
+        std::string inherited = current ? path_utf8(std::filesystem::path(current)) : "";
+        const char* library = "cudart64_12.dll";
+#elif defined(__linux__)
+        const std::string key = "LD_LIBRARY_PATH";
+        constexpr char separator = ':';
+        const char* current = std::getenv("LD_LIBRARY_PATH");
+        std::string inherited = current ? current : "";
+        const char* library = "libcudart.so.12";
+#else
+        throw Error("UnsupportedPlatform", "CUDA runtime integration supports Windows and Linux");
+#endif
+#if defined(_WIN32) || defined(__linux__)
+        const auto path = path_utf8(runtime);
+        if (!runtime.is_absolute() || path.find(separator) != std::string::npos ||
+            !std::filesystem::is_regular_file(runtime / library))
+            throw Error("RuntimeMissing", "Configure the installed CUDA runtime directory");
+        for (auto it = opts.environment.begin(); it != opts.environment.end(); ++it) {
+#ifdef _WIN32
+            const bool match = _stricmp(it->first.c_str(), key.c_str()) == 0;
+#else
+            const bool match = it->first == key;
+#endif
+            if (match) {
+                inherited = it->second;
+                opts.environment.erase(it);
+                break;
+            }
+        }
+        opts.environment[key] = inherited.empty() ? path : path + separator + inherited;
+#endif
+    }
     private_directory(p.options.private_work_directory);
     p.key = random_token();
     p.keyfile = p.options.private_work_directory / ("engine-" + random_token(16) + ".key");
@@ -65,7 +104,6 @@ void LocalEngine::start(const CallContext& context) {
         std::filesystem::perm_options::replace);
 #endif
     int port = available_loopback_port();
-    auto opts = p.options.process;
     opts.arguments.insert(opts.arguments.end(),
                           {"--model", path_utf8(p.options.model), "--host", "127.0.0.1", "--port",
                            std::to_string(port), "--api-key-file", path_utf8(p.keyfile),

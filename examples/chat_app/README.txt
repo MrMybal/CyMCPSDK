@@ -1,14 +1,16 @@
 CyMCPSDK Chat Lab 0.5.6 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
-Chat, Providers and Logs have dedicated tabs. Appearance is inside Providers.
+Chat opens directly. Settings contains Providers, Logs and Help. Close returns to the draft.
+The Settings gear is at the bottom right. The status is next to the provider and model.
+Click the current Codex model in the footer to choose another for the next message.
 Search provider cards, edit their own connection fields, then Connect / New chat.
 Double-click a card to connect. Switching providers retains settings in memory.
 Logs shows timestamped stages, errors and durations. Copy log copies diagnostics;
 Open log file opens the private background-written session log. Message bodies,
 API keys and native session IDs are excluded. Hover the filename for its full path.
 English is the default, including the local Markdown demonstration.
-Help (F1) opens the supplied offline manual in the selected language.
+F1 opens Help. Open full manual opens the offline manual in the selected language.
 Keep the complete Documentation/ directory beside the executable.
 Automatic connection is enabled at startup. Installed native CLIs and supported
 npm packages, environment API keys and running local model services are detected

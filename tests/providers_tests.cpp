@@ -30,7 +30,25 @@ int main(int argc, char** argv) {
         std::string fixture = argv[1];
         ProviderRegistry registry;
         auto catalogue = registry.describe();
-        check(catalogue.size() == 22, "Built-in catalogue has twenty-two implemented profiles");
+        check(catalogue.size() == 23,
+              "Built-in catalogue includes the alternative Codex CLI transport");
+        {
+            ProviderConfig config;
+            config.process = {fixture, {"--codex-exec-fixture"}};
+            Conversation chat(registry.create("codex-exec", config), "fixture");
+            chat.connect();
+            auto first = chat.send("first\nline");
+            check(first.text == "first\nline" && first.usage.at("output_tokens") == 2,
+                  "Codex exec receives multiline stdin and returns usage");
+            auto snapshot = chat.checkpoint();
+            chat.disconnect();
+            Conversation reopened(registry.create("codex-exec", config), "fixture");
+            reopened.restore(snapshot);
+            check(reopened.send("second").text == "second" &&
+                      reopened.session().id == "codex-exec-thread",
+                  "Codex exec resumes the exact saved thread");
+            expect_error("UnexpectedEOF", [&] { reopened.send("truncated"); });
+        }
         expect_error("UnknownProvider", [&] { registry.create("unregistered"); });
         expect_error("DuplicateProvider", [&] {
             registry.add({"openai", "Duplicate", "http", "", {}},
@@ -87,6 +105,13 @@ int main(int argc, char** argv) {
                 Conversation broken(registry.create(id, config_for(flag)), "fixture/model");
                 broken.connect();
                 expect_error(error, [&] { broken.send("partial failure"); });
+                if (flag == "--fixture-fail") {
+                    const auto row = broken.transcript().back();
+                    check(agy ? row.at("provider_code") == "ERROR" &&
+                                    row.at("error_message") == "Antigravity turn failed"
+                              : row.at("error_message") == "Provider refusal",
+                          "CLI errors preserve a dedicated upstream message or native status");
+                }
             }
             Conversation mismatch(registry.create(id, config_for("--fixture-wrong-session")),
                                   "fixture/model");
@@ -165,26 +190,59 @@ int main(int argc, char** argv) {
                 "{\"models\":[{\"name\":\"fixture-model\",\"model\":\"fixture-model\"}]}",
                 "application/json");
         });
-        auto reject = [&](auto& res) {
+        const std::string model_refusal = "The selected model is unavailable for this account.";
+        const std::string wire_refusal = model_refusal + " Credential: test-key";
+        auto reject = [&](const auto& req, auto& res) {
             if (mode == 4 || mode == 5) {
                 res.status = mode == 4 ? 401 : 429;
                 res.set_content("{\"private-account-data\":true}", "application/json");
+                return true;
+            }
+            if (mode == 11) {
+                res.status = 400;
+                Json error = {{"code", "model_not_found"}, {"message", wire_refusal}};
+                if (req.path == "/messages")
+                    error = {{"type", "invalid_request_error"}, {"message", wire_refusal}};
+                else if (req.path == "/api/chat")
+                    error = wire_refusal;
+                res.set_content(
+                    Json({{"error", error}, {"account", "private-account-data"}}).dump(),
+                    "application/json");
+                return true;
+            }
+            if (mode == 12) {
+                res.status = 502;
+                res.set_content("<html>private-account-data test-key</html>", "text/html");
                 return true;
             }
             return false;
         };
         server.http.Post("/responses", [&](const auto& req, auto& res) {
             ++requests;
-            if (reject(res))
+            if (reject(req, res))
                 return;
             if (mode == 7) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 res.set_content("", "text/event-stream");
                 return;
             }
+            if (mode == 13) {
+                const auto frame = sse(
+                    {{"type", "error"}, {"code", "model_not_found"}, {"message", wire_refusal}});
+                res.set_chunked_content_provider(
+                    "text/event-stream", [frame](std::size_t offset, httplib::DataSink& sink) {
+                        if (!offset)
+                            return sink.write(frame.data(), frame.size());
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        sink.done();
+                        return true;
+                    });
+                return;
+            }
             auto body = parse_json(req.body);
-            if (body.at("store") != false || body.at("model") != "fixture-model" ||
-                !body.at("input").is_array() || body.at("tools").at(0).at("name") != wire_name)
+            if (body.contains("think") || body.at("store") != false ||
+                body.at("model") != "fixture-model" || !body.at("input").is_array() ||
+                body.at("tools").at(0).at("name") != wire_name)
                 invalid_body = true;
             bool output = false;
             bool preserved_reasoning = false;
@@ -215,7 +273,10 @@ int main(int argc, char** argv) {
                 return;
             }
             if (mode == 2)
-                data += sse({{"type", "response.failed"}, {"error", {{"message", "failure"}}}});
+                data += sse({{"type", "response.failed"},
+                             {"response",
+                              {{"error", {{"message", wire_refusal}, {"code", "model_not_found"}}},
+                               {"output", "unrelated-private-data"}}}});
             else
                 data += sse({{"type", "response.completed"},
                              {"response",
@@ -226,10 +287,10 @@ int main(int argc, char** argv) {
         });
         server.http.Post("/messages", [&](const auto& req, auto& res) {
             ++requests;
-            if (reject(res))
+            if (reject(req, res))
                 return;
             auto body = parse_json(req.body);
-            if (body.at("system") != "App instructions\n" ||
+            if (body.contains("think") || body.at("system") != "App instructions\n" ||
                 body.at("tools").at(0).at("name") != wire_name || !body.contains("max_tokens"))
                 invalid_body = true;
             bool output = body.at("messages").back().at("content").is_array();
@@ -263,7 +324,9 @@ int main(int argc, char** argv) {
             data += sse({{"type", "content_block_stop"}, {"index", 0}});
             if (mode != 1) {
                 if (mode == 2)
-                    data += sse({{"type", "error"}, {"error", {{"type", "overloaded_error"}}}});
+                    data +=
+                        sse({{"type", "error"},
+                             {"error", {{"type", "overloaded_error"}, {"message", wire_refusal}}}});
                 else {
                     data += sse({{"type", "message_delta"},
                                  {"delta", {{"stop_reason", output ? "end_turn" : "tool_use"}}},
@@ -275,9 +338,13 @@ int main(int argc, char** argv) {
         });
         server.http.Post("/api/chat", [&](const auto& req, auto& res) {
             ++requests;
-            if (reject(res))
+            if (reject(req, res))
                 return;
             auto body = parse_json(req.body);
+            if ((mode == 9 && body.value("think", Json()) != false) ||
+                (mode == 10 && body.value("think", Json()) != "low") ||
+                (mode != 9 && mode != 10 && body.contains("think")))
+                invalid_body = true;
             bool output = body.at("messages").back().at("role") == "tool";
             if (body.at("tools").at(0).at("function").at("name") != wire_name)
                 invalid_body = true;
@@ -287,25 +354,40 @@ int main(int argc, char** argv) {
             if (!output)
                 message["tool_calls"] = Json::array(
                     {{{"function", {{"name", wire_name}, {"arguments", {{"a", 41}}}}}}});
+            if (mode == 8) {
+                message["content"] = "Partial answer";
+                // A length stop can cut the next call before its arguments are available.
+                message["tool_calls"].push_back({{"function", {{"name", wire_name}}}});
+            }
             std::string data = Json({{"message", message}, {"done", false}}).dump() + "\n";
             if (mode != 1)
-                data += mode == 2 ? Json({{"error", "provider failure"}}).dump() + "\n"
+                data += mode == 2 ? Json({{"error", wire_refusal}}).dump() + "\n"
                                   : Json({{"message", {{"content", ""}}},
                                           {"done", true},
-                                          {"done_reason", "stop"},
+                                          {"done_reason", mode == 8 ? "length" : "stop"},
                                           {"eval_count", 2}})
                                             .dump() +
                                         "\n";
             res.set_content(data, "application/x-ndjson");
         });
         server.http.Post("/chat/completions", [&](const auto& req, auto& res) {
-            if (reject(res))
+            ++requests;
+            if (reject(req, res))
                 return;
             auto body = parse_json(req.body);
+            if (body.contains("think"))
+                invalid_body = true;
             bool has_tools = body.contains("tools");
             bool output = body.at("messages").back().at("role") == "tool";
             std::string data;
-            if (has_tools && !output) {
+            if (mode == 2) {
+                data += sse({{"choices", Json::array({{{"index", 0},
+                                                       {"delta", {{"content", "Partial text"}}}}})}});
+                data += sse({{"error",
+                              {{"code", 503},
+                               {"message", wire_refusal},
+                               {"metadata", {{"raw", "unrelated-private-data"}}}}}});
+            } else if (has_tools && !output) {
                 if (body.at("tools").at(0).at("function").at("name") != wire_name)
                     invalid_body = true;
                 Json delta = {{"tool_calls",
@@ -338,9 +420,8 @@ int main(int argc, char** argv) {
                                 {"finish_reason", "stop"}}})},
                          {"usage", {{"completion_tokens", 2}}}});
             }
-            if (mode != 1)
-                data += mode == 2 ? sse({{"error", {{"message", "provider failed"}}}})
-                                  : "data: [DONE]\n\n";
+            if (mode != 1 && mode != 2)
+                data += "data: [DONE]\n\n";
             res.set_content(data, "text/event-stream");
         });
         server.start();
@@ -349,6 +430,8 @@ int main(int argc, char** argv) {
             config.api_key = "test-key";
             config.tools = tools;
             config.settings = {{"base_url", server.url}};
+            if (id != "ollama")
+                config.settings["think"] = false;
             auto provider = registry.create(id, config);
             Conversation chat(provider, "fixture-model", "App instructions");
             mode = 0;
@@ -362,18 +445,101 @@ int main(int argc, char** argv) {
             check(!answer.usage.empty(), "API reports native usage");
             check(!invalid_body.load(),
                   "API native request, auth and tool result shapes validated");
+            if (id == "ollama") {
+                for (auto [scenario, setting] :
+                     std::vector<std::pair<int, Json>>{{9, false}, {10, "low"}}) {
+                    mode = scenario;
+                    auto configured = config;
+                    configured.settings["think"] = setting;
+                    Conversation selected(registry.create(id, configured), "fixture-model");
+                    selected.connect();
+                    check(selected.send("answer").text == "Answer 42" && !invalid_body.load(),
+                          "Ollama receives the requested thinking mode on each generation");
+                }
+                auto invalid = config;
+                invalid.settings["think"] = 2;
+                expect_error("InvalidOptions", [&] { registry.create(id, invalid); });
+                mode = 8;
+                const int before_tools = invoked;
+                const int before_requests = requests.load();
+                auto partial = chat.send("truncated response");
+                const auto last = chat.history().back();
+                check(partial.text == "Partial answer" && partial.finish_reason == "length" &&
+                          partial.usage.at("eval_count") == 2,
+                      "Truncated Ollama response preserves text, usage and finish reason");
+                check(invoked == before_tools && requests.load() == before_requests + 1 &&
+                          !last.at("_cymcp_native").at("content").contains("tool_calls"),
+                      "Ollama neither executes nor retains calls from a truncated generation");
+                mode = 0;
+                check(chat.send("another turn").text == "Answer 42" && invoked == before_tools + 1,
+                      "A complete Ollama tool request still works after truncation");
+            }
             expect_error("Unsupported",
                          [&] { provider->start_session("fixture-model", "native-cli-id"); });
             for (const auto& [scenario, code] :
                  std::vector<std::pair<int, std::string>>{{1, "UnexpectedEOF"},
                                                           {2, "ProviderError"},
                                                           {4, "AuthenticationRequired"},
-                                                          {5, "RateLimited"}}) {
+                                                          {5, "RateLimited"},
+                                                          {11, "ProviderError"},
+                                                          {12, "ProviderError"}}) {
                 mode = scenario;
                 Conversation broken(registry.create(id, config), "fixture-model",
                                     "App instructions");
                 broken.connect();
-                expect_error(code, [&] { broken.send("test failure"); });
+                const int attempts = requests.load();
+                try {
+                    broken.send("test failure");
+                    check(false, "Broken generation returns a provider error");
+                } catch (const Error& error) {
+                    check(error.code == code, "Generation preserves its SDK error code");
+                    const std::string detail = error.what();
+                    if (scenario == 11) {
+                        const auto row = broken.transcript().back();
+                        const std::string native_code = id == "anthropic" ? "invalid_request_error"
+                                                        : id == "ollama"  ? ""
+                                                                          : "model_not_found";
+                        check(detail.starts_with(model_refusal) &&
+                                  detail.find("test-key") == std::string::npos &&
+                                  detail.find("private-account-data") == std::string::npos &&
+                                  error.provider_code == native_code &&
+                                  row.at("error_message") == detail &&
+                                  row.at("provider_code") == native_code &&
+                                  requests.load() == attempts + 1,
+                              "HTTP rejection preserves the safe model refusal and native code "
+                              "after one request");
+                    }
+                    if (scenario == 4 || scenario == 5 || scenario == 12) {
+                        const auto status = scenario == 4 ? "401" : scenario == 5 ? "429" : "502";
+                        check(detail.find(status) != std::string::npos &&
+                                  detail.find("private-account-data") == std::string::npos &&
+                                  detail.find("test-key") == std::string::npos &&
+                                  requests.load() == attempts + 1,
+                              "Unrecognized JSON and HTML fall back to the HTTP status without raw "
+                              "content");
+                    }
+                    if (scenario == 2) {
+                        check(error.provider_code == (id == "openai"       ? "model_not_found"
+                                                      : id == "anthropic"  ? "overloaded_error"
+                                                      : id == "openrouter" ? "503"
+                                                                           : ""),
+                              "Streamed generation errors retain the native code when supplied");
+                        check(detail.starts_with(model_refusal) &&
+                                  detail.find(config.api_key) == std::string::npos &&
+                                  detail.find("unrelated-private-data") == std::string::npos,
+                              "Streamed provider error retains its explanation and masks "
+                              "credentials");
+                        if (id == "openrouter") {
+                            const auto row = broken.transcript().back();
+                            check(requests.load() == attempts + 1 &&
+                                      row.at("content") == "Partial text" &&
+                                      row.at("error_message") == detail &&
+                                      row.at("provider_code") == "503",
+                                  "OpenRouter preserves its partial response and sanitized failure "
+                                  "after one request");
+                        }
+                    }
+                }
             }
             mode = 0;
             auto denied = std::make_shared<Registry>();
@@ -455,6 +621,15 @@ int main(int argc, char** argv) {
             stalled.connect();
             mode = 7;
             expect_error("Timeout", [&] { stalled.send("wait"); });
+            mode = 13;
+            try {
+                stalled.send("streamed refusal");
+                check(false, "An error frame ends a generation");
+            } catch (const Error& error) {
+                check(error.code == "ProviderError" && error.provider_code == "model_not_found" &&
+                          std::string(error.what()).starts_with(model_refusal),
+                      "An explicit provider rejection wins over a later network idle timeout");
+            }
             mode = 0;
         }
         ProviderConfig config;

@@ -102,6 +102,16 @@ int main(int argc, char** argv) {
             config.settings["allow_all_actions"] = allow;
             return config;
         };
+        {
+            // Same entry points as cymcp_chat models: this agent has no models subprocess
+            // and publishes the available choices only in its session/new response.
+            auto negotiated = registry.create("acp", acp_config());
+            negotiated->connect();
+            const auto catalogue = negotiated->list_models();
+            check(catalogue.size() == 2 && catalogue.at(1).at("id") == "fixture-other" &&
+                      negotiated->list_models() == catalogue,
+                  "Freshly connected ACP agent negotiates and caches its session catalogue");
+        }
         auto provider = registry.create("devin", acp_config("", false, true));
         provider->connect();
         check(provider->list_models().size() == 2,

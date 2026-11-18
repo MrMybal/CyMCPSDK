@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
         options.npm_roots = {folder / "npm/node_modules"};
         ProviderRegistry providers;
         auto rows = providers.discover(options);
-        check(rows.size() == 22, "All built-in profiles have discovery results");
+        check(rows.size() == 23, "All built-in profiles have discovery results");
         check(find(rows, "codex").state == "not-installed",
               "Missing CLI distinguished from a connected account");
         check(find(rows, "openai").state == "needs-key",

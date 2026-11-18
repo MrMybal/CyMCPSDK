@@ -1,3 +1,4 @@
+#include "provider_error.hpp"
 #include <cymcp/ai.hpp>
 #include <set>
 namespace cymcp {
@@ -45,6 +46,8 @@ struct AcpProvider::Impl {
     Json config_options = Json::array(), models = Json::array(), legacy_models = Json::object();
     Json modes = Json::object();
     Json prompt_capabilities = Json::object();
+    Session open_session(std::string model, std::string resume, std::string system_prompt,
+                         const std::string& requested_mode, const CallContext& context);
     explicit Impl(AcpOptions config) : options(std::move(config)) {}
     CallContext begin(const CallContext& input, std::chrono::milliseconds timeout) {
         auto context = input;
@@ -232,12 +235,18 @@ struct AcpProvider::Impl {
             }
             if (!message.contains("id") || message.at("id") != id)
                 throw Error("ProtocolError", "Unexpected ACP response ID");
-            if (message.contains("error")) {
-                auto code = message.at("error").value("code", 0);
-                throw Error(code == -32000   ? "AuthenticationRequired"
-                            : code == -32601 ? "Unsupported"
-                                             : "ProviderError",
-                            "ACP agent rejected the request");
+            if (auto error = message.find("error"); error != message.end()) {
+                const auto code = error->find("code");
+                const char* category = "ProviderError";
+                if (code != error->end()) {
+                    if (*code == -32000)
+                        category = "AuthenticationRequired";
+                    else if (*code == -32601)
+                        category = "Unsupported";
+                }
+                throw detail::structured_provider_error(*error, "code",
+                                                        process_error_secrets(options.process),
+                                                        category, "ACP agent rejected the request");
             }
             if (!message.contains("result") || !message.at("result").is_object())
                 throw Error("ProtocolError", "Missing ACP response result");
@@ -366,6 +375,11 @@ Json AcpProvider::list_models(const CallContext& input) {
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
     auto context = p.begin(input, p.options.connect_timeout);
+    // Some agents publish their catalogue only in session/new. Negotiate a session if the
+    // caller just connected and no independent catalogue command is configured.
+    if (p.models.empty() && p.initialized && p.session_id.empty() &&
+        p.options.models_process.executable.empty())
+        p.open_session({}, {}, {}, {}, context);
     if (!p.models.empty())
         return p.models;
     if (p.options.models_process.executable.empty())
@@ -386,46 +400,53 @@ Json AcpProvider::list_models(const CallContext& input) {
         throw Error("ModelDiscoveryFailed", "Native model discovery failed");
     return model_rows(parse_json(output, provider_message_limit));
 }
+Session AcpProvider::Impl::open_session(std::string model, std::string resume,
+                                        std::string system_prompt,
+                                        const std::string& requested_mode,
+                                        const CallContext& context) {
+    if (!initialized)
+        throw Error("InvalidState", "Connect ACP first");
+    if (!resume.empty() && !load_session)
+        throw Error("Unsupported", "Agent does not advertise session loading");
+    auto cwd = options.process.cwd.empty() ? std::filesystem::current_path()
+                                           : std::filesystem::absolute(options.process.cwd);
+    Json params = {{"cwd", path_utf8(cwd)}, {"mcpServers", options.mcp_servers}};
+    session_id = resume;
+    models = config_options = Json::array();
+    modes = legacy_models = Json::object();
+    if (!resume.empty())
+        params["sessionId"] = resume;
+    try {
+        auto result = rpc(resume.empty() ? "session/new" : "session/load", params, context);
+        auto id = resume.empty() ? result.at("sessionId").get<std::string>() : resume;
+        if (id.empty() || (result.contains("sessionId") && result.at("sessionId") != id))
+            throw Error("SessionInvalid", "ACP returned a different session ID");
+        session_id = id;
+        metadata(result);
+        select("mode", requested_mode, context);
+        select("model", model, context);
+        system = std::move(system_prompt);
+        first_prompt = resume.empty();
+        return {id, current_model()};
+    } catch (const Error& error) {
+        if (error.code == "Cancelled" || error.code == "Timeout" || error.code == "UnexpectedEOF" ||
+            error.code == "ProtocolError")
+            reset();
+        else
+            session_id.clear();
+        throw;
+    } catch (...) {
+        reset();
+        throw;
+    }
+}
 Session AcpProvider::start_session(std::string model, std::string resume, const CallContext& input,
                                    std::string system) {
     auto& p = *impl_;
     std::lock_guard lock(p.mutex);
     auto context = p.begin(input, p.options.connect_timeout);
-    if (!p.initialized)
-        throw Error("InvalidState", "Connect ACP first");
-    if (!resume.empty() && !p.load_session)
-        throw Error("Unsupported", "Agent does not advertise session loading");
-    auto cwd = p.options.process.cwd.empty() ? std::filesystem::current_path()
-                                             : std::filesystem::absolute(p.options.process.cwd);
-    Json params = {{"cwd", path_utf8(cwd)}, {"mcpServers", p.options.mcp_servers}};
-    p.session_id = resume;
-    p.models = p.config_options = Json::array();
-    p.modes = p.legacy_models = Json::object();
-    if (!resume.empty())
-        params["sessionId"] = resume;
-    try {
-        auto result = p.rpc(resume.empty() ? "session/new" : "session/load", params, context);
-        auto id = resume.empty() ? result.at("sessionId").get<std::string>() : resume;
-        if (id.empty() || (result.contains("sessionId") && result.at("sessionId") != id))
-            throw Error("SessionInvalid", "ACP returned a different session ID");
-        p.session_id = id;
-        p.metadata(result);
-        p.select("mode", p.options.mode, context);
-        p.select("model", model, context);
-        p.system = std::move(system);
-        p.first_prompt = resume.empty();
-        return {id, p.current_model()};
-    } catch (const Error& error) {
-        if (error.code == "Cancelled" || error.code == "Timeout" || error.code == "UnexpectedEOF" ||
-            error.code == "ProtocolError")
-            p.reset();
-        else
-            p.session_id.clear();
-        throw;
-    } catch (...) {
-        p.reset();
-        throw;
-    }
+    return p.open_session(std::move(model), std::move(resume), std::move(system), p.options.mode,
+                          context);
 }
 ChatResult AcpProvider::send(Session& session, Json& messages, const CallContext& input) {
     auto& p = *impl_;

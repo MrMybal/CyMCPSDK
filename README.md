@@ -37,17 +37,17 @@ or an authenticated local MCP server. Connect an AI provider to those operations
 MCP client to forward selected tools from another application.
 
 Use CLI agents, native APIs or an existing local model service for conversations. The provider
-registry includes 22 extensible profiles, including Codex, Claude Code, OpenCode, Antigravity,
+registry includes 23 extensible profiles, including Codex, Claude Code, OpenCode, Antigravity,
 ACP agents, Responses, Messages, OpenRouter and Ollama. Actual models and capabilities come
 from the configured provider. Credentials and model weights are supplied separately.
 
 Chat Lab demonstrates streamed messages, Markdown/code/tables, attachments, cancellation,
 exact session reconnection and optional history. Its demonstration counter can be used by an
 AI or another MCP/SDK client. English is the default; French and five CyUI themes are available.
-**Help (F1)** opens the supplied local manual.
-**Chat**, **Providers** and **Logs** have dedicated tabs. Search the provider catalogue, edit each
-provider's settings and inspect timestamped connection/request events with a private session log.
-See the [connection journal](assets/screenshots/logs-en.png) and a [streamed Codex reply](assets/screenshots/chat-auto-en.png).
+Chat opens directly. **Settings** contains **Providers**, **Logs** and **Help**. Search the catalogue,
+read the session log as a table or raw JSONL, or open the offline manual. **F1** opens Help and
+**Close** returns to the conversation.
+See the [journal of a simulated model refusal](assets/screenshots/logs-en.png) and the [earlier capture of a real streamed Codex reply](assets/screenshots/chat-auto-en.png).
 Native providers offer **Sign in** when authentication is required. Manual provider selection
 pre-fills conventional settings; remote APIs display their catalogue for an explicit model choice.
 

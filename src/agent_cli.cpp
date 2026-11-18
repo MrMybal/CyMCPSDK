@@ -34,6 +34,7 @@ AgentCliProvider::AgentCliProvider(AgentCliOptions options)
     : Provider(options.protocol == AgentCliProtocol::OpenCode      ? "opencode-cli"
                : options.protocol == AgentCliProtocol::Antigravity ? "antigravity"
                : options.protocol == AgentCliProtocol::CommandCode ? "command-code"
+               : options.protocol == AgentCliProtocol::CodexExec   ? "codex-exec"
                                                                    : "codebuddy"),
       options_(std::move(options)) {
     if (!options_.native_settings.is_object() || options_.connect_timeout.count() <= 0 ||
@@ -43,9 +44,10 @@ AgentCliProvider::AgentCliProvider(AgentCliOptions options)
     if (options_.protocol != AgentCliProtocol::CodeBuddy &&
         (!options_.mcp_config_file.empty() || !options_.allowed_tools.empty()))
         throw Error("Unsupported", "These tool configuration fields belong to CodeBuddy CLI");
-    if (options_.protocol == AgentCliProtocol::CommandCode && !options_.native_settings.empty())
-        throw Error("Unsupported",
-                    "Use an explicit Command Code argument prefix for native configuration");
+    if ((options_.protocol == AgentCliProtocol::CommandCode ||
+         options_.protocol == AgentCliProtocol::CodexExec) &&
+        !options_.native_settings.empty())
+        throw Error("Unsupported", "Use an explicit argument prefix for native configuration");
     if (options_.persistent && options_.protocol != AgentCliProtocol::Antigravity)
         throw Error("Unsupported",
                     "Persistent stream input is implemented for Antigravity; use ACP for OpenCode");
@@ -59,7 +61,7 @@ ProviderCapabilities AgentCliProvider::capabilities() const {
             true,
             !buddy || options_.allow_all_actions || !options_.mcp_config_file.empty() ||
                 !options_.allowed_tools.empty(),
-            !buddy,
+            !buddy && options_.protocol != AgentCliProtocol::CodexExec,
             false,
             false,
             false,
@@ -92,8 +94,8 @@ void AgentCliProvider::connect(const CallContext& input) {
 Json AgentCliProvider::list_models(const CallContext& input) {
     std::lock_guard lock(mutex_);
     auto context = begin(input, options_.connect_timeout);
-    if (options_.protocol == AgentCliProtocol::CodeBuddy)
-        throw Error("Unsupported", "CodeBuddy CLI model selection uses an explicit model ID");
+    if (!capabilities().model_catalogue)
+        throw Error("Unsupported", "This CLI selects its model by ID or native default");
     auto output = probe(options_.process,
                         options_.protocol == AgentCliProtocol::CommandCode
                             ? std::vector<std::string>{"--list-models"}
@@ -176,7 +178,15 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
     bool agy = options_.protocol == AgentCliProtocol::Antigravity;
     bool command = options_.protocol == AgentCliProtocol::CommandCode;
     bool buddy = options_.protocol == AgentCliProtocol::CodeBuddy;
-    if (agy) {
+    const bool codex = options_.protocol == AgentCliProtocol::CodexExec;
+    if (codex) {
+        args.insert(args.end(),
+                    {"--sandbox", options_.allow_all_actions ? "danger-full-access" : "read-only",
+                     "--ask-for-approval", "never", "exec"});
+        if (!session.id.empty())
+            args.push_back("resume");
+        args.insert(args.end(), {"--json", "--skip-git-repo-check"});
+    } else if (agy) {
         args.insert(args.end(), {"--input-format", "stream-json", "--output-format", "stream-json",
                                  "--disable-slash-commands"});
         if (options_.allow_all_actions)
@@ -231,7 +241,12 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
     }
     if (!session.model.empty())
         args.insert(args.end(), {"--model", session.model});
-    if (!agy && !command && !buddy) {
+    if (codex) {
+        args.push_back("--");
+        if (!session.id.empty())
+            args.push_back(session.id);
+        args.push_back("-");
+    } else if (options_.protocol == AgentCliProtocol::OpenCode) {
 #ifdef _WIN32
         // OpenCode 1.x only accepts its message as an argument.
         if (prompt.size() > 30000)
@@ -273,12 +288,13 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
                               .dump() +
                           "\n",
                       context.cancellation);
-    else if (command)
+    else if (command || codex)
         process.write(prompt, context.cancellation);
     if (!options_.persistent)
         process.close_input();
     ChatResult result;
     bool completed = false;
+    std::string codex_error;
     std::map<std::string, std::string> snapshots;
     std::size_t snapshot_bytes = 0;
     ProcessLine line;
@@ -292,18 +308,49 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
         auto payload = agy ? data.value(kind, Json::object()) : data;
         if (payload.is_object())
             native_id(session, payload,
-                      agy       ? "conversation_id"
+                      codex     ? "thread_id"
+                      : agy     ? "conversation_id"
                       : command ? "sessionId"
                       : buddy   ? "session_id"
                                 : "sessionID");
         if (agy)
             native_id(session, data, "conversation_id");
+        const auto error = data.find("error");
+        const bool open_code_error = options_.protocol == AgentCliProtocol::OpenCode &&
+                                     kind == "error" && error != data.end() && error->is_object();
+        if (open_code_error || (codex && (kind == "error" || kind == "turn.failed"))) {
+            const auto& fields = error != data.end() && error->is_object() ? *error : data;
+            const auto message = fields.find("message");
+            if (message != fields.end() && message->is_string() &&
+                !message->get_ref<const std::string&>().empty()) {
+                auto detail = redact_error_message(message->get_ref<const std::string&>(),
+                                                   process_error_secrets(options_.process));
+                if (open_code_error && !detail.empty())
+                    throw Error("ProviderError", std::move(detail));
+                codex_error = std::move(detail);
+            }
+            // An error event can describe a native reconnect. The turn result decides
+            // whether the generation failed. A one-shot CLI can also exit after just an error.
+            if (kind == "error" && !completed && !codex_error.empty())
+                continue;
+        }
         if (kind == "error" || kind == "turn.failed" || data.contains("error"))
-            throw Error("ProviderError", "CLI reported a provider error");
+            throw Error("ProviderError",
+                        codex_error.empty() ? "CLI reported a provider error" : codex_error);
         if (completed)
             throw Error("ProtocolError", "CLI emitted events after its terminal result");
         std::string text;
-        if (command && kind == "event") {
+        if (codex && (kind == "item.completed" || kind == "item.started")) {
+            const auto& item = data.at("item");
+            const auto type = item.at("type").get<std::string>();
+            if (kind == "item.completed" && type == "agent_message")
+                text = item.at("text").get<std::string>();
+            else if (type == "command_execution" || type == "mcp_tool_call")
+                context.emit(kind == "item.started" ? "ToolStarted" : "ToolCompleted", item);
+        } else if (codex && kind == "turn.completed") {
+            result.usage = data.value("usage", Json::object());
+            completed = true;
+        } else if (command && kind == "event") {
             auto event = data.at("event");
             auto event_type = event.at("type").get<std::string>();
             native_id(session, event, "sessionId");
@@ -319,17 +366,23 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
                 context.emit("ToolCompleted", event);
             else if (event_type == "tool_denied")
                 throw Error("AccessDenied", "Command Code denied an action");
-            else if (event_type == "run_error" || event_type == "interrupted")
-                throw Error("ProviderError", "Command Code run failed");
+            else if (event_type == "interrupted")
+                throw Error("Cancelled", "Command Code interrupted the turn", event_type);
+            else if (event_type == "run_error")
+                throw Error("ProviderError", "Command Code run failed", event_type);
             else
                 context.emit("ProviderEvent", event);
         } else if ((command || buddy) && kind == "result") {
             auto subtype = data.value("subtype", std::string());
             if (subtype == "max_turns" || subtype == "error_max_turns")
-                throw Error("TurnLimitExceeded", "Native agent turn limit reached");
+                throw Error("TurnLimitExceeded", "Native agent turn limit reached", subtype);
             if (subtype != "success" || data.value("is_error", false) ||
                 (data.contains("denied_actions") && !data.at("denied_actions").empty()))
-                throw Error("ProviderError", "Native agent turn failed");
+                throw Error(
+                    "ProviderError", "Native agent turn failed",
+                    subtype == "success"
+                        ? ""
+                        : redact_error_message(subtype, process_error_secrets(options_.process)));
             result.text = data.at(command ? "finalText" : "result").get<std::string>();
             result.usage = data.value("usage", Json::object());
             completed = true;
@@ -373,24 +426,27 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
                              payload.at("tool_info"));
             if (payload.contains("usage"))
                 context.emit("UsageUpdated", payload.at("usage"));
-        } else if (!agy && !command && !buddy && (kind == "text" || kind == "reasoning")) {
+        } else if (options_.protocol == AgentCliProtocol::OpenCode &&
+                   (kind == "text" || kind == "reasoning")) {
             auto part = data.value("part", Json::object());
             if (kind == "text")
                 text = part.value("text", std::string());
             else
                 context.emit("ThinkingDelta", {{"text", part.value("text", std::string())}});
-        } else if (!agy && !command && !buddy && kind == "tool_use") {
+        } else if (options_.protocol == AgentCliProtocol::OpenCode && kind == "tool_use") {
             auto part = data.value("part", Json::object());
             auto status = part.value("state", Json::object()).value("status", std::string());
             context.emit(
                 status == "completed" || status == "error" ? "ToolCompleted" : "ToolStarted", part);
         } else if (agy && kind == "result") {
-            if (payload.value("status", std::string()) != "SUCCESS")
-                throw Error("ProviderError", "Antigravity turn failed");
+            auto status = payload.value("status", std::string());
+            if (status != "SUCCESS")
+                throw Error("ProviderError", "Antigravity turn failed",
+                            redact_error_message(status, process_error_secrets(options_.process)));
             result.text = payload.at("response").get<std::string>();
             result.usage = payload.value("usage", Json::object());
             completed = true;
-        } else if (!agy && !command && !buddy && kind == "step_finish") {
+        } else if (options_.protocol == AgentCliProtocol::OpenCode && kind == "step_finish") {
             auto part = data.value("part", Json::object());
             result.usage = part.value("tokens", Json::object());
             completed = part.value("reason", std::string()) == "stop";
@@ -405,6 +461,8 @@ ChatResult AgentCliProvider::send(Session& session, Json& messages, const CallCo
         if (completed && options_.persistent)
             break;
     }
+    if (!completed && !codex_error.empty())
+        throw Error("ProviderError", codex_error);
     if ((!options_.persistent || !process.running()) && process.wait(context.cancellation) != 0)
         throw Error("ProcessCrash", "CLI exited with an error");
     if (!completed)

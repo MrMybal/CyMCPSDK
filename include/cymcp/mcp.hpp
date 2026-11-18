@@ -11,7 +11,11 @@ class McpServer {
     std::string name_;
     std::mutex mutex_;
     bool initialized_ = false;
-    std::map<std::string, Cancellation> active_;
+    using RequestKey = std::pair<std::pair<std::string, std::string>, std::string>;
+    std::map<RequestKey, Cancellation> active_;
+    struct ActiveCall;
+    std::shared_ptr<ActiveCall> reserve(const Json&, const CallContext&, Json& error);
+    Json dispatch(const Json&, const CallContext&);
 
   public:
     explicit McpServer(const Registry&, std::string name = "CyMCPSDK");

@@ -64,6 +64,8 @@ Json builtin_settings(const std::string& id) {
                      {"allow_all_actions", false}};
     if (id == "codex") {
         settings["approval_policy"] = "never";
+    } else if (id == "codex-exec") {
+        return settings;
     } else if (id == "claude-code") {
         settings["persistent"] = true;
         settings["setting_sources"] = "user";
@@ -116,6 +118,22 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                     options.approvals = allow ? Policy::allow_all() : config.approvals;
                     options.request_handler = config.request_handler;
                     return std::make_shared<CodexProvider>(std::move(options));
+                });
+    add_builtin({"codex-exec",
+                 "Codex (exec)",
+                 "cli-exec-json",
+                 "native-account",
+                 {true, true, true, false, false}},
+                [](const ProviderConfig& config) {
+                    no_host_tools(config);
+                    AgentCliOptions options;
+                    options.protocol = AgentCliProtocol::CodexExec;
+                    options.process = process_for(config, "codex");
+                    options.connect_timeout =
+                        duration(config.settings, "connect_timeout_ms", 15000);
+                    options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
+                    options.allow_all_actions = config.settings.value("allow_all_actions", false);
+                    return std::make_shared<AgentCliProvider>(std::move(options));
                 });
     add_builtin({"claude-code",
                  "Claude Code",
@@ -267,6 +285,8 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                     [protocol](const ProviderConfig& config) {
                         ApiOptions options;
                         options.protocol = protocol;
+                        if (protocol == ApiProtocol::Ollama && config.settings.contains("think"))
+                            options.ollama_think = config.settings.at("think");
                         options.base_url = config.settings.value("base_url", std::string());
                         options.api_key = config.api_key;
                         options.tools = config.tools;
@@ -380,6 +400,9 @@ std::shared_ptr<Provider> ProviderRegistry::create(const std::string& id,
         if (!provider)
             throw Error("InvalidProvider", "Provider factory returned null");
         provider->identity_ = id;
+        provider->error_secrets_ = process_error_secrets(effective.process);
+        if (!effective.api_key.empty())
+            provider->error_secrets_.push_back(effective.api_key);
         return provider;
     } catch (const Json::exception&) {
         throw Error("InvalidOptions", "Invalid provider setting type");

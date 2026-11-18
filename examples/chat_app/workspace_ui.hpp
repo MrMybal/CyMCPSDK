@@ -2,6 +2,7 @@
 #include "journal.hpp"
 #include <algorithm>
 #include <cyui/Core.h>
+#include <cyui/modules/DocumentViews.h>
 
 namespace chat_example {
 inline void workspace_translations() {
@@ -13,8 +14,24 @@ inline void workspace_translations() {
          {"No preview for this file type. Save the attachment to use it.",
           "Aucun aperçu pour ce type de fichier. Enregistrez la pièce jointe pour l’utiliser."},
          {"Logs", "Journal"},
+         {"Settings", "Paramètres"},
+         {"Close", "Fermer"},
+         {"Help", "Aide"},
+         {"Raw JSONL", "JSONL brut"},
+         {"Open full manual", "Ouvrir le manuel complet"},
+         {"Delete this turn?", "Supprimer ce tour ?"},
+         {"The message and its reply will be removed from the conversation history.",
+          "Le message et sa réponse seront retirés de l’historique de la conversation."},
+         {"Delete turn", "Supprimer le tour"},
          {"Provider settings", "Paramètres des fournisseurs"},
          {"Chat and AI providers", "Tchat et fournisseurs IA"},
+         {"Install NVIDIA CUDA 12 runtime", "Installer le runtime NVIDIA CUDA 12"},
+         {"Verify NVIDIA CUDA 12 runtime", "Vérifier le runtime NVIDIA CUDA 12"},
+         {"Downloading and verifying CUDA runtime…",
+          "Téléchargement et vérification du runtime CUDA…"},
+         {"NVIDIA license", "Licence NVIDIA"},
+         {"Optional private runtime for compatible local engines (2.9 MiB).",
+          "Runtime privé facultatif pour les moteurs locaux compatibles (2,9 Mio)."},
          {"Choose a provider", "Choisir un fournisseur"},
          {"Configure providers", "Configurer les fournisseurs"},
          {"View logs", "Voir le journal"},
@@ -172,7 +189,10 @@ template <class App> void draw_error(App& app) {
     const auto code = !app.error.empty() ? app.error : state.error_code;
     if (code.empty())
         return;
-    const auto text = std::string("[") + code + "] " + cyui::tr(diagnostic_help(code));
+    const auto detail = app.error.empty() && !state.error_message.empty()
+                            ? state.error_message
+                            : cyui::tr(diagnostic_help(code));
+    const auto text = std::string("[") + code + "] " + detail;
     cyui::callout(code == "UnknownModel" || code == "Cancelled" ? cyui::Tone::info
                                                                 : cyui::Tone::error,
                   text.c_str());
@@ -302,6 +322,28 @@ template <class App> void draw_provider_settings(App& app) {
     }
     cyui::space(10);
     if (cyui::beginSection(cyui::trLabel("Installation and connection").c_str(), true)) {
+#ifdef CYMCP_CHAT_HAS_LOCAL
+        if (std::string(provider_kind(entry)) == "Local service") {
+            ImGui::TextWrapped(
+                "%s", cyui::tr("Optional private runtime for compatible local engines (2.9 MiB).")
+                          .c_str());
+            if (app.cuda_installation.valid()) {
+                cyui::textDim("%s", cyui::tr("Downloading and verifying CUDA runtime…").c_str());
+            } else {
+                if (cyui::button(cyui::trLabel(app.cuda_directory.empty()
+                                                   ? "Install NVIDIA CUDA 12 runtime"
+                                                   : "Verify NVIDIA CUDA 12 runtime")
+                                     .c_str()))
+                    app.action([&] { app.install_cuda(); });
+                ImGui::SameLine();
+                if (cyui::button(cyui::trLabel("NVIDIA license").c_str()))
+                    ShellExecuteW(app.window, L"open", L"https://docs.nvidia.com/cuda/eula/",
+                                  nullptr, nullptr, SW_SHOWNORMAL);
+            }
+            if (!app.cuda_directory.empty())
+                ImGui::TextWrapped("%s", cymcp::path_utf8(app.cuda_directory).c_str());
+        }
+#endif
         if (cyui::beginProperties("##connection-fields", 160)) {
             if (std::string(provider_kind(entry)) == "Native CLI") {
                 cyui::property(cyui::tr("Executable").c_str());
@@ -451,9 +493,7 @@ template <class App> void draw_providers(App& app) {
     ImGui::EndTable();
 }
 template <class App> void draw_logs(App& app) {
-    cyui::heading(cyui::tr("Diagnostics").c_str(), 2);
-    if (cyui::button(cyui::trLabel("Copy log").c_str()))
-        ImGui::SetClipboardText(app.journal.copy_text(app.log_errors_only).c_str());
+    const bool copy = cyui::button(cyui::trLabel("Copy log").c_str());
     ImGui::SameLine();
     if (cyui::button(cyui::trLabel("Open log file").c_str()))
         app.action([&] { app.open_log(); });
@@ -463,7 +503,11 @@ template <class App> void draw_logs(App& app) {
     ImGui::SameLine();
     cyui::toggleSwitch(cyui::trLabel("Errors only").c_str(), &app.log_errors_only);
     ImGui::SameLine();
-    cyui::toggleSwitch(cyui::trLabel("Follow log").c_str(), &app.log_follow);
+    if (cyui::toggleSwitch(cyui::trLabel("Follow log").c_str(), &app.log_follow))
+        app.log_jump = app.log_follow;
+    ImGui::SameLine();
+    if (cyui::toggleSwitch(cyui::trLabel("Raw JSONL").c_str(), &app.log_raw))
+        app.log_jump = app.log_follow;
     cyui::filterBox("##log-filter", app.log_filter);
     cyui::textDim("%s", cymcp::path_utf8(app.log_path.filename()).c_str());
     cyui::tooltip(cymcp::path_utf8(app.log_path).c_str());
@@ -480,17 +524,40 @@ template <class App> void draw_logs(App& app) {
     for (const auto& row : app.journal.rows()) {
         if (app.log_errors_only && row.level != "warning" && row.level != "error")
             continue;
-        const auto search =
-            row.provider_id + " " + row.operation + " " + row.code + " " + row.message;
+        const auto search = row.provider_id + " " + row.operation + " " + row.code + " " +
+                            row.provider_code + " " + row.message;
         if (app.log_filter.matches(search.c_str(), row.level.c_str()))
             rows.push_back(&row);
     }
+    if (copy)
+        ImGui::SetClipboardText(Journal::copy_text(rows, app.log_raw).c_str());
     if (rows.empty()) {
         cyui::emptyState(cyui::tr("No matching log entries").c_str(),
                          cyui::tr("Connection and request events appear here. Message contents and "
                                   "credentials are excluded.")
                              .c_str(),
                          cyui::icon::info);
+        return;
+    }
+    auto follow_new_entries = [&] {
+        const auto last = rows.back()->id;
+        const bool at_bottom = ImGui::GetScrollMaxY() - ImGui::GetScrollY() <= cyui::dp(3);
+        if (app.log_follow && (app.log_jump || (last != app.log_last_id && at_bottom)))
+            ImGui::SetScrollY(ImGui::GetCursorPosY());
+        app.log_jump = false;
+        app.log_last_id = last;
+    };
+    if (app.log_raw) {
+        if (ImGui::BeginChild("##raw-log", {}, ImGuiChildFlags_None,
+                              ImGuiWindowFlags_HorizontalScrollbar)) {
+            ImGuiListClipper clipper;
+            clipper.Begin(static_cast<int>(rows.size()));
+            while (clipper.Step())
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
+                    ImGui::TextUnformatted(log_json(*rows[i]).c_str());
+            follow_new_entries();
+        }
+        ImGui::EndChild();
         return;
     }
     if (ImGui::BeginTable("##diagnostics", 7,
@@ -525,43 +592,55 @@ template <class App> void draw_logs(App& app) {
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(cyui::tr(row.operation.c_str()).c_str());
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(row.code.c_str());
+                const auto code = row.provider_code.empty()
+                                      ? row.code
+                                      : row.code + " (" + row.provider_code + ")";
+                ImGui::TextUnformatted(code.c_str());
+                cyui::tooltip(code.c_str());
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(cyui::tr(row.message.c_str()).c_str());
-                cyui::tooltip(cyui::tr(row.message.c_str()).c_str());
+                const auto detail = row.level == "error" && row.operation != "settings"
+                                        ? row.message
+                                        : cyui::tr(row.message.c_str());
+                ImGui::TextUnformatted(detail.c_str());
+                cyui::tooltip(detail.c_str());
                 ImGui::TableNextColumn();
                 if (row.elapsed_ms > 0)
                     ImGui::Text("%.0f ms", row.elapsed_ms);
             }
-        if (app.log_follow && !ImGui::IsAnyItemActive())
-            ImGui::SetScrollHereY(1.0f);
+        follow_new_entries();
         ImGui::EndTable();
     }
 }
-template <class App> void draw_chat(App& app) {
-    const auto& state = app.chat.state();
-    if (cyui::button(cyui::trLabel("Configure providers").c_str()))
-        app.show_page(1);
-    {
-        cyui::ScopedDisabled disabled(state.busy || app.discovery_task.valid());
-        if (!state.connected)
-            ImGui::SameLine();
-        if (!state.connected && cyui::primaryButton(cyui::trLabel("Connect").c_str()))
-            app.action([&] { app.connect(); });
-    }
-    if (app.discovery_task.valid()) {
-        ImGui::SameLine();
-        cyui::spinner("##detecting");
-        ImGui::SameLine();
-        cyui::textDim("%s", cyui::tr("Detecting installed AI connections...").c_str());
-    }
-    ImGui::NewLine();
-    if (!app.error.empty() || !state.error_code.empty()) {
-        if (!app.error.empty())
-            draw_error(app);
-        if (cyui::button(cyui::trLabel("View logs").c_str()))
-            app.show_page(2);
-    }
-    app.panel.draw();
+template <class App> void draw_help(App& app) {
+    if (cyui::button(cyui::trLabel("Open full manual").c_str()))
+        app.action([&] { app.open_help(); });
+    const bool fr = cyui::locale() == "fr";
+    app.help_document.setMarkdown(fr ? R"(## Envoyer un message
+
+Choisissez une connexion dans **Fournisseurs**, puis revenez au tchat avec **Fermer**.
+**Entrée** envoie votre message. **Maj+Entrée** insère une nouvelle ligne. Pendant une réponse, **Arrêter** interrompt la génération.
+
+## Markdown et pièces jointes
+
+Sélectionnez du texte dans le brouillon pour le formater. Collez une image avec **Ctrl+V** ou choisissez un fichier avec **+**.
+Survolez un message pour le copier ou y répondre.
+
+## Lire les erreurs
+
+Le tour en échec contient le message du fournisseur. Dans **Journal**, utilisez **Erreurs uniquement** pour le retrouver ou **JSONL brut** pour lire les événements tels qu’ils sont enregistrés.)"
+                                     : R"(## Send a message
+
+Choose a connection in **Providers**, then select **Close** to return to the chat.
+**Enter** sends your message. **Shift+Enter** starts a new line. Use **Stop** during a response to interrupt generation.
+
+## Markdown and attachments
+
+Select text in the draft to format it. Paste an image with **Ctrl+V** or choose a file with **+**.
+Hover over a message to copy or reply to it.
+
+## Read an error
+
+The failed turn contains the provider's explanation. In **Logs**, use **Errors only** to find it or **Raw JSONL** to read events as recorded.)");
+    cyui::documentView("##chat-help", app.help_view, app.help_document);
 }
 } // namespace chat_example

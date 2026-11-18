@@ -37,6 +37,19 @@ std::filesystem::path file_for(const std::filesystem::path& directory, const std
 } // namespace
 ConversationStore::ConversationStore(std::filesystem::path directory)
     : directory_(std::filesystem::absolute(std::move(directory)).lexically_normal()) {
+#ifdef __APPLE__
+    // macOS supplies /var/folders/... as TMPDIR. Resolve only its root-owned OS aliases.
+    for (const auto* alias : {"/var", "/tmp"}) {
+        const auto suffix = directory_.lexically_relative(alias);
+        if (suffix.empty() || *suffix.begin() == ".." || suffix == ".")
+            continue;
+        const auto physical = std::filesystem::path("/private") / (alias + 1);
+        std::error_code ec;
+        if (std::filesystem::canonical(alias, ec) == physical && !ec)
+            directory_ = physical / suffix;
+        break;
+    }
+#endif
     safe_path(directory_);
     private_directory(directory_);
 }

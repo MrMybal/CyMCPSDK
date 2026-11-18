@@ -74,7 +74,7 @@ par l'hôte l'emporte. Chat Lab préremplit ses champs avec ces valeurs, puis av
 l'installation détectée. Adresses locales par défaut : Ollama `http://127.0.0.1:11434`,
 LM Studio `http://127.0.0.1:1234/v1`, llama.cpp `http://127.0.0.1:8080/v1` (port de `llama-server`).
 
-Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et 22 profils intégrés.
+Le module `CyMCP::AI` fournit un contrat `Provider`, un registre de factories et 23 profils intégrés.
 Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux SDK Python des fournisseurs,
 à CyUI ou à un moteur GPU. Ajouter un fournisseur ne nécessite pas de modifier le service `Conversation`.
 
@@ -83,6 +83,7 @@ Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux S
 | ID du registre | Transport implémenté | Catalogue | Reprise |
 |---|---|---|---|
 | `codex` | App Server persistant, JSON-RPC stdio | Natif, paginé | Thread natif exact |
+| `codex-exec` | CLI par tour, `exec --json`, texte sur stdin | Modèle natif ou ID explicite | `exec resume` avec le même ID |
 | `claude-code` | CLI `stream-json` persistant par défaut | `Unsupported` ; ID manuel | Session native exacte |
 | `opencode` | ACP v1 persistant, OpenCode actuel | Options de session annoncées | `session/load` si annoncé |
 | `opencode-cli` | CLI historique **1.x** `run --format json` | `opencode models` | `--session ID` |
@@ -104,6 +105,11 @@ Les transports sont natifs C++ : aucune dépendance aux compagnons Python, aux S
 Les trois derniers profils réutilisent le même adaptateur compatible. Leurs capacités effectives dépendent du
 serveur et du modèle. Le profil `llama.cpp` ne lance pas le moteur : utiliser `LocalEngine`, puis fournir
 `engine.base_url()` et `engine.token()`. Ollama est un service distinct, installé et lancé séparément.
+
+Pour le profil `ollama`, `settings.think` configure la réflexion du modèle. Utiliser
+`true` ou `false` pour les modèles à interrupteur comme Qwen 3, ou une chaîne telle que
+`"low"` si le modèle annonce des niveaux. Omettre le paramètre conserve le choix natif
+du modèle. Les valeurs acceptées dépendent du modèle installé. [Documentation Ollama](https://docs.ollama.com/capabilities/thinking)
 
 Les entrées multimodales sont traduites selon chaque transport et ses capacités ; consulter le
 [guide des conversations](Conversations.md) pour la matrice et le format des pièces jointes. Les appels d'outils fonctionnent dans

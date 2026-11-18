@@ -10,6 +10,9 @@ struct HttpRequest {
     // Longest silence while sending or receiving; 0 uses the total deadline. A stream that
     // keeps producing bytes is never cut by this value.
     std::chrono::milliseconds idle_timeout{0};
+    // With a streaming sink, buffer non-2xx bodies separately up to this size. An
+    // oversized error yields an empty body and its HTTP status. Zero streams all statuses.
+    std::size_t error_body_limit = 0;
 };
 struct HttpResponse {
     int status = 0;

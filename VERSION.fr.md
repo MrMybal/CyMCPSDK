@@ -4,6 +4,9 @@
 
 ## 0.5.6 — En développement
 
+- Corriger les quinze écarts de l’audit de conformité et ajouter leurs tests de régression.
+  Les douze suites Windows et les huit suites Linux passent. [Corrections et validations](Docs/Audit-0.5.6.md)
+- Ajouter le profil `codex-exec` avec reprise et l’installation privée de NVIDIA CUDART 12.8.90 sur Windows et Linux x64.
 - Utiliser la nouvelle saisie native CyUI : hauteur adaptative, formatage, Entrée/Maj+Entrée et brouillons conservés pendant la génération.
 - Afficher les conversations via TranscriptSource et ses caches bornés, sans recopier tout le transcript à chaque delta.
 - Afficher les cartes de pièces jointes, les aperçus d’images asynchrones et les fichiers texte ; enregistrer leur contenu embarqué vers une destination choisie.
@@ -59,9 +62,8 @@
 
 ### Problèmes connus
 
-- La compilation Linux rencontre actuellement une erreur GCC dans une déclaration du test du cœur.
-- Sous macOS, le test de stockage de conversation échoue lorsque le dossier temporaire a un ancêtre
-  sous forme de lien symbolique. Aucune distribution complète Linux/macOS n'est encore proposée.
+- Le test du cœur compile avec GCC 15.2. Le stockage de conversation reconnaît les alias système
+  des dossiers temporaires de macOS. La validation sur une machine macOS reste à effectuer.
   L'exemple graphique utilise Win32/DX11.
 - La disponibilité d'un fournisseur dépend de la version du CLI/API, du compte et du modèle choisi.
   La présence d'un profil ne garantit pas l'authentification auprès de chaque service.
@@ -69,8 +71,8 @@
 ### Limites actuelles
 
 - Le SDK n'inclut ni modèles, CLI fournisseurs, moteurs d'inférence, runtimes GPU ou pilotes.
-- Les téléchargements locaux vérifient des manifestes fournis par l'hôte ; l'extraction automatique
-  d'archives, les catalogues de paquets GPU et la reprise HTTP Range restent à implémenter.
+- Les dépendances locales gèrent les membres vérifiés d’une archive et le paquet NVIDIA CUDART
+  12.8.90 sous Windows/Linux x64. Les autres paquets GPU et la reprise HTTP Range restent à réaliser.
 - L'attachement direct des opérations dans Chat Lab est disponible pour Codex et les transports API
   compatibles ; les autres CLI utilisent leurs réglages MCP natifs. Les services ACP fichiers/terminal
   nécessitent des callbacks de l'hôte.

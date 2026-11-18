@@ -44,10 +44,19 @@ inline std::string log_time(std::int64_t millis) {
          << millis % 1000;
     return text.str();
 }
+inline std::string log_json(const cymcp::ChatDiagnostic& row) {
+    cymcp::Json entry = {{"timestamp_ms", row.timestamp_ms}, {"time", log_time(row.timestamp_ms)},
+                         {"level", row.level}, {"provider", row.provider_id},
+                         {"operation", row.operation}, {"code", row.code},
+                         {"message", row.message}, {"elapsed_ms", row.elapsed_ms}};
+    if (!row.provider_code.empty())
+        entry["provider_code"] = row.provider_code;
+    return entry.dump();
+}
 class Journal {
     struct File {
         std::filesystem::path path;
-        std::ofstream stream;
+        cymcp::PrivateOutputFile stream{nullptr, &std::fclose};
         std::size_t bytes = 0;
         std::atomic_bool failed{false};
         std::atomic_bool full{false};
@@ -62,28 +71,25 @@ class Journal {
         file_->path = std::move(path);
     }
     void add(std::string level, std::string provider, std::string operation, std::string code,
-             std::string message, double elapsed = 0) {
+             std::string message, double elapsed = 0, std::string provider_code = {}) {
         const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::system_clock::now().time_since_epoch())
                                 .count();
-        cymcp::ChatDiagnostic row{
-            next_id_++,           millis,          std::move(level),   std::move(provider),
-            std::move(operation), std::move(code), std::move(message), elapsed};
+        cymcp::ChatDiagnostic row{next_id_++,
+                                  millis,
+                                  std::move(level),
+                                  std::move(provider),
+                                  std::move(operation),
+                                  std::move(code),
+                                  std::move(message),
+                                  elapsed,
+                                  std::move(provider_code)};
         if (rows_.size() == 2000)
             rows_.pop_front();
         rows_.push_back(row);
         if (!file_)
             return;
-        auto line = cymcp::Json({{"timestamp_ms", row.timestamp_ms},
-                                 {"time", log_time(row.timestamp_ms)},
-                                 {"level", row.level},
-                                 {"provider", row.provider_id},
-                                 {"operation", row.operation},
-                                 {"code", row.code},
-                                 {"message", row.message},
-                                 {"elapsed_ms", row.elapsed_ms}})
-                        .dump() +
-                    "\n";
+        auto line = log_json(row) + "\n";
         try {
             writer_.post([file = file_, line = std::move(line)] {
                 try {
@@ -93,15 +99,14 @@ class Journal {
                         file->full = true;
                         return;
                     }
-                    if (!file->stream.is_open()) {
-                        cymcp::private_directory(file->path.parent_path());
-                        file->stream.open(file->path, std::ios::binary | std::ios::trunc);
-                    }
-                    file->stream << line;
-                    file->stream.flush();
-                    file->bytes += line.size();
                     if (!file->stream)
+                        file->stream = cymcp::open_private_output_file(file->path);
+                    if (std::fwrite(line.data(), 1, line.size(), file->stream.get()) !=
+                            line.size() ||
+                        std::fflush(file->stream.get()) != 0)
                         file->failed = true;
+                    else
+                        file->bytes += line.size();
                 } catch (...) {
                     file->failed = true;
                 }
@@ -122,14 +127,21 @@ class Journal {
     bool file_full() const {
         return file_ && file_->full;
     }
-    std::string copy_text(bool errors_only = false) const {
+    static std::string copy_text(const std::vector<const cymcp::ChatDiagnostic*>& rows, bool raw) {
         std::ostringstream text;
-        text << "CyMCPSDK " << cymcp::version << " diagnostics\n";
-        for (const auto& row : rows_) {
-            if (errors_only && row.level != "error" && row.level != "warning")
+        if (!raw)
+            text << "CyMCPSDK " << cymcp::version << " diagnostics\n";
+        for (const auto* entry : rows) {
+            const auto& row = *entry;
+            if (raw) {
+                text << log_json(row) << '\n';
                 continue;
+            }
             text << log_time(row.timestamp_ms) << ' ' << row.level << " [" << row.provider_id
-                 << "] " << row.operation << " / " << row.code << ": " << row.message;
+                 << "] " << row.operation << " / " << row.code;
+            if (!row.provider_code.empty())
+                text << " (" << row.provider_code << ')';
+            text << ": " << row.message;
             if (row.elapsed_ms > 0)
                 text << " (" << static_cast<long long>(row.elapsed_ms) << " ms)";
             text << '\n';

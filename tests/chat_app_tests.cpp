@@ -3,6 +3,7 @@
 #include <cymcp/mcp.hpp>
 #include <fstream>
 #include <httplib.h>
+#include <sddl.h>
 
 using namespace cymcp;
 namespace {
@@ -202,11 +203,27 @@ Json read(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     return parse_json(std::string(std::istreambuf_iterator<char>(file), {}));
 }
+std::wstring directory_or_file_acl(const std::filesystem::path& path) {
+    DWORD size = 0;
+    GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, nullptr, 0, &size);
+    std::vector<unsigned char> descriptor(size);
+    if (!size ||
+        !GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, descriptor.data(), size, &size))
+        throw std::runtime_error("Cannot read fixture ACL");
+    LPWSTR text = nullptr;
+    if (!ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor.data(), SDDL_REVISION_1, DACL_SECURITY_INFORMATION, &text, nullptr))
+        throw std::runtime_error("Cannot format fixture ACL");
+    std::wstring result(text);
+    LocalFree(text);
+    return result;
+}
 struct Run {
     std::unique_ptr<Process> process;
-    std::filesystem::path report;
+    std::filesystem::path report, journal;
     Run(const std::string& app, const std::filesystem::path& directory, Json config, Json steps,
-        bool ready = false, std::string theme = "mid-grey", std::string language = "fr") {
+        bool ready = false, std::string theme = "mid-grey", std::string language = "fr",
+        std::filesystem::path custom_log = {}) {
         private_directory(directory);
         auto input = directory / "config.json", plan = directory / "plan.json";
         report = directory / "report.json";
@@ -229,6 +246,11 @@ struct Run {
                              path_utf8(directory / "screen.png")};
         if (ready)
             options.arguments.push_back("--test-ready-stdout");
+        journal = directory / "application.log";
+        if (!custom_log.empty()) {
+            journal = std::move(custom_log);
+            options.arguments.insert(options.arguments.end(), {"--log-file", path_utf8(journal)});
+        }
         options.environment["CYMCP_TEST_API_KEY"] = fixture_key;
         process = std::make_unique<Process>(options);
         process->close_input();
@@ -246,7 +268,7 @@ struct Run {
         check(report_value.dump().find(fixture_key) == std::string::npos,
               "API key excluded from app validation report");
         {
-            std::ifstream log(report.parent_path() / "application.log", std::ios::binary);
+            std::ifstream log(journal, std::ios::binary);
             const std::string contents(std::istreambuf_iterator<char>(log), {});
             check(!contents.empty(), "Application writes a persistent diagnostic journal");
             check(contents.find(fixture_key) == std::string::npos &&
@@ -290,18 +312,53 @@ int main(int argc, char** argv) {
             private_directory(folder);
             const auto image = folder / "preview.png";
             const auto note = folder / "notes.md";
+            const auto outside = folder / "outside.md";
+            const auto custom = folder / ("custom-logs-" + random_token(16));
+            std::filesystem::create_directory(custom);
+            const auto before = directory_or_file_acl(custom);
+            const auto log = custom / "selected.log";
+            std::ofstream(log) << "previous contents";
             std::filesystem::copy_file(argv[3], image,
                                        std::filesystem::copy_options::overwrite_existing);
-            std::ofstream(note) << "## Attachment fixture\n\nNative **Markdown** preview.";
-            Run run(argv[1], folder, {{"provider", "demo"}},
-                    Json::array(
-                        {{{"action", "connect"}},
-                         {{"action", "send"},
-                          {"text", "Native attachments"},
-                          {"attachments", Json::array({path_utf8(image), path_utf8(note)})}},
-                         {{"action", "preview-attachment"}, {"index", 0}, {"image_ready", true}},
-                         {{"action", "preview-attachment"}, {"index", 1}}}));
+            std::ofstream(note) << "## Attachment fixture\n\n![Native preview][photo]\n\n"
+                                   "[photo]: ./preview.png\n";
+            std::ofstream(outside) << "![Unattached](../preview.png)\n";
+            Run run(
+                argv[1], folder, {{"provider", "demo"}},
+                Json::array(
+                    {{{"action", "connect"}},
+                     {{"action", "draft-attachment"}, {"file", path_utf8(image)}, {"messages", 0}},
+                     {{"action", "page"}, {"index", 1}},
+                     // Keep chat thumbnails offscreen. Only the Markdown popup can load an image.
+                     {{"action", "send"},
+                      {"text", "Ambiguous names"},
+                      {"attachments",
+                       Json::array({path_utf8(image), path_utf8(image), path_utf8(note)})}},
+                     {{"action", "preview-attachment"}, {"index", 2}, {"image_ready", false}},
+                     {{"action", "send"},
+                      {"text", "Document only"},
+                      {"attachments", Json::array({path_utf8(note)})}},
+                     {{"action", "preview-attachment"}, {"index", 0}, {"image_ready", false}},
+                     {{"action", "send"},
+                      {"text", "Native attachments"},
+                      {"attachments",
+                       Json::array({path_utf8(image), path_utf8(note), path_utf8(outside)})}},
+                     {{"action", "preview-attachment"}, {"index", 2}, {"image_ready", false}},
+                     {{"action", "preview-attachment"}, {"index", 1}, {"image_ready", true}},
+                     {{"action", "preview-attachment"}, {"index", 0}, {"image_ready", true}},
+                     {{"action", "save-attachment-twice"}, {"index", 1}}}),
+                false, "mid-grey", "fr", log);
             report.push_back(run.finish());
+            check(sha256_file(folder / "saved-attachment.bin") == sha256_file(note),
+                  "Repeated save keeps the application running and writes the selected content");
+            check(directory_or_file_acl(custom) == before,
+                  "Choosing an existing log folder leaves its access rules and inheritance intact");
+            auto owner_only = directory_or_file_acl(folder);
+            owner_only.erase(owner_only.find(L"OICI"), 4);
+            auto file_acl = directory_or_file_acl(log);
+            check(file_acl.starts_with(L"D:P") && file_acl.substr(file_acl.find(L'(')) ==
+                                                      owner_only.substr(owner_only.find(L'(')),
+                  "Custom log replaces the previous file with owner-only access");
         }
         for (const std::string theme :
              {"mid-grey", "light-grey", "amber-night", "violet", "navy"}) {
@@ -322,6 +379,7 @@ int main(int argc, char** argv) {
             // prevent discovery from selecting an installed AI. Earlier tests pinned Codex.
             Run run(argv[1], output / "startup-no-preference",
                     {{"provider", "demo"},
+                     {"system", "Only for the offline demo"},
                      {"automatic", true},
                      {"discovery_environment", false},
                      {"discovery",
@@ -332,6 +390,7 @@ int main(int argc, char** argv) {
                             Json::array({"--codex-fixture", "--fixture-app-delay"})}}}}}}}},
                     Json::array({{{"action", "automatic-connect"},
                                   {"provider", "codex"},
+                                  {"configured_system", ""},
                                   {"log_code", "Completed"}},
                                  {{"action", "send"},
                                   {"text", "startup"},
@@ -349,16 +408,19 @@ int main(int argc, char** argv) {
                 argv[1], output / "provider-settings-tabs",
                 {{"provider", "openai-compatible"},
                  {"model", "fixture-model"},
+                 {"system", "Only for this provider"},
                  {"api_key_env", "CYMCP_TEST_API_KEY"},
                  {"settings", {{"base_url", model.base + "/v1"}}}},
                 Json::array(
                     {{{"action", "page"}, {"index", 1}, {"page", 1}},
                      {{"action", "select-provider"},
                       {"id", "claude-code"},
-                      {"selected_provider", "claude-code"}},
+                      {"selected_provider", "claude-code"},
+                      {"configured_system", ""}},
                      {{"action", "select-provider"},
                       {"id", "openai-compatible"},
-                      {"configured_model", "fixture-model"}},
+                      {"configured_model", "fixture-model"},
+                      {"configured_system", "Only for this provider"}},
                      {{"action", "connect"}},
                      {{"action", "send"}, {"text", "REJECT"}, {"error", "AuthenticationRequired"}},
                      {{"action", "page"},
@@ -372,12 +434,14 @@ int main(int argc, char** argv) {
             const auto before = model.requests.load();
             Run run(argv[1], output / "automatic-local",
                     {{"provider", "openai-compatible"},
+                     {"system", "Use the configured provider instructions"},
                      {"automatic", true},
                      {"discovery_environment", false},
                      {"api_key_env", "CYMCP_TEST_API_KEY"},
                      {"settings", {{"base_url", model.base + "/v1"}, {"timeout_ms", 10000}}}},
                     Json::array({{{"action", "automatic-connect"},
                                   {"provider", "openai-compatible"},
+                                  {"configured_system", "Use the configured provider instructions"},
                                   {"model", "fixture-model"}},
                                  {{"action", "wait"}, {"messages", 0}}}));
             report.push_back(run.finish());
@@ -422,8 +486,16 @@ int main(int argc, char** argv) {
                                        {"text", "TEXT_ONLY"},
                                        {"reply", "APP_OK"},
                                        {"streaming", true}}});
+            if (id == "ollama")
+                steps.back()["measure_frames"] = true;
             Run run(argv[1], output / id, config, steps);
             report.push_back(run.finish());
+            if (id == "ollama") {
+                const auto& step = report.back().at("results").back();
+                check(step.at("first_rendered_ms").get<double>() > 0 &&
+                          step.at("first_rendered_ms") < step.at("completed_frame_ms"),
+                      "Streaming reply reaches a DX11 frame before the completed reply");
+            }
             check(model.requests == before + 3,
                   "Exactly two tool-round requests and one text request; no generation replay");
         }
@@ -479,21 +551,127 @@ int main(int argc, char** argv) {
                 {"app_commands", {{"attach_to_ai", true}, {"allow_changes", true}}}};
             Run run(argv[1], output / "codex-process", native,
                     Json::array({{{"action", "connect"}},
-                                 {{"action", "send"},
-                                  {"text", "tool"},
-                                  {"reply", "Hello fixture"},
-                                  {"counter", 42},
-                                  {"streaming", true}},
-                                 {{"action", "send"},
-                                  {"text", "silent"},
-                                  {"cancel_after_ms", 150},
+                                 {{"action", "draft"}, {"text", "silent"}, {"draft", "silent"}},
+                                 {{"action", "click-send"},
+                                  {"cancel_after_ms", 350},
+                                  {"timeout_ms", 4000},
+                                  {"messages", 2},
                                   {"error", "Cancelled"}},
                                  {{"action", "reconnect"}, {"same_session", true}},
-                                 {{"action", "send"},
-                                  {"text", "after cancel"},
+                                 {{"action", "draft"}, {"text", "tool"}, {"draft", "tool"}},
+                                 {{"action", "click-send"},
                                   {"reply", "Hello fixture"},
+                                  {"counter", 42},
+                                  {"draft", ""},
                                   {"streaming", true}}}));
             report.push_back(run.finish());
+        }
+        const std::string refusal =
+            "The 'gpt-6.2-sol' model is not supported when using Codex with a ChatGPT account.";
+        {
+            Run run(argv[1], output / "settings-navigation", {{"provider", "demo"}},
+                    Json::array({{{"action", "draft"}, {"text", "**Unsent**"}, {"page", 0}},
+                                 {{"action", "click-settings"}, {"page", 1}},
+                                 {{"action", "page"}, {"index", 2}, {"page", 2}},
+                                 {{"action", "raw-log"}, {"enabled", true}, {"page", 2}},
+                                 {{"action", "click-close"}, {"page", 0}, {"draft", "**Unsent**"}},
+                                 {{"action", "help-key"}, {"page", 3}},
+                                 {{"action", "close-key"}, {"page", 0}, {"draft", "**Unsent**"},
+                                  {"messages", 0}}}));
+            report.push_back(run.finish());
+        }
+        for (const std::string prompt : {"rpc-model-refusal", "partial-model-refusal"}) {
+            const auto folder = output / prompt;
+            private_directory(folder);
+            const auto turns = folder / "turn-starts.txt";
+            std::ofstream(turns, std::ios::trunc).close();
+            const bool rpc = prompt == "rpc-model-refusal";
+            Json native = {{"provider", "codex"},
+                           {"model", "gpt-6.2-sol"},
+                           {"process",
+                            {{"executable", argv[2]},
+                             {"arguments", {"--codex-fixture"}},
+                             {"environment", {{"CYMCP_FIXTURE_TURNS_FILE", path_utf8(turns)}}}}}};
+            Run run(argv[1], folder, native,
+                    Json::array({{{"action", "connect"}},
+                                 {{"action", "draft"}, {"text", prompt}, {"draft", prompt}},
+                                 {{"action", "click-send"},
+                                  {"error", "ProviderError"},
+                                  {"turn_error_contains", refusal},
+                                  {"provider_code", rpc ? "-32602" : "badRequest"},
+                                  {"reply", rpc ? "" : "Partial answer."},
+                                  {"messages", 2}},
+                                 {{"action", "wait"},
+                                  {"wait_ms", 250},
+                                  {"error", "ProviderError"},
+                                  {"messages", 2}}}));
+            report.push_back(run.finish());
+            check(report.back().at("model") == "gpt-6.2-sol",
+                  "Chat Lab displays the same model whose turn was rejected");
+            std::ifstream journal(run.journal);
+            unsigned failures = 0;
+            bool log_is_private = true;
+            std::string line;
+            while (std::getline(journal, line)) {
+                log_is_private &= line.find("fixture-sensitive-token") == std::string::npos &&
+                                  line.find("rpc-private-payload") == std::string::npos &&
+                                  line.find(prompt) == std::string::npos &&
+                                  line.find("Partial answer.") == std::string::npos;
+                const auto entry = parse_json(line);
+                if (entry.at("operation") == "generating" && entry.at("level") == "error") {
+                    ++failures;
+                    const auto& detail = entry.at("message").get_ref<const std::string&>();
+                    check(
+                        entry.at("code") == "ProviderError" && entry.at("provider") == "codex" &&
+                            entry.at("provider_code") == (rpc ? "-32602" : "badRequest") &&
+                            (rpc ? detail == refusal : detail.find(refusal) != std::string::npos),
+                        "Journal file retains the refusal, SDK category and native provider code");
+                }
+            }
+            check(log_is_private,
+                  "Provider error logs exclude secrets, prompt and partial assistant text");
+            check(failures == 1, "The failed turn appears once in the journal file");
+            std::ifstream attempts(turns);
+            check(std::getline(attempts, line) && !std::getline(attempts, line),
+                  "A failed Codex turn makes exactly one generation request");
+        }
+        {
+            const auto folder = output / "codex-account-model";
+            private_directory(folder);
+            const auto turns = folder / "turn-starts.txt";
+            std::ofstream(turns, std::ios::trunc).close();
+            Json native = {{"provider", "codex"}, {"model", "gpt-6.2-sol"},
+                           {"process", {{"executable", argv[2]},
+                                        {"arguments", {"--codex-fixture", "--fixture-account-models"}},
+                                        {"environment", {{"CYMCP_FIXTURE_TURNS_FILE", path_utf8(turns)}}}}}};
+            Run run(argv[1], folder, native,
+                    Json::array({{{"action", "connect"}, {"model", "gpt-6.2-sol"}},
+                                 {{"action", "draft"}, {"text", "account-model-test"}},
+                                 {{"action", "click-send"}, {"error", "UnknownModel"},
+                                  {"turn_error_contains", refusal}, {"provider_code", "model_not_found"},
+                                  {"reply", ""}, {"messages", 2}},
+                                 {{"action", "select-model"}, {"id", "gpt-6-luna"},
+                                  {"model", "gpt-6-luna"}, {"same_session", true}, {"messages", 2}},
+                                 {{"action", "draft"}, {"text", "account-model-test"}},
+                                 {{"action", "click-send"}, {"reply", "Hello fixture"},
+                                  {"model", "gpt-6-luna"}, {"same_session", true}, {"messages", 4}}}));
+            report.push_back(run.finish());
+            std::ifstream journal(run.journal);
+            std::size_t failures = 0;
+            for (std::string line; std::getline(journal, line);) {
+                check(line.find("fixture-private-account") == std::string::npos,
+                      "Adjacent provider metadata is excluded from the journal");
+                const auto row = parse_json(line);
+                if (row.at("code") == "UnknownModel" && row.at("operation") == "generating") {
+                    ++failures;
+                    check(row.at("message") == refusal && row.at("provider_code") == "model_not_found",
+                          "A stringified Codex backend rejection retains only its explanation and code");
+                }
+            }
+            std::ifstream count(turns);
+            check(failures == 1 &&
+                      std::count(std::istreambuf_iterator<char>(count), std::istreambuf_iterator<char>(), '\n') == 2,
+                  "Changing the model leaves both turns visible and sends only on explicit clicks");
         }
         for (bool writable : {false, true}) {
             Json mcp_config = {{"provider", "demo"},

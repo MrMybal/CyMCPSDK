@@ -9,6 +9,8 @@ struct ProcessOptions {
     // Memory guards only. A full queue applies backpressure to the child; it never fails a turn.
     std::size_t max_line_bytes = 256 * 1024 * 1024, max_queue_bytes = 64 * 1024 * 1024;
 };
+enum class StdoutFormat { Lines, Binary };
+std::vector<std::string> process_error_secrets(const ProcessOptions&);
 struct ProcessLine {
     bool stderr_stream = false;
     std::string text;
@@ -19,6 +21,9 @@ class Process {
 
   public:
     explicit Process(const ProcessOptions&);
+    // Binary mode returns raw stdout chunks from next(), preserving every byte. Stderr
+    // remains line-oriented. Both streams use the same bounded, cancellable output queue.
+    Process(const ProcessOptions&, StdoutFormat);
     ~Process();
     Process(const Process&) = delete;
     Process& operator=(const Process&) = delete;
