@@ -3,6 +3,7 @@
 #include "exercise.hpp"
 #include "help.hpp"
 #include "journal.hpp"
+#include <cymcp/performance.hpp>
 
 // Include Windows definitions before the dependent SDK headers.
 #include <shellapi.h>
@@ -311,6 +312,8 @@ struct App {
     HWND window;
     std::shared_ptr<ProviderRegistry> registry = chat_example::providers();
     chat_example::Commands commands;
+    std::shared_ptr<PerformanceMonitor> performance;
+    ContextOptions context_options;
     chat_example::ClipboardAttachments clipboard;
     ChatController chat{registry};
     chat_example::Attachments attachment_host;
@@ -463,6 +466,10 @@ struct App {
         journal.add("info", "", "application", "Started", std::string("CyMCPSDK ") + version);
     }
     void sync_diagnostics() {
+        if (performance)
+            for (const auto& row : performance->drain())
+                journal.add("info", "", row.value("stage", std::string()), "Performance",
+                            row.dump(), row.value("elapsed_ms", 0.0));
         for (const auto& row : chat.state().diagnostics) {
             if (row.id <= last_diagnostic)
                 continue;
@@ -560,6 +567,29 @@ struct App {
         options.erase("allow_all_actions");
         assign(settings, options.dump(2));
         auto command_config = config.value("app_commands", Json::object());
+        const auto perf_config = config.value("performance", Json::object());
+        if (perf_config.value("enabled", false)) {
+            PerformanceOptions o;
+            o.records = perf_config.value("records", std::size_t(1024));
+            o.jsonl_file = std::filesystem::u8path(perf_config.value("file", std::string()));
+            performance = std::make_shared<PerformanceMonitor>(std::move(o));
+        }
+        const auto context_config = config.value("context", Json::object());
+        context_options.max_bytes = context_config.value("max_bytes", std::size_t(0));
+        context_options.recent_turns = context_config.value("recent_turns", std::size_t(8));
+        const auto storage = command_config.value("storage", Json::object());
+        ResourceOptions storage_options;
+        storage_options.disk_directory =
+            std::filesystem::u8path(storage.value("directory", std::string()));
+        storage_options.max_stored_bytes =
+            storage.value("memory_bytes", storage_options.max_stored_bytes);
+        storage_options.max_disk_bytes =
+            storage.value("disk_bytes", storage_options.max_disk_bytes);
+        storage_options.spool_threshold =
+            storage.value("spool_threshold", storage_options.spool_threshold);
+        if (performance || command_config.value("notifications", false) || !storage.empty())
+            commands.configure_services(std::move(storage_options),
+                                        command_config.value("notifications", false), performance);
         app_tools = command_config.value("attach_to_ai", false);
         commands.allow_changes(command_config.value("allow_changes", false));
         commands.deferred_tools(command_config.value("deferred_tools", false));
@@ -584,6 +614,8 @@ struct App {
         connection.system_prompt = system.data();
         connection.resume_id = resume.data();
         connection.automatic_model = automatic;
+        connection.context = context_options;
+        connection.performance = performance;
         connection.provider.settings = parse_json(settings.data());
         if (endpoint[0])
             connection.provider.settings["base_url"] = endpoint.data();

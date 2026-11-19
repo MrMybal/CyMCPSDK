@@ -5,10 +5,13 @@ description: Garder toutes les commandes accessibles en réduisant les catalogue
 section: SDK
 parent: integration
 order: 2
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Découvrir sans perdre de fonctions {#tools}
+
+Le [stockage disque, les mesures, les abonnements et les fenêtres de contexte API](doc:runtime-options)
+complètent ces fonctions par des options indépendantes, désactivées par défaut.
 
 `Registry` reste la référence. Les appels SDK directs et les outils MCP classiques gardent leurs
 noms, arguments, schémas de sortie et droits. `describe()` renvoie toujours le catalogue complet.

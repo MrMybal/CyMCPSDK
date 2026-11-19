@@ -1,10 +1,18 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.6.0 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.7.0 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 
 ## Work on the SDK
+
+- Disk spooling, performance records, MCP change subscriptions and API context windows are
+  independent opt-in facilities. See runtime-options in the manual. No implicit summarizer/model.
+  Stream producers publish only complete results, and must never be automatically retried.
+- Context projection retains full host history and pins systems/current turns. Keep tool-call
+  groups intact. Native agents retain their own context logic. Budgets are bytes, not token claims.
+- Performance records contain metadata only. Notification readers deliver no host callbacks;
+  drain their bounded queues on the host thread and keep legacy TTL behavior available.
 
 - Large API/Codex tool registries use five discovery tools by default (threshold 32).
   Search, load a full schema, then call the original operation. Every operation remains

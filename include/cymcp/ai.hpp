@@ -1,5 +1,6 @@
 #pragma once
 #include "content.hpp"
+#include "context.hpp"
 #include "http.hpp"
 #include "process.hpp"
 #include <optional>
@@ -319,6 +320,7 @@ class Conversation {
 
   public:
     Conversation(std::shared_ptr<Provider>, std::string model, std::string system_prompt = {});
+    void configure_context(ContextOptions); // host-history APIs only; idle conversation
     void connect(std::string resume_id = {}, const CallContext& = {}, bool automatic_model = false,
                  Json* models = nullptr);
     ChatResult send(Json user_content, const CallContext& = {});

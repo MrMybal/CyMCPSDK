@@ -1,5 +1,6 @@
 #include "provider_error.hpp"
 #include <cymcp/ai.hpp>
+#include <cymcp/performance.hpp>
 #include <cymcp/resources.hpp>
 #include <limits>
 #include <set>
@@ -455,6 +456,8 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
     auto protocol = options_.protocol;
     for (std::size_t round = 0; options_.max_tool_rounds == 0 || round < options_.max_tool_rounds;
          ++round) {
+        if (input.context_bytes_limit && serialized_size(messages) > input.context_bytes_limit)
+            throw Error("ContextTooLarge", "Active tool turn exceeds the context budget");
         context.cancellation.check();
         ChatResult result;
         Json calls = Json::array(), content = Json::array();

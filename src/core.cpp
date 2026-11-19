@@ -1,4 +1,6 @@
+#include <cymcp/changes.hpp>
 #include <cymcp/core.hpp>
+#include <cymcp/performance.hpp>
 #include <regex>
 #include <set>
 
@@ -77,12 +79,24 @@ void Registry::replace(Operation op) {
     register_operation(std::move(op), true);
 }
 void Registry::remove(const std::string& name) {
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
     if (!operations_.erase(name))
         throw Error("UnknownOperation", "Unknown operation");
     ++revision_;
     catalogue_.reset();
     summaries_.reset();
+    auto feed = changes_;
+    lock.unlock();
+    if (feed)
+        feed->publish("tools");
+}
+void Registry::set_performance_monitor(std::shared_ptr<PerformanceMonitor> monitor) {
+    std::lock_guard lock(mutex_);
+    performance_ = std::move(monitor);
+}
+void Registry::set_change_feed(std::shared_ptr<ChangeFeed> feed) {
+    std::lock_guard lock(mutex_);
+    changes_ = std::move(feed);
 }
 void Registry::register_operation(Operation op, bool replace) {
     if (op.name.empty() || op.name.size() > 128 ||
@@ -96,7 +110,7 @@ void Registry::register_operation(Operation op, bool replace) {
         (!op.output_schema.empty() && op.output_schema.value("type", Json()) != "object"))
         throw Error("InvalidSchema",
                     "Operation parameters and declared structured outputs must be object schemas");
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
     const auto name = op.name;
     const auto found = operations_.find(name);
     if (!replace && found != operations_.end())
@@ -107,6 +121,10 @@ void Registry::register_operation(Operation op, bool replace) {
     ++revision_;
     catalogue_.reset();
     summaries_.reset();
+    auto feed = changes_;
+    lock.unlock();
+    if (feed)
+        feed->publish("tools");
 }
 namespace {
 Json operation_description(const Operation& operation) {
@@ -169,26 +187,36 @@ std::uint64_t Registry::revision() const {
     return revision_;
 }
 Json Registry::invoke(const std::string& name, const Json& args, const CallContext& context) const {
-    context.cancellation.check();
     std::shared_ptr<const Operation> op;
+    std::shared_ptr<PerformanceMonitor> monitor;
     {
         std::lock_guard lock(mutex_);
+        monitor = performance_ ? performance_ : context.performance;
         auto it = operations_.find(name);
-        if (it == operations_.end())
-            throw Error("UnknownOperation", "Unknown operation");
-        op = it->second;
+        if (it != operations_.end())
+            op = it->second;
     }
-    if (!policy_.allows(context, name, args))
-        throw Error("AccessDenied", "Operation denied by host policy");
-    validate(args, op->input_schema);
-    auto result = op->handler(args, context);
-    context.cancellation.check();
+    PerformanceSpan span(monitor, "operation", op ? name : "unknown", args);
     try {
-        validate(result, op->output_schema);
-    } catch (const Error&) {
-        throw Error("InvalidOutput", "Handler output does not match its schema");
+        context.cancellation.check();
+        if (!op)
+            throw Error("UnknownOperation", "Unknown operation");
+        if (!policy_.allows(context, name, args))
+            throw Error("AccessDenied", "Operation denied by host policy");
+        validate(args, op->input_schema);
+        auto result = op->handler(args, context);
+        context.cancellation.check();
+        try {
+            validate(result, op->output_schema);
+        } catch (const Error&) {
+            throw Error("InvalidOutput", "Handler output does not match its schema");
+        }
+        span.finish("ok", &result);
+        return result;
+    } catch (const Error& error) {
+        span.finish(error.code);
+        throw;
     }
-    return result;
 }
 Executor::Executor(std::size_t workers, std::size_t capacity) : capacity_(capacity) {
     if (!workers || workers > 64 || !capacity)

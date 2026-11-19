@@ -30,7 +30,7 @@ std::string path_utf8(const std::filesystem::path&);
 // conventional authorization fields, removes control characters and bounds the UTF-8 text.
 std::string redact_error_message(std::string_view message,
                                  const std::vector<std::string>& secrets = {});
-inline constexpr const char* version = "0.6.0";
+inline constexpr const char* version = "0.7.0";
 class Error : public std::runtime_error {
   public:
     std::string code;
@@ -67,6 +67,8 @@ struct Event {
     Json data = Json::object();
 };
 using EventSink = std::function<void(const Event&)>;
+class PerformanceMonitor;
+class ChangeFeed;
 struct CallContext {
     std::string principal = "local";
     std::string request_id;
@@ -74,6 +76,10 @@ struct CallContext {
     EventSink events;
     // Transport-local namespace for correlating peer request IDs, separate from authorization.
     std::string transport_scope;
+    std::shared_ptr<PerformanceMonitor> performance;
+    // Optional transport channel for streaming JSON-RPC notifications; null is a heartbeat.
+    std::function<void(const Json&)> notifications;
+    std::size_t context_bytes_limit = 0; // optional host-history message budget
     void emit(std::string type, Json data = Json::object()) const;
 };
 enum class Decision { allow, deny };
@@ -105,10 +111,14 @@ class Registry {
     mutable std::shared_ptr<const Json> catalogue_;
     mutable std::shared_ptr<const Json> summaries_;
     std::uint64_t revision_ = 0;
+    std::shared_ptr<PerformanceMonitor> performance_;
+    std::shared_ptr<ChangeFeed> changes_;
     void register_operation(Operation, bool replace);
 
   public:
     explicit Registry(Policy policy = {});
+    void set_performance_monitor(std::shared_ptr<PerformanceMonitor>);
+    void set_change_feed(std::shared_ptr<ChangeFeed>);
     void add(Operation operation);
     void replace(Operation operation);
     void remove(const std::string& name);

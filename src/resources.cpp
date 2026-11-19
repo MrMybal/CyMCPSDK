@@ -2,7 +2,10 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cymcp/changes.hpp>
+#include <cymcp/performance.hpp>
 #include <cymcp/resources.hpp>
+#include <fstream>
 #include <limits>
 
 namespace cymcp {
@@ -37,12 +40,126 @@ std::string lower(std::string value) {
     });
     return value;
 }
+struct DiskRoot {
+    std::filesystem::path path;
+    std::mutex mutex;
+    std::size_t used = 0;
+    ~DiskRoot() {
+        std::error_code error;
+        std::filesystem::remove(path, error);
+    }
+};
+struct DiskData {
+    std::shared_ptr<DiskRoot> root;
+    std::filesystem::path path;
+    std::size_t reserved = 0;
+    ~DiskData() {
+        std::error_code error;
+        std::filesystem::remove(path, error);
+        if (root) {
+            std::lock_guard lock(root->mutex);
+            root->used -= reserved;
+        }
+    }
+};
+class StoreBuffer : public std::streambuf {
+    ResourceOptions options;
+    std::shared_ptr<DiskRoot> root;
+    const CallContext& context;
+    PrivateOutputFile file{nullptr, &std::fclose};
+    std::function<void(std::size_t)> reserve_disk;
+
+  public:
+    std::string memory;
+    std::shared_ptr<DiskData> disk;
+    std::size_t bytes = 0;
+    StoreBuffer(ResourceOptions o, std::shared_ptr<DiskRoot> r, const CallContext& c,
+                std::function<void(std::size_t)> reserve)
+        : options(std::move(o)), root(std::move(r)), context(c), reserve_disk(std::move(reserve)) {}
+    ~StoreBuffer() {
+        file.reset();
+        disk.reset();
+    }
+    std::streamsize xsputn(const char* data, std::streamsize count) override {
+        context.cancellation.check();
+        const auto n = static_cast<std::size_t>(count);
+        const auto limit = root ? std::max(options.max_disk_bytes, options.max_stored_bytes)
+                                : options.max_stored_bytes;
+        if (n > limit || bytes > limit - n)
+            throw Error("ResourceTooLarge", "Result exceeds storage budget");
+        if (root && !disk &&
+            bytes + n > std::min(options.spool_threshold, options.max_stored_bytes)) {
+            disk = std::make_shared<DiskData>();
+            disk->root = root;
+            reserve_disk(memory.size());
+            disk->reserved = memory.size();
+            disk->path = root->path / random_token(32);
+            file = open_private_output_file(disk->path);
+            if (std::fwrite(memory.data(), 1, memory.size(), file.get()) != memory.size())
+                throw Error("FileError", "Cannot spool result");
+            std::string().swap(memory);
+        }
+        if (disk) {
+            reserve_disk(n);
+            disk->reserved += n;
+            if (std::fwrite(data, 1, n, file.get()) != n)
+                throw Error("FileError", "Cannot spool result");
+        } else
+            memory.append(data, n);
+        bytes += n;
+        return count;
+    }
+    int_type overflow(int_type value) override {
+        if (traits_type::eq_int_type(value, traits_type::eof()))
+            return traits_type::not_eof(value);
+        const char c = traits_type::to_char_type(value);
+        xsputn(&c, 1);
+        return value;
+    }
+    void finish() {
+        if (file) {
+            if (std::fflush(file.get()))
+                throw Error("FileError", "Cannot flush result");
+            file.reset();
+        }
+        context.cancellation.check();
+    }
+};
+bool exceeds(const Json& value, std::size_t limit) {
+    struct Limit {};
+    struct Buffer : std::streambuf {
+        std::size_t remaining;
+        explicit Buffer(std::size_t n) : remaining(n) {}
+        std::streamsize xsputn(const char*, std::streamsize n) override {
+            if (static_cast<std::size_t>(n) > remaining)
+                throw Limit{};
+            remaining -= static_cast<std::size_t>(n);
+            return n;
+        }
+        int_type overflow(int_type c) override {
+            if (!traits_type::eq_int_type(c, traits_type::eof())) {
+                if (!remaining)
+                    throw Limit{};
+                --remaining;
+            }
+            return traits_type::not_eof(c);
+        }
+    } buffer(limit);
+    std::ostream out(&buffer);
+    out.exceptions(std::ios::badbit | std::ios::failbit);
+    try {
+        out << value;
+        return false;
+    } catch (const Limit&) {
+        return true;
+    }
+}
 } // namespace
 struct ResourceRegistry::Impl {
     struct Entry {
         Resource resource;
         std::string token, owner;
-        bool stored = false;
+        bool stored = false, on_disk = false;
         Clock::time_point expires = Clock::time_point::max();
         std::uint64_t used = 0;
     };
@@ -51,6 +168,11 @@ struct ResourceRegistry::Impl {
     mutable std::mutex mutex;
     std::map<std::string, std::shared_ptr<Entry>> public_resources, stored, chunks;
     std::size_t bytes = 0;
+    std::size_t disk_bytes = 0;
+    std::shared_ptr<DiskRoot> disk_root;
+    std::shared_ptr<ChangeFeed> changes;
+    std::condition_variable_any wake;
+    std::jthread janitor;
     std::uint64_t revision = 0, tick = 0;
     struct Grep {
         std::string text, owner, tail;
@@ -64,9 +186,31 @@ struct ResourceRegistry::Impl {
         if (o.chunk_bytes < 4 || o.chunk_bytes > 4 * 1024 * 1024 || !o.max_stored_results ||
             !o.max_stored_bytes || o.result_ttl.count() <= 0)
             throw Error("InvalidOptions", "Invalid resource storage limits");
+        if (!o.disk_directory.empty()) {
+            if (!o.max_disk_bytes || !o.spool_threshold)
+                throw Error("InvalidOptions", "Invalid disk storage limits");
+            disk_root = std::make_shared<DiskRoot>();
+            disk_root->path =
+                std::filesystem::absolute(o.disk_directory) / ("cymcp-results-" + random_token(16));
+            private_directory(disk_root->path);
+            janitor = std::jthread([this](std::stop_token stop) {
+                std::unique_lock lock(mutex);
+                while (!stop.stop_requested()) {
+                    wake.wait_for(lock, stop, std::chrono::seconds(1), [] { return false; });
+                    prune();
+                }
+            });
+        }
+    }
+    ~Impl() {
+        if (janitor.joinable()) {
+            janitor.request_stop();
+            wake.notify_all();
+            janitor.join();
+        }
     }
     void erase_stored(decltype(stored)::iterator it) {
-        bytes -= it->second->resource.size;
+        (it->second->on_disk ? disk_bytes : bytes) -= it->second->resource.size;
         chunks.erase(it->second->token);
         stored.erase(it);
     }
@@ -77,6 +221,29 @@ struct ResourceRegistry::Impl {
                 erase_stored(old);
             } else
                 ++it;
+    }
+    void reserve_disk(std::size_t count) {
+        std::lock_guard lock(mutex);
+        prune();
+        for (;;) {
+            {
+                std::lock_guard quota(disk_root->mutex);
+                if (count <= options.max_disk_bytes &&
+                    disk_root->used <= options.max_disk_bytes - count) {
+                    disk_root->used += count;
+                    return;
+                }
+            }
+            auto oldest = stored.end();
+            for (auto it = stored.begin(); it != stored.end(); ++it)
+                if (it->second->on_disk &&
+                    (oldest == stored.end() || it->second->used < oldest->second->used))
+                    oldest = it;
+            if (oldest == stored.end())
+                throw Error("ResourceTooLarge",
+                            "Disk result budget is occupied by active streams or readers");
+            erase_stored(oldest);
+        }
     }
     void add(Resource resource, bool replace) {
         if (resource.uri.empty() || resource.uri.size() > 4096 ||
@@ -90,7 +257,7 @@ struct ResourceRegistry::Impl {
         auto entry = std::make_shared<Entry>();
         entry->resource = std::move(resource);
         entry->token = random_token(32);
-        std::lock_guard lock(mutex);
+        std::unique_lock lock(mutex);
         auto found = public_resources.find(entry->resource.uri);
         if (found != public_resources.end()) {
             if (!replace)
@@ -101,6 +268,13 @@ struct ResourceRegistry::Impl {
         public_resources[entry->resource.uri] = entry;
         ++revision;
         greps.clear();
+        auto feed = changes;
+        auto uri = entry->resource.uri;
+        lock.unlock();
+        if (feed) {
+            feed->publish("resources");
+            feed->publish("resource", uri);
+        }
     }
 };
 ResourceRegistry::ResourceRegistry(Policy policy, ResourceOptions options)
@@ -114,14 +288,35 @@ void ResourceRegistry::replace(Resource resource) {
 }
 void ResourceRegistry::remove(const std::string& uri) {
     auto& p = *impl_;
-    std::lock_guard lock(p.mutex);
+    std::unique_lock lock(p.mutex);
     auto found = p.public_resources.find(uri);
     if (found != p.public_resources.end()) {
         p.chunks.erase(found->second->token);
         p.public_resources.erase(found);
         ++p.revision;
         p.greps.clear();
+        auto feed = p.changes;
+        lock.unlock();
+        if (feed) {
+            feed->publish("resources");
+            feed->publish("resource", uri);
+        }
     }
+}
+void ResourceRegistry::set_change_feed(std::shared_ptr<ChangeFeed> feed) {
+    std::lock_guard lock(impl_->mutex);
+    impl_->changes = std::move(feed);
+}
+bool ResourceRegistry::readable(const std::string& uri, const CallContext& c) const {
+    c.cancellation.check();
+    if (!impl_->policy.allows(c, "resources.read", {{"uri", uri}}))
+        return false;
+    std::lock_guard lock(impl_->mutex);
+    impl_->prune();
+    if (impl_->public_resources.contains(uri))
+        return true;
+    auto found = impl_->stored.find(uri);
+    return found != impl_->stored.end() && found->second->owner == c.principal;
 }
 std::uint64_t ResourceRegistry::revision() const {
     std::lock_guard lock(impl_->mutex);
@@ -243,12 +438,32 @@ Json ResourceRegistry::read(const std::string& uri, const CallContext& context) 
     result["contents"] = Json::array({std::move(content)});
     return result;
 }
-Json ResourceRegistry::store(std::string bytes, std::string mime_type, const CallContext& context) {
+Json ResourceRegistry::store(std::string bytes, std::string mime_type, const CallContext& context,
+                             bool binary) {
+    return store_stream(
+        [&bytes](std::ostream& out, const auto&) {
+            out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        },
+        std::move(mime_type), context, binary);
+}
+Json ResourceRegistry::store_json(const Json& value, const CallContext& context) {
+    return store_stream([&value](std::ostream& out, const auto&) { out << value; },
+                        "application/json", context);
+}
+Json ResourceRegistry::store_stream(
+    const std::function<void(std::ostream&, const CallContext&)>& producer, std::string mime_type,
+    const CallContext& context, bool binary) {
     context.cancellation.check();
     auto& p = *impl_;
-    if (bytes.size() > p.options.max_stored_bytes)
-        throw Error("ResourceTooLarge", "Result exceeds retained resource budget");
-    auto data = std::make_shared<const std::string>(std::move(bytes));
+    if (!producer || mime_type.empty() || mime_type.size() > 256)
+        throw Error("InvalidParameters", "Invalid stream producer or MIME type");
+    StoreBuffer buffer(p.options, p.disk_root, context, [&p](std::size_t n) { p.reserve_disk(n); });
+    std::ostream out(&buffer);
+    out.exceptions(std::ios::badbit | std::ios::failbit);
+    producer(out, context);
+    if (!out)
+        throw Error("FileError", "Stream producer failed");
+    buffer.finish();
     auto entry = std::make_shared<Impl::Entry>();
     entry->stored = true;
     entry->token = random_token(32);
@@ -257,16 +472,36 @@ Json ResourceRegistry::store(std::string bytes, std::string mime_type, const Cal
     entry->resource.uri = "cymcp://result/" + entry->token;
     entry->resource.name = "Tool result";
     entry->resource.mime_type = std::move(mime_type);
-    entry->resource.size = data->size();
+    entry->resource.size = buffer.bytes;
+    entry->resource.binary = binary;
+    entry->on_disk = static_cast<bool>(buffer.disk);
     entry->resource.cache_ttl = p.options.result_ttl;
-    entry->resource.read = [data](std::size_t offset, std::size_t length, const CallContext& ctx) {
-        ctx.cancellation.check();
-        return data->substr(offset, length);
-    };
+    if (buffer.disk) {
+        entry->resource.read = [disk = buffer.disk](std::size_t offset, std::size_t length,
+                                                    const CallContext& c) {
+            c.cancellation.check();
+            std::ifstream in(disk->path, std::ios::binary);
+            in.seekg(static_cast<std::streamoff>(offset));
+            std::string result(length, '\0');
+            in.read(result.data(), static_cast<std::streamsize>(length));
+            if (!in || static_cast<std::size_t>(in.gcount()) != length)
+                throw Error("FileError", "Cannot read retained result");
+            return result;
+        };
+    } else {
+        auto data = std::make_shared<const std::string>(std::move(buffer.memory));
+        entry->resource.read = [data](std::size_t offset, std::size_t length,
+                                      const CallContext& ctx) {
+            ctx.cancellation.check();
+            return data->substr(offset, length);
+        };
+    }
     std::lock_guard lock(p.mutex);
     p.prune();
+    const auto budget = entry->on_disk ? p.options.max_disk_bytes : p.options.max_stored_bytes;
+    auto retained = [&] { return entry->on_disk ? p.disk_bytes : p.bytes; };
     while (!p.stored.empty() && (p.stored.size() >= p.options.max_stored_results ||
-                                 data->size() > p.options.max_stored_bytes - p.bytes)) {
+                                 entry->resource.size > budget - retained())) {
         auto oldest =
             std::min_element(p.stored.begin(), p.stored.end(), [](const auto& a, const auto& b) {
                 return a.second->used < b.second->used;
@@ -274,16 +509,23 @@ Json ResourceRegistry::store(std::string bytes, std::string mime_type, const Cal
         p.erase_stored(oldest);
     }
     entry->used = ++p.tick;
-    p.bytes += data->size();
+    (entry->on_disk ? p.disk_bytes : p.bytes) += entry->resource.size;
     p.chunks[entry->token] = entry;
     p.stored[entry->resource.uri] = entry;
     return {{"uri", entry->resource.uri},
             {"name", entry->resource.name},
-            {"mimeType",
-             data->size() > p.options.chunk_bytes ? "application/json" : entry->resource.mime_type},
-            {"bytes", data->size()},
-            {"chunked", data->size() > p.options.chunk_bytes},
+            {"mimeType", entry->resource.size > p.options.chunk_bytes ? "application/json"
+                                                                      : entry->resource.mime_type},
+            {"bytes", entry->resource.size},
+            {"chunked", entry->resource.size > p.options.chunk_bytes},
             {"expiresInMs", p.options.result_ttl.count()}};
+}
+Json ResourceRegistry::storage_stats() const {
+    std::lock_guard lock(impl_->mutex);
+    impl_->prune();
+    return {{"memory_bytes", impl_->bytes},
+            {"disk_bytes", impl_->disk_bytes},
+            {"results", impl_->stored.size()}};
 }
 std::size_t ResourceRegistry::stored_bytes() const {
     auto& p = *impl_;
@@ -473,12 +715,11 @@ struct ToolGateway::Impl {
     Json invoke(const Json& args, const CallContext& context) {
         auto result = target->invoke(args.at("name").get<std::string>(),
                                      args.value("arguments", Json::object()), context);
-        auto serialized = result.dump();
-        if (serialized.size() <= options.inline_bytes)
+        if (!exceeds(result, options.inline_bytes))
             return result;
         try {
             return Json{
-                {"resource", resources->store(std::move(serialized), "application/json", context)},
+                {"resource", resources->store_json(result, context)},
                 {"message",
                  "Read the resource manifest, then follow chunk URIs with cy_resources_read."}};
         } catch (const Error& error) {

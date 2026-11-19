@@ -693,6 +693,10 @@ int main(int argc, char** argv) {
             Json mcp_config = {
                 {"provider", "demo"},
                 {"app_commands", {{"allow_changes", writable}, {"deferred_tools", deferred}}}};
+            if (deferred) {
+                mcp_config["performance"] = {{"enabled", true}};
+                mcp_config["app_commands"]["notifications"] = true;
+            }
             Run run(argv[1],
                     output / ((writable ? "mcp-allow" : "mcp-deny") +
                               std::string(deferred ? "-deferred" : "")),
@@ -721,9 +725,12 @@ int main(int argc, char** argv) {
             client.connect(timeout);
             check(client.list_tools(timeout).size() == (deferred ? 5 : 2),
                   "External client discovers the app's actual command registry");
-            check(client.list_resources(timeout).size() == 1 &&
+            check(client.list_resources(timeout).size() == (deferred ? 2 : 1) &&
                       client.read_resource("app://chat-lab/commands", timeout).contains("contents"),
                   "Real Chat Lab exposes its read-only MCP command resource");
+            if (deferred)
+                client.start_notifications(
+                    {{"resourceSubscriptions", Json::array({"app://chat-lab/counter"})}}, timeout);
             auto invoke = [&](const std::string& name, const Json& arguments) {
                 return deferred
                            ? client.call_tool("cy_tools_call",

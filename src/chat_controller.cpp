@@ -148,6 +148,7 @@ struct ChatController::Impl {
         active = Cancellation{};
         CallContext context;
         context.cancellation = active;
+        context.performance = connection.performance;
         context.events = [this](const Event& event) {
             // Keep private native/configuration payloads out of the UI queue.
             if (event.type == "TextDelta" || event.type == "ThinkingDelta")
@@ -423,6 +424,9 @@ void ChatController::open(ChatConnection options) {
         s.provider = s.registry->create(s.connection.provider_id, s.connection.provider);
         s.chat = std::make_shared<Conversation>(s.provider, s.connection.model,
                                                 s.connection.system_prompt);
+        if (s.connection.context.max_bytes && s.provider->uses_host_history() &&
+            !s.provider->uses_native_turn_context())
+            s.chat->configure_context(s.connection.context);
         if (!s.connection.history_directory.empty())
             s.store = std::make_unique<ConversationStore>(s.connection.history_directory);
         const bool can_select_model = s.provider->capabilities().turn_model_selection;
@@ -437,7 +441,8 @@ void ChatController::open(ChatConnection options) {
             }
         } else
             s.chat->connect(s.connection.resume_id, context, s.connection.automatic_model,
-                            s.connection.automatic_model || can_select_model ? &result.models : nullptr);
+                            s.connection.automatic_model || can_select_model ? &result.models
+                                                                             : nullptr);
         result.history = s.chat->transcript();
     });
 }
@@ -570,7 +575,7 @@ void ChatController::poll() {
         : result.error == "Cancelled" ? "warning"
                                       : "error",
         result.action, result.error.empty() ? "Completed" : result.error,
-        result.error.empty()          ? "Operation completed"
+        result.error.empty()            ? "Operation completed"
         : !result.error_message.empty() ? result.error_message
         : choose_model                  ? "Model selection required"
         : result.error == "Cancelled"   ? "Operation cancelled"

@@ -2,7 +2,21 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
-## 0.6.0 — In development
+## 0.7.0 — In development
+
+- Add opt-in private disk spooling with streaming producers, byte quotas including concurrent
+  writes, UTF-8/binary range reads, cancellation and automatic temporary-file cleanup.
+- Add an optional bounded performance monitor for SDK operations, MCP client/server and
+  conversations. Private asynchronous JSONL records contain metadata only, with aggregate timings.
+- Add optional MCP 2026 change subscriptions over HTTP SSE and stdio. Resource and tool changes
+  invalidate client caches, including resource deletion. Legacy peers retain TTL behavior.
+- Add optional API context windows with complete tool-turn groups, pinned system instructions
+  and a host-provided incremental summarizer. Full history/checkpoints remain intact; native
+  CLI agents keep their own context management.
+- Chat Lab accepts independent storage, performance, notifications and context settings.
+  See the [runtime options guide](Documentation/Documentation.html#/en/runtime-options).
+
+## 0.6.0
 
 - Add optional on-demand tool discovery without removing access to any application command.
   API/Codex registries above 32 tools use it automatically; full definitions remain selectable.

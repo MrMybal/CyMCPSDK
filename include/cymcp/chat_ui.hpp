@@ -5,7 +5,7 @@
 namespace cyui {
 struct DocumentServices;
 struct ImageData;
-}
+} // namespace cyui
 namespace cymcp {
 // Optional CyMCP::ChatUI module. The host owns the ImGui context and renderer.
 struct ChatConnection {
@@ -15,6 +15,8 @@ struct ChatConnection {
     std::string history_id;
     bool restore = false;
     bool automatic_model = false;
+    ContextOptions context;
+    std::shared_ptr<PerformanceMonitor> performance;
 };
 struct ChatAttachment {
     std::uint64_t id = 0;

@@ -166,10 +166,10 @@ struct LocalHttpServer::Impl {
                 context.transport_scope = "http:" + std::to_string(++channel);
                 context.cancellation = shutdown.child();
                 const auto protocol = req.get_header_value("MCP-Protocol-Version");
-                const bool legacy =
-                    req.path == "/mcp" && value.is_object() &&
-                    value.value("jsonrpc", Json()) == "2.0" && value.contains("method") &&
-                    (protocol.empty() || legacy_version(protocol));
+                const bool legacy = req.path == "/mcp" && value.is_object() &&
+                                    value.value("jsonrpc", Json()) == "2.0" &&
+                                    value.contains("method") &&
+                                    (protocol.empty() || legacy_version(protocol));
                 const bool initialize = legacy && value.at("method") == "initialize";
                 std::shared_ptr<LegacySession> session;
                 if (initialize && req.has_header("Mcp-Session-Id")) {
@@ -196,6 +196,30 @@ struct LocalHttpServer::Impl {
                                       [] { return false; });
                     }
                 });
+                if (req.path == "/mcp" && !legacy && value.is_object() &&
+                    value.value("method", Json()) == "subscriptions/listen") {
+                    // The SSE provider runs while its request/socket remain alive. Its cancellation
+                    // is tied to server shutdown and heartbeat write failures.
+                    res.set_chunked_content_provider(
+                        "text/event-stream", [fn = endpoint, value, context](
+                                                 std::size_t, httplib::DataSink& sink) mutable {
+                            context.notifications = [&](const Json& message) {
+                                auto bytes = message.is_null() ? std::string(": keepalive\n\n")
+                                                               : "data: " + message.dump() + "\n\n";
+                                if (!sink.write(bytes.data(), bytes.size()))
+                                    context.cancellation.cancel();
+                            };
+                            try {
+                                auto result = fn(value, context);
+                                if (!result.is_null())
+                                    context.notifications(result);
+                            } catch (...) {
+                            }
+                            sink.done();
+                            return true;
+                        });
+                    return;
+                }
                 auto reply = endpoint(value, context);
                 if (reply.is_null()) {
                     res.status = 202;

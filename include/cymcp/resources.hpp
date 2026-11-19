@@ -1,5 +1,6 @@
 #pragma once
 #include "core.hpp"
+#include <ostream>
 
 namespace cymcp {
 struct Resource {
@@ -14,6 +15,8 @@ struct ResourceOptions {
     std::size_t chunk_bytes = 32 * 1024;
     std::size_t max_stored_bytes = 64 * 1024 * 1024, max_stored_results = 128;
     std::chrono::milliseconds result_ttl{300000};
+    std::filesystem::path disk_directory; // absent = no disk I/O
+    std::size_t max_disk_bytes = 1024ULL * 1024 * 1024, spool_threshold = 1024 * 1024;
 };
 class ResourceRegistry {
     struct Impl;
@@ -27,6 +30,8 @@ class ResourceRegistry {
     void add(Resource);
     void replace(Resource);
     void remove(const std::string& uri);
+    void set_change_feed(std::shared_ptr<ChangeFeed>);
+    bool readable(const std::string& uri, const CallContext& = {}) const;
     std::uint64_t revision() const;
     // Listings contain descriptions only. Large contents are manifests linking bounded chunks.
     Json list(std::size_t offset = 0, std::size_t limit = 64) const;
@@ -35,8 +40,15 @@ class ResourceRegistry {
     Json grep(std::string text, bool ignore_case = false, std::string cursor = {},
               const CallContext& = {});
     // Retained result handles are private to context.principal, expire and are bounded in memory.
-    Json store(std::string bytes, std::string mime_type, const CallContext& = {});
+    Json store(std::string bytes, std::string mime_type, const CallContext& = {},
+               bool binary = false);
+    // Producer writes incrementally, once, to a bounded memory/disk sink. Failure publishes no
+    // handle.
+    Json store_stream(const std::function<void(std::ostream&, const CallContext&)>&,
+                      std::string mime_type, const CallContext& = {}, bool binary = false);
+    Json store_json(const Json&, const CallContext& = {});
     std::size_t stored_bytes() const;
+    Json storage_stats() const;
 };
 struct ToolGatewayOptions {
     std::size_t page_size = 20, inline_bytes = 16 * 1024;

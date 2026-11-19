@@ -5,10 +5,13 @@ description: Keep every app command accessible while reducing catalogue and resu
 section: SDK
 parent: integration
 order: 2
-revision: 1
+revision: 2
 ---
 
 ## Discover without losing capabilities {#tools}
+
+Optional [disk storage, performance logs, change subscriptions and API context windows](doc:runtime-options)
+extend these facilities without changing their default behavior.
 
 `Registry` remains the source of truth. Direct SDK calls and ordinary MCP tools preserve their
 names, arguments, output schemas and policies. `describe()` still returns the complete catalogue.

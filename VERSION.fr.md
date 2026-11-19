@@ -2,7 +2,21 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
-## 0.6.0 — En développement
+## 0.7.0 — En développement
+
+- Ajouter le stockage temporaire privé sur disque, les producteurs progressifs, les quotas
+  tenant compte des écritures simultanées, le texte/binaire et le nettoyage automatique.
+- Ajouter un moniteur de performance optionnel : opérations SDK, MCP et conversations.
+  Les journaux JSONL privés et asynchrones contiennent uniquement des métadonnées.
+- Ajouter les abonnements MCP 2026 en HTTP SSE et stdio : les changements et suppressions
+  invalident le cache client. Les anciens pairs conservent le fonctionnement par TTL.
+- Ajouter les fenêtres de contexte API optionnelles, les échanges d'outils indivisibles et
+  le résumé incrémental fourni par l'hôte. Historique complet et sauvegardes sont conservés.
+  Les agents CLI gardent leur gestion native du contexte.
+- Chat Lab accepte des réglages indépendants de stockage, performance, notifications et contexte.
+  Voir le [guide des options d'exécution](Documentation/Documentation.html#/fr/runtime-options).
+
+## 0.6.0
 
 - Ajouter la découverte d'outils à la demande sans retirer aucune commande de l'application.
   Les registres API/Codex de plus de 32 outils l'utilisent par défaut ; le mode complet reste disponible.

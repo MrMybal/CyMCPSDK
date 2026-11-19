@@ -1,6 +1,9 @@
 #include "mcp_headers.hpp"
 #include <charconv>
+#include <cymcp/changes.hpp>
 #include <cymcp/mcp.hpp>
+#include <cymcp/performance.hpp>
+#include <limits>
 #include <optional>
 #include <set>
 namespace cymcp {
@@ -26,6 +29,18 @@ std::size_t page_offset(const Json& params, const std::string& generation, std::
 }
 Json rpc_error(const Json& id, int code, const std::string& message) {
     return {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", code}, {"message", message}}}};
+}
+std::string metric_method(const Json& request) {
+    if (!request.is_object() || !request.contains("method") || !request["method"].is_string())
+        return "unknown";
+    auto method = request["method"].get<std::string>();
+    for (const auto* known :
+         {"server/discover", "initialize", "ping", "tools/list", "tools/call", "cymcp/tools/get",
+          "resources/list", "resources/read", "resources/templates/list", "subscriptions/listen",
+          "notifications/initialized", "notifications/cancelled"})
+        if (method == known)
+            return method;
+    return "unknown";
 }
 Json meta() {
     return {{version_key, modern},
@@ -112,7 +127,9 @@ struct McpServer::ActiveCall {
 };
 McpServer::McpServer(const Registry& registry, std::string name, McpServerOptions options)
     : registry_(registry), name_(std::move(name)), options_(std::move(options)) {
-    if (!options_.page_size || options_.page_size > 1000 || options_.cache_ttl.count() < 0)
+    if (!options_.page_size || options_.page_size > 1000 || options_.cache_ttl.count() < 0 ||
+        !options_.max_subscriptions || options_.max_subscriptions > 64 ||
+        !options_.max_resource_subscriptions || options_.max_resource_subscriptions > 1024)
         throw Error("InvalidOptions", "Invalid MCP catalogue options");
 }
 Json McpServer::tool_page(const Json& params) {
@@ -147,7 +164,8 @@ std::shared_ptr<McpServer::ActiveCall> McpServer::reserve(const Json& request,
                                                           const CallContext& input, Json& error) {
     if (!request.is_object() ||
         (request.value("method", Json()) != "tools/call" &&
-         request.value("method", Json()) != "resources/read") ||
+         request.value("method", Json()) != "resources/read" &&
+         request.value("method", Json()) != "subscriptions/listen") ||
         !request.contains("id") ||
         !(request["id"].is_string() || request["id"].is_number_integer()))
         return {};
@@ -166,13 +184,92 @@ std::shared_ptr<McpServer::ActiveCall> McpServer::reserve(const Json& request,
     return call;
 }
 Json McpServer::handle(const Json& request, const CallContext& input) {
+    auto measured = input;
+    if (!measured.performance)
+        measured.performance = options_.performance;
     Json error;
-    auto call = reserve(request, input, error);
-    if (!error.is_null())
+    auto call = reserve(request, measured, error);
+    if (!error.is_null()) {
         return error;
-    return dispatch(request, call ? call->context : input);
+    }
+    return dispatch(request, call ? call->context : measured);
+}
+Json McpServer::listen(const Json& id, const Json& params, const CallContext& c) {
+    if (subscriptions_.fetch_add(1) >= options_.max_subscriptions) {
+        --subscriptions_;
+        throw Error("Busy", "Subscription capacity reached");
+    }
+    struct Release {
+        std::atomic_uint& count;
+        ~Release() {
+            --count;
+        }
+    } release{subscriptions_};
+    if (!options_.changes || !c.notifications)
+        throw Error("InvalidParameters",
+                    "Notifications require an enabled journal and streaming transport");
+    auto requested = params.value("notifications", Json::object());
+    if (!requested.is_object())
+        throw Error("InvalidParameters", "Notification filter must be an object");
+    Json filter = Json::object();
+    for (const auto* key : {"toolsListChanged", "resourcesListChanged"})
+        if (requested.value(key, false) &&
+            (std::string(key) == "toolsListChanged" || options_.resources))
+            filter[key] = true;
+    Json uris = requested.value("resourceSubscriptions", Json::array());
+    if (!uris.is_array() || uris.size() > options_.max_resource_subscriptions)
+        throw Error("InvalidParameters", "Resource subscription limit exceeded");
+    Json accepted = Json::array();
+    for (const auto& uri : uris) {
+        const auto name = uri.get<std::string>();
+        if (name.empty() || name.size() > 4096)
+            throw Error("InvalidParameters", "Invalid subscription URI");
+        if (options_.resources && options_.resources->readable(name, c))
+            accepted.push_back(name);
+    }
+    if (!accepted.empty())
+        filter["resourceSubscriptions"] = accepted;
+    const auto metadata = Json{{"io.modelcontextprotocol/subscriptionId", id}};
+    auto send = [&](std::string method, Json data) {
+        data["_meta"] = metadata;
+        c.notifications(
+            {{"jsonrpc", "2.0"}, {"method", std::move(method)}, {"params", std::move(data)}});
+    };
+    auto sequence = options_.changes->sequence();
+    send("notifications/subscriptions/acknowledged", {{"notifications", filter}});
+    auto heartbeat = Clock::now();
+    while (!c.cancellation.cancelled()) {
+        auto batch =
+            options_.changes->read(sequence, c.cancellation, std::chrono::milliseconds(250));
+        sequence = batch.sequence;
+        bool tools = batch.missed, resources = batch.missed;
+        std::set<std::string> changed;
+        for (const auto& change : batch.changes) {
+            tools |= change.topic == "tools";
+            resources |= change.topic == "resources";
+            if (change.topic == "resource")
+                changed.insert(change.uri);
+        }
+        if (tools && filter.value("toolsListChanged", false))
+            send("notifications/tools/list_changed", Json::object());
+        if (resources && filter.value("resourcesListChanged", false))
+            send("notifications/resources/list_changed", Json::object());
+        for (const auto& uri : accepted) {
+            auto name = uri.get<std::string>();
+            if (batch.missed || changed.contains(name))
+                send("notifications/resources/updated", {{"uri", name}});
+        }
+        if (Clock::now() - heartbeat >= std::chrono::seconds(1)) {
+            c.notifications(nullptr);
+            heartbeat = Clock::now();
+        }
+    }
+    return {{"jsonrpc", "2.0"},
+            {"id", id},
+            {"result", {{"resultType", "complete"}, {"_meta", metadata}}}};
 }
 Json McpServer::dispatch(const Json& request, const CallContext& input) {
+    PerformanceSpan span(input.performance, "mcp.server", metric_method(request), request);
     Json id = nullptr;
     if (!request.is_object() || request.value("jsonrpc", Json()) != "2.0" ||
         !request.contains("method") || !request["method"].is_string())
@@ -195,6 +292,7 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
             if (it != active_.end())
                 it->second.cancel();
         }
+        span.finish("ok");
         return nullptr;
     }
     try {
@@ -218,6 +316,11 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                              {"experimental", {{"com.cymcp/toolLookup", Json::object()}}}};
         if (options_.resources)
             capabilities["resources"] = Json::object();
+        if (current && options_.changes) {
+            capabilities["tools"]["listChanged"] = true;
+            if (options_.resources)
+                capabilities["resources"] = {{"listChanged", true}, {"subscribe", true}};
+        }
         if (method == "server/discover") {
             if (!current)
                 return rpc_error(id, -32602, "Discovery requires version metadata");
@@ -244,6 +347,8 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                 if (!initialized_)
                     return rpc_error(id, -32000, "Initialize the connection first");
             }
+            if (method == "subscriptions/listen" && current)
+                return listen(id, params, input);
             if (method == "ping")
                 result = Json::object();
             else if (method == "tools/list") {
@@ -310,10 +415,14 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
         }
         if (current)
             result["resultType"] = "complete";
-        return {{"jsonrpc", "2.0"}, {"id", id}, {"result", std::move(result)}};
+        Json reply = {{"jsonrpc", "2.0"}, {"id", id}, {"result", std::move(result)}};
+        span.finish(reply["result"].value("isError", false) ? "ToolError" : "ok", &reply);
+        return reply;
     } catch (const Json::exception&) {
+        span.finish("InvalidParameters");
         return rpc_error(id, -32602, "Invalid method parameters");
     } catch (const Error& e) {
+        span.finish(e.code);
         return rpc_error(id,
                          e.code == "InvalidParameters" || e.code == "UnknownOperation" ? -32602
                          : e.code == "ResourceNotFound"                                ? -32002
@@ -321,6 +430,7 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                                                                                        : -32603,
                          e.what());
     } catch (...) {
+        span.finish("InternalError");
         return rpc_error(id, -32603, "Internal error");
     }
 }
@@ -336,6 +446,11 @@ void McpServer::serve_stdio(std::istream& in, std::ostream& out, std::size_t wor
         }
     };
     Executor executor(workers);
+    std::unique_ptr<Executor> subscribers;
+    if (options_.changes)
+        subscribers = std::make_unique<Executor>(options_.max_subscriptions);
+    base.notifications = [&](const Json& message) { send(message); };
+    base.performance = options_.performance;
     std::string line;
     line.reserve(4096);
     bool oversized = false;
@@ -380,7 +495,11 @@ void McpServer::serve_stdio(std::istream& in, std::ostream& out, std::size_t wor
         else if (call) {
             auto id = request.at("id");
             try {
-                executor.post([&, request = std::move(request), call] {
+                auto& pool =
+                    subscribers && request.value("method", Json()) == "subscriptions/listen"
+                        ? *subscribers
+                        : executor;
+                pool.post([&, request = std::move(request), call] {
                     if (!call->context.cancellation.cancelled())
                         send(dispatch(request, call->context), &call->context.cancellation);
                 });
@@ -393,6 +512,102 @@ void McpServer::serve_stdio(std::istream& in, std::ostream& out, std::size_t wor
     base.cancellation.cancel();
 }
 struct McpClient::Impl {
+    struct Watch {
+        Cancellation lifetime;
+        std::string id;
+        mutable std::mutex mutex;
+        std::condition_variable wake;
+        std::deque<Json> notifications, replies;
+        Json accepted = Json::object();
+        bool acknowledged = false, ended = false;
+        std::string error;
+        std::atomic<std::uint64_t> epoch{0};
+        std::jthread worker;
+        ~Watch() {
+            lifetime.cancel();
+            if (worker.joinable())
+                worker.join();
+        }
+        void finish(std::string code) {
+            std::lock_guard lock(mutex);
+            ended = true;
+            if (error.empty())
+                error = std::move(code);
+            ++epoch;
+            wake.notify_all();
+        }
+        void route(Json message) {
+            std::lock_guard lock(mutex);
+            if (message.contains("method")) {
+                const auto method = message.value("method", std::string());
+                const auto params = message.value("params", Json::object());
+                if (params.value("_meta", Json::object())
+                        .value("io.modelcontextprotocol/subscriptionId", Json()) != id)
+                    return;
+                if (method == "notifications/subscriptions/acknowledged") {
+                    acknowledged = true;
+                    accepted = params.value("notifications", Json::object());
+                } else if (method == "notifications/tools/list_changed" ||
+                           method == "notifications/resources/list_changed" ||
+                           method == "notifications/resources/updated")
+                    ++epoch;
+                else
+                    return;
+                if (notifications.size() >= 256)
+                    notifications.pop_front();
+                notifications.push_back(std::move(message));
+            } else if (message.value("id", Json()) == id) {
+                ended = true;
+                if (message.contains("error"))
+                    error = "RemoteError";
+                ++epoch;
+            } else {
+                if (replies.size() >= 128) {
+                    ended = true;
+                    error = "ProtocolError";
+                } else
+                    replies.push_back(std::move(message));
+            }
+            wake.notify_all();
+        }
+        Json next(const Cancellation& cancel) {
+            std::unique_lock lock(mutex);
+            while (replies.empty() && !ended) {
+                cancel.check();
+                wake.wait_for(lock, std::chrono::milliseconds(25));
+            }
+            cancel.check();
+            if (replies.empty())
+                throw Error("UnexpectedEOF", "MCP notification reader stopped");
+            auto reply = std::move(replies.front());
+            replies.pop_front();
+            return reply;
+        }
+        void stream(const char* bytes, std::size_t count, std::string& line, std::string& data) {
+            for (std::size_t i = 0; i < count; ++i) {
+                if (bytes[i] != '\n') {
+                    line += bytes[i];
+                    if (line.size() > 1024 * 1024)
+                        throw Error("ResponseTooLarge", "Notification line exceeds limit");
+                    continue;
+                }
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
+                if (line.starts_with("data:")) {
+                    data += line.substr(5);
+                    data += '\n';
+                    if (data.size() > 1024 * 1024)
+                        throw Error("ResponseTooLarge", "Notification exceeds limit");
+                } else if (line.empty() && !data.empty()) {
+                    route(parse_json(data));
+                    data.clear();
+                }
+                line.clear();
+            }
+        }
+    };
+    std::unique_ptr<Watch> watch;
+    std::uint64_t observed_epoch = 0;
     ProcessOptions options;
     std::unique_ptr<Process> process;
     std::string url, token, protocol = modern;
@@ -420,6 +635,7 @@ struct McpClient::Impl {
     using HeaderCatalogue = std::map<std::string, std::optional<HeaderParameters>>;
     std::optional<HeaderCatalogue> tool_headers;
     void close() noexcept {
+        stop_watch();
         try {
             Cancellation grace;
             grace.deadline = Clock::now() + std::chrono::seconds(1);
@@ -453,6 +669,25 @@ struct McpClient::Impl {
         connected = false;
         clear_cache();
     }
+    void stop_watch() noexcept {
+        if (!watch)
+            return;
+        try {
+            if (process) {
+                Cancellation grace;
+                grace.deadline = Clock::now() + std::chrono::seconds(1);
+                process->write(Json({{"jsonrpc", "2.0"},
+                                     {"method", "notifications/cancelled"},
+                                     {"params", {{"requestId", watch->id}, {"_meta", meta()}}}})
+                                       .dump() +
+                                   "\n",
+                               grace);
+            }
+        } catch (...) {
+        }
+        watch.reset();
+        clear_cache();
+    }
     Json list_tools(const Cancellation&);
     Json exchange(std::string method, Json params, const Cancellation& cancel,
                   bool notify = false) {
@@ -470,6 +705,7 @@ struct McpClient::Impl {
             } catch (...) {
                 // A partial JSON line cannot be resumed safely on this stream.
                 connected = false;
+                stop_watch();
                 process.reset();
                 throw;
             }
@@ -477,7 +713,15 @@ struct McpClient::Impl {
                 return nullptr;
             ProcessLine line;
             try {
-                while (process->next(line, cancel)) {
+                while (watch || process->next(line, cancel)) {
+                    if (watch) {
+                        auto next = watch->next(cancel);
+                        if (next.value("id", Json()) == id) {
+                            reply = std::move(next);
+                            break;
+                        }
+                        continue;
+                    }
                     if (line.stderr_stream)
                         continue;
                     Json next = parse_json(line.text, provider_message_limit);
@@ -628,6 +872,12 @@ struct McpClient::Impl {
         return reply;
     }
     Json call(std::string method, Json params, const Cancellation& cancel) {
+        PerformanceSpan span(cache_options.performance, "mcp.client", method, params);
+        if (watch && observed_epoch != watch->epoch.load()) {
+            observed_epoch = watch->epoch.load();
+            clear_cache();
+        }
+        const auto epoch = watch ? watch->epoch.load() : 0;
         cancel.check();
         const bool cacheable = method == "tools/list" || method == "cymcp/tools/get" ||
                                method == "resources/list" || method == "resources/read" ||
@@ -639,6 +889,7 @@ struct McpClient::Impl {
                 if (found->second.expires > Clock::now()) {
                     ++stats.hits;
                     found->second.used = ++cache_tick;
+                    span.finish("ok", &found->second.value, true);
                     return found->second.value;
                 }
                 stats.bytes -= found->second.bytes;
@@ -653,7 +904,12 @@ struct McpClient::Impl {
         if (!response.contains("result"))
             throw Error("ProtocolError", "Missing MCP result");
         auto result = std::move(response["result"]);
-        if (cacheable && result.is_object() &&
+        const bool changed = watch && epoch != watch->epoch.load();
+        if (changed) {
+            observed_epoch = watch->epoch.load();
+            clear_cache();
+        }
+        if (!changed && cacheable && result.is_object() &&
             result.value("resultType", std::string("complete")) == "complete" &&
             result.contains("ttlMs") && result["ttlMs"].is_number_integer() &&
             cache_options.cache_entries && cache_options.cache_bytes &&
@@ -676,6 +932,8 @@ struct McpClient::Impl {
                 stats.entries = cache.size();
             }
         }
+        span.finish(result.is_object() && result.value("isError", false) ? "ToolError" : "ok",
+                    &result);
         return result;
     }
 };
@@ -699,6 +957,125 @@ McpClient::McpClient(std::string url, std::string token, McpClientOptions cache)
 #endif
 McpClient::~McpClient() {
     impl_->close();
+}
+void McpClient::start_notifications(Json filter, const Cancellation& input) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    if (!p.connected)
+        throw Error("InvalidState", "Connect MCP client first");
+    if (p.protocol != modern)
+        throw Error("Unsupported",
+                    "This peer uses legacy MCP; use TTL or explicit cache invalidation");
+    p.stop_watch();
+    p.watch = std::make_unique<Impl::Watch>();
+    auto* w = p.watch.get();
+    w->id = "subscription-" + random_token(16);
+    Json message = {{"jsonrpc", "2.0"},
+                    {"id", w->id},
+                    {"method", "subscriptions/listen"},
+                    {"params", {{"_meta", meta()}, {"notifications", std::move(filter)}}}};
+    if (p.process) {
+        try {
+            p.process->write(message.dump() + "\n", input);
+        } catch (...) {
+            p.watch.reset();
+            throw;
+        }
+        auto* process = p.process.get();
+        w->worker = std::jthread([w, process] {
+            try {
+                ProcessLine line;
+                while (process->next(line, w->lifetime)) {
+                    if (!line.stderr_stream)
+                        w->route(parse_json(line.text, provider_message_limit));
+                }
+                w->finish("UnexpectedEOF");
+            } catch (const Error& e) {
+                if (!w->lifetime.cancelled())
+                    w->finish(e.code);
+            } catch (...) {
+                w->finish("ProtocolError");
+            }
+        });
+    } else {
+#ifdef CYMCP_HAS_HTTP
+        HttpRequest req;
+        req.method = "POST";
+        req.url = p.url;
+        req.body = message.dump();
+        req.timeout = std::chrono::milliseconds(0);
+        req.max_response_bytes = std::numeric_limits<std::size_t>::max();
+        req.error_body_limit = 4096;
+        req.headers = {{"Authorization", "Bearer " + p.token},
+                       {"Content-Type", "application/json"},
+                       {"Accept", "text/event-stream"},
+                       {"MCP-Protocol-Version", modern},
+                       {"Mcp-Method", "subscriptions/listen"}};
+        w->worker = std::jthread([w, req = std::move(req)] {
+            try {
+                std::string line, data;
+                auto result =
+                    HttpClient().perform(req, w->lifetime, [&](const char* b, std::size_t n) {
+                        w->stream(b, n, line, data);
+                        return !w->lifetime.cancelled();
+                    });
+                w->finish(result.status == 200 ? "UnexpectedEOF" : "RemoteError");
+            } catch (const Error& e) {
+                if (!w->lifetime.cancelled())
+                    w->finish(e.code);
+            } catch (...) {
+                w->finish("ProtocolError");
+            }
+        });
+#else
+        p.watch.reset();
+        throw Error("Unsupported", "HTTP module disabled");
+#endif
+    }
+    auto cancel = input;
+    if (cancel.deadline == Clock::time_point::max())
+        cancel.deadline = Clock::now() + std::chrono::seconds(10);
+    try {
+        std::unique_lock wait(w->mutex);
+        while (!w->acknowledged && !w->ended) {
+            cancel.check();
+            w->wake.wait_for(wait, std::chrono::milliseconds(25));
+        }
+        if (!w->acknowledged)
+            throw Error("Unsupported", "Peer did not accept change notifications");
+    } catch (...) {
+        p.stop_watch();
+        throw;
+    }
+    p.observed_epoch = w->epoch.load();
+    p.clear_cache();
+}
+void McpClient::stop_notifications() noexcept {
+    std::lock_guard lock(impl_->mutex);
+    impl_->stop_watch();
+}
+Json McpClient::drain_notifications() {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    Json rows = Json::array();
+    if (p.watch) {
+        std::lock_guard inner(p.watch->mutex);
+        for (auto& n : p.watch->notifications)
+            rows.push_back(std::move(n));
+        p.watch->notifications.clear();
+    }
+    return rows;
+}
+Json McpClient::notification_status() const {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    if (!p.watch)
+        return {{"running", false}};
+    std::lock_guard inner(p.watch->mutex);
+    return {{"running", p.watch->acknowledged && !p.watch->ended},
+            {"error", p.watch->error},
+            {"filter", p.watch->accepted},
+            {"revision", p.watch->epoch.load()}};
 }
 void McpClient::connect(const Cancellation& input) {
     auto cancel = input;

@@ -1,4 +1,5 @@
 #pragma once
+#include <cymcp/changes.hpp>
 #include <cymcp/mcp.hpp>
 #include <cymcp/search.hpp>
 
@@ -15,6 +16,21 @@ class Commands {
     bool deferred_ = false;
     std::unique_ptr<cymcp::LocalHttpServer> server_;
     std::string token_, endpoint_;
+    std::shared_ptr<cymcp::ChangeFeed> changes_;
+    std::shared_ptr<cymcp::PerformanceMonitor> performance_;
+    static cymcp::Resource counter_resource(int value) {
+        auto text = std::make_shared<const std::string>(cymcp::Json({{"value", value}}).dump());
+        cymcp::Resource r;
+        r.uri = "app://chat-lab/counter";
+        r.name = "Counter state";
+        r.size = text->size();
+        r.cache_ttl = std::chrono::seconds(30);
+        r.read = [text](auto o, auto n, const auto& c) {
+            c.cancellation.check();
+            return text->substr(o, n);
+        };
+        return r;
+    }
 
   public:
     Commands()
@@ -68,6 +84,8 @@ class Commands {
                  const int value = args.at("value").template get<int>();
                  value_ = value;
                  ++writes_;
+                 if (changes_)
+                     resources_->replace(counter_resource(value));
                  return cymcp::Json{{"value", value}};
              }});
         gateway_ = std::make_unique<cymcp::ToolGateway>(registry_, cymcp::ToolGatewayOptions{},
@@ -78,6 +96,35 @@ class Commands {
     }
     void allow_changes(bool allow) {
         writable_ = allow;
+    }
+    void configure_services(cymcp::ResourceOptions options, bool notifications,
+                            std::shared_ptr<cymcp::PerformanceMonitor> monitor = {}) {
+        if (server_)
+            throw cymcp::Error("Busy", "Configure services before starting MCP");
+        const auto help = std::make_shared<const std::string>(
+            resources_->read("app://chat-lab/commands")["contents"][0]["text"].get<std::string>());
+        resources_ = std::make_shared<cymcp::ResourceRegistry>(cymcp::Policy::allow_all(),
+                                                               std::move(options));
+        cymcp::Resource r;
+        r.uri = "app://chat-lab/commands";
+        r.name = "Chat Lab commands";
+        r.size = help->size();
+        r.cache_ttl = std::chrono::seconds(30);
+        r.read = [help](auto o, auto n, const auto& c) {
+            c.cancellation.check();
+            return help->substr(o, n);
+        };
+        resources_->add(std::move(r));
+        performance_ = std::move(monitor);
+        registry_->set_performance_monitor(performance_);
+        if (notifications) {
+            changes_ = std::make_shared<cymcp::ChangeFeed>();
+            resources_->set_change_feed(changes_);
+            registry_->set_change_feed(changes_);
+            resources_->add(counter_resource(value_.load()));
+        }
+        gateway_ = std::make_unique<cymcp::ToolGateway>(registry_, cymcp::ToolGatewayOptions{},
+                                                        resources_);
     }
     bool changes_allowed() const {
         return writable_.load();
@@ -116,6 +163,8 @@ class Commands {
         token_ = cymcp::random_token();
         cymcp::McpServerOptions options;
         options.resources = resources_;
+        options.changes = changes_;
+        options.performance = performance_;
         mcp_ = std::make_unique<cymcp::McpServer>(*ai_registry(), "CyMCPSDK Chat Lab", options);
         auto server = std::make_unique<cymcp::LocalHttpServer>(
             token_, [this](const cymcp::Json& request, const cymcp::CallContext& context) {

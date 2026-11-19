@@ -1,6 +1,7 @@
 #include "provider_error.hpp"
 #include <algorithm>
 #include <cymcp/ai.hpp>
+#include <cymcp/performance.hpp>
 #include <cymcp/resources.hpp>
 #include <limits>
 #include <set>
@@ -125,6 +126,8 @@ ChatResult HttpChatProvider::send(Session& session, Json& messages, const CallCo
     std::map<std::string, std::string> names;
     for (std::size_t round = 0; options_.max_tool_rounds == 0 || round < options_.max_tool_rounds;
          ++round) {
+        if (input.context_bytes_limit && serialized_size(messages) > input.context_bytes_limit)
+            throw Error("ContextTooLarge", "Active tool turn exceeds the context budget");
         context.cancellation.check();
         ChatResult result;
         Json calls = Json::array();
@@ -322,12 +325,27 @@ struct Conversation::State {
     std::atomic_bool disconnect_requested{false};
     Json messages = Json::array();
     Json native_system_messages = Json::array();
+    std::unique_ptr<ContextWindow> context_window;
     std::size_t native_history_bytes = 2; // compact JSON size including the array brackets
     std::mutex turn, history, cancellation_mutex;
     Cancellation active;
     State(std::shared_ptr<Provider> p, std::string m)
         : provider(std::move(p)), model(std::move(m)) {}
 };
+void Conversation::configure_context(ContextOptions options) {
+    auto context = reserve({});
+    struct Release {
+        State& s;
+        ~Release() {
+            s.reserved.store(false);
+        }
+    } release{*state_};
+    std::lock_guard turn(state_->turn);
+    if (options.max_bytes &&
+        (!state_->provider->uses_host_history() || state_->provider->uses_native_turn_context()))
+        throw Error("Unsupported", "Native agents manage their own context");
+    state_->context_window = std::make_unique<ContextWindow>(std::move(options));
+}
 Conversation::Conversation(std::shared_ptr<Provider> provider, std::string model,
                            std::string system)
     : state_(std::make_shared<State>(std::move(provider), std::move(model))) {
@@ -495,7 +513,7 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
         session = s.session;
     }
     validate_content(content);
-    const std::size_t user_index = messages.size();
+    std::size_t user_index = messages.size();
     Json user = {{"role", "user"}};
     user["content"] = std::move(content);
     if (prefix_bytes > provider_message_limit)
@@ -503,6 +521,17 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
     const auto user_bytes =
         native_turn ? detail::json_size(user, provider_message_limit - prefix_bytes) : 0;
     messages.push_back(std::move(user));
+    const bool projected = !native_turn && s.context_window && s.context_window->enabled();
+    Json context_metrics = Json::object();
+    if (projected) {
+        auto projection = s.context_window->project(messages, context);
+        messages = std::move(projection.messages);
+        user_index = messages.size() - 1;
+        context_metrics = {{"omitted_messages", projection.omitted_messages},
+                           {"input_bytes", projection.input_bytes},
+                           {"summarized", projection.summarized}};
+        context.emit("ContextReduced", context_metrics);
+    }
     if (!native_turn)
         detail::json_size(messages, provider_message_limit);
     bool committed = false;
@@ -526,6 +555,9 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
             for (std::size_t i = user_index; i < messages.size(); ++i)
                 s.messages.push_back(std::move(messages[i]));
             s.native_history_bytes = bytes;
+        } else if (projected) {
+            for (std::size_t i = user_index; i < messages.size(); ++i)
+                s.messages.push_back(std::move(messages[i]));
         } else {
             s.messages = std::move(messages);
         }
@@ -536,6 +568,10 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
     std::size_t event_count = 0;
     std::string partial;
     CallContext measured = context;
+    PerformanceSpan performance(context.performance, "conversation", s.provider->identity(),
+                                messages);
+    if (projected)
+        measured.context_bytes_limit = s.context_window->max_bytes();
     measured.events = [&](const Event& event) {
         ++event_count;
         if (event.type == "TextDelta" && event.data.contains("text") &&
@@ -552,7 +588,8 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
         return Json{
             {"first_token_ms", first_token < 0 ? Json() : Json(first_token)},
             {"total_ms", std::chrono::duration<double, std::milli>(Clock::now() - started).count()},
-            {"events", event_count}};
+            {"events", event_count},
+            {"context", context_metrics}};
     };
     {
         std::lock_guard lock(s.history);
@@ -563,6 +600,7 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
     }
     auto failed = [&](const std::string& code, std::string_view reason,
                       std::string_view native = {}) {
+        performance.finish(code);
         const auto detail = s.provider->error_message(reason);
         const auto provider_code = s.provider->error_message(native);
         // A locally rejected attachment must not become a future provider input.
@@ -593,6 +631,7 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
     try {
         measured.emit("TurnStarted", {{"sessionId", session.id}});
         auto result = s.provider->send(session, messages, measured);
+        performance.finish_bytes("ok", result.text.size());
         context.cancellation.check();
         commit();
         result.metrics = metrics();
@@ -719,6 +758,8 @@ void Conversation::change_user_turn(std::size_t user_turn, std::optional<std::st
             original.swap(replacement);
             throw;
         }
+        if (s.context_window)
+            s.context_window->reset();
         return;
     }
     const auto next = std::find_if(first + 1, s.messages.end(), is_user);
@@ -737,6 +778,8 @@ void Conversation::change_user_turn(std::size_t user_turn, std::optional<std::st
         failures.push_back(std::move(failure));
     }
     s.messages.erase(std::remove_if(first, next, is_turn_message), next);
+    if (s.context_window)
+        s.context_window->reset();
     s.failed_turns.swap(failures);
     if (latest) {
         s.metrics = Json::object();
@@ -938,6 +981,8 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
             s.model = model;
             s.session = std::move(session);
             s.messages = std::move(messages);
+            if (s.context_window)
+                s.context_window->reset();
             s.native_system_messages = std::move(native_system_messages);
             s.native_history_bytes = native_history_bytes;
             s.metrics = snapshot.value("metrics", Json::object());
