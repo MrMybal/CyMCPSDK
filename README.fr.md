@@ -12,7 +12,7 @@
     <td width="300" align="right" valign="top">
       <p><sub>Licence de la bibliothèque</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
       <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.5.6</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
-      <p><sub>Compilation depuis les sources · exemple Windows x64</sub></p>
+      <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Télécharger Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
 </table>
@@ -25,7 +25,7 @@ Elle fournit des transports SDK/MCP natifs et un panneau de tchat Markdown CyUI 
 
 > **EN DÉVELOPPEMENT · 0.5.6**
 >
-> L'exemple Windows se compile depuis les sources. La distribution Linux/macOS et les
+> L'exemple de tchat Windows est disponible en ZIP portable. La distribution Linux/macOS et les
 > installations de dépendances restent en cours de réalisation. Consulter les [notes de version et problèmes connus](VERSION.fr.md).
 
 [![Catalogue et paramètres des fournisseurs dans Chat Lab](assets/screenshots/providers-fr.png)](assets/screenshots/providers-fr.png)
@@ -73,12 +73,13 @@ moteur d'inférence, modèle, runtime CUDA ou pilote n'est embarqué. Android es
 
 ## Installation
 
-Aucune release binaire GitHub n'est publiée pour la 0.5.6. Compiler les sources avec accès au dépôt.
+Télécharger [Chat Lab 0.5.6 pour Windows x64](https://github.com/MrMybal/CyMCPSDK/releases/download/v0.5.6/CyMCPSDK-ChatLab-0.5.6-windows-x64.zip).
+La release contient l'exemple de tchat. Compiler le SDK C++ depuis les sources pour l'intégrer dans votre app.
 Pour Chat Lab : Windows 10/11 x64, runtime Microsoft Visual C++ 2015–2022 x64 et DX11
 (repli WARP disponible). Garder `Documentation/`, `licenses/` et les notices à côté de l'exécutable.
 
-1. Compiler l'exemple Windows avec les commandes ci-dessous.
-2. Lancer `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
+1. Extraire le ZIP complet dans un dossier, ou compiler l'exemple avec les commandes ci-dessous.
+2. Lancer `cymcp_chat_app.exe` depuis ce dossier (`out/ChatLab-windows-x64/` après compilation).
 3. Garder **Automatic connection** activé. Les CLI installés, services locaux démarrés et clés API
    d'environnement sont détectés ; la première connexion disponible est préparée sans envoyer de message.
 4. Cliquer sur une autre connexion si nécessaire, puis envoyer avec **Entrée** (ou **Ctrl+Entrée**). Les vrais modèles sont proposés dans une liste.

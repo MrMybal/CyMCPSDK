@@ -12,7 +12,7 @@
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
       <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.6</strong></a><br><strong>IN DEVELOPMENT</strong></p>
-      <p><sub>Build from source · Windows x64 example</sub></p>
+      <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Download Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
 </table>
@@ -25,7 +25,7 @@ native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
 > **IN DEVELOPMENT · 0.5.6**
 >
-> The Windows example is available as a source build. Linux/macOS distribution and dependency
+> The Windows chat example is available as a portable ZIP. Linux/macOS distribution and dependency
 > installation work remain in progress. Read the [version notes and known issues](VERSION.md).
 
 [![Chat Lab provider catalogue and dedicated connection settings](assets/screenshots/providers-en.png)](assets/screenshots/providers-en.png)
@@ -72,12 +72,13 @@ or driver is bundled. Android is deferred.
 
 ## Installation
 
-No GitHub binary release is published for 0.5.6. Build from source with access to this repository.
+Download [Chat Lab 0.5.6 for Windows x64](https://github.com/MrMybal/CyMCPSDK/releases/download/v0.5.6/CyMCPSDK-ChatLab-0.5.6-windows-x64.zip).
+The release contains the chat example. Build the C++ SDK from source for integration into your own app.
 For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 runtime and DX11
 (WARP fallback available). Keep `Documentation/`, `licenses/` and notices beside the executable.
 
-1. Build the Windows example with the commands below.
-2. Run `out/ChatLab-windows-x64/cymcp_chat_app.exe`.
+1. Extract the complete ZIP into a folder, or build the example with the commands below.
+2. Run `cymcp_chat_app.exe` from the extracted folder (`out/ChatLab-windows-x64/` for a source build).
 3. Keep **Automatic connection** enabled. Installed CLIs, running local services and environment API keys
    are detected; the first available connection is prepared without sending a message.
 4. Click another detected connection if needed, then send with **Enter** (or **Ctrl+Enter**). Actual models appear in a dropdown.

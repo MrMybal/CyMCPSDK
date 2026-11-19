@@ -1,5 +1,6 @@
 name: Native SDK
-on: [push, pull_request, workflow_dispatch]
+# Builds and releases run locally. This definition requires explicit manual activation.
+on: workflow_dispatch
 jobs:
   desktop:
     strategy:
