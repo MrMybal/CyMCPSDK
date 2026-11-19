@@ -170,6 +170,7 @@ fourni avec les distributions de l'application. Ce tableau est un index de leurs
 <details>
 <summary><strong>AI Usage</strong></summary>
 
+- [Prompt d’intégration](Docs/IntegrationPrompt.fr.md) et [prompt de mise à jour](Docs/UpdatePrompt.fr.md).
 - [Guide IA principal](Documentation/DocAI.md) — architecture, compilation et contrats d'intégration.
 - [Intégration détaillée](Docs/Integration.md) — référence développeur française existante.
 - [Profils fournisseurs](Docs/Providers.md) — référence française existante des transports.

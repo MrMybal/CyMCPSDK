@@ -169,6 +169,7 @@ folder supplied with redistributed application builds. This table indexes their 
 <details>
 <summary><strong>AI Usage</strong></summary>
 
+- [Application integration prompt](Docs/IntegrationPrompt.fr.md) and [upgrade prompt](Docs/UpdatePrompt.fr.md) (French).
 - [Primary agent guide](Documentation/DocAI.md) — architecture, build and integration contracts.
 - [Detailed integration](Docs/Integration.md) — existing French developer reference.
 - [Provider profiles](Docs/Providers.md) — existing French transport reference.
