@@ -389,7 +389,7 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                     auto value = registry_.invoke(params["name"].get<std::string>(),
                                                   params.value("arguments", Json::object()), input);
                     result = {
-                        {"content", Json::array({{{"type", "text"}, {"text", value.dump()}}})},
+                        {"content", Json::array({{{"type", "text"}, {"text", options_.result_text ? options_.result_text(value) : value.dump()}}})},
                         {"isError", false}};
                     if (value.is_object())
                         result["structuredContent"] = value;

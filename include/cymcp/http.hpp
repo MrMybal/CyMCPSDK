@@ -31,13 +31,18 @@ struct Url {
     bool loopback = false;
 };
 Url parse_url(const std::string&);
+// Host authentication returns an opaque identity from the transport Bearer credential.
+using TokenAuthenticator = std::function<std::string(std::string_view)>;
 using JsonEndpoint = std::function<Json(const Json&, const CallContext&)>;
 class LocalHttpServer {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
   public:
-    LocalHttpServer(std::string token, JsonEndpoint endpoint, std::size_t workers = 4);
+    LocalHttpServer(std::string token, JsonEndpoint endpoint, std::size_t workers = 4,
+                    std::size_t max_request_bytes = provider_message_limit);
+    LocalHttpServer(TokenAuthenticator, JsonEndpoint endpoint, std::size_t workers = 4,
+                    std::size_t max_request_bytes = provider_message_limit);
     ~LocalHttpServer();
     LocalHttpServer(const LocalHttpServer&) = delete;
     LocalHttpServer& operator=(const LocalHttpServer&) = delete;

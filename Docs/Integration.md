@@ -228,3 +228,14 @@ une invocation précise d’un paquet vérifié.
 - https://learn.chatgpt.com/docs/app-server
 - https://code.claude.com/docs/en/headless
 - https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
+
+
+## Host contracts (0.7.1)
+
+Operation::schema_validation optionally supplies both check and validate callbacks for
+a host schema dialect. Both are required; default validation is unchanged. The host
+is responsible for complete declaration/value validation and safe local references.
+LocalHttpServer accepts a TokenAuthenticator returning an opaque authenticated principal,
+plus a request byte bound. Never derive identity from business JSON. The strong-token
+constructor remains supported. McpServerOptions::result_text optionally projects text
+for existing clients; structuredContent and output validation retain the original result.
