@@ -1,13 +1,29 @@
 #include "mcp_headers.hpp"
+#include <charconv>
 #include <cymcp/mcp.hpp>
 #include <optional>
 #include <set>
 namespace cymcp {
 namespace {
-using mcp_http::modern;
 using mcp_http::legacy;
+using mcp_http::modern;
 using mcp_http::version_key;
 constexpr auto caps_key = "io.modelcontextprotocol/clientCapabilities";
+std::size_t page_offset(const Json& params, const std::string& generation, std::size_t size) {
+    if (!params.contains("cursor"))
+        return 0;
+    const auto cursor = params.at("cursor").get<std::string>();
+    const auto prefix = generation + ":";
+    if (!cursor.starts_with(prefix))
+        throw Error("InvalidParameters", "Catalogue cursor is invalid or stale");
+    const auto tail = std::string_view(cursor).substr(prefix.size());
+    std::size_t offset = 0;
+    const auto parsed = std::from_chars(tail.data(), tail.data() + tail.size(), offset);
+    if (tail.empty() || parsed.ec != std::errc{} || parsed.ptr != tail.data() + tail.size() ||
+        offset > size)
+        throw Error("InvalidParameters", "Catalogue cursor is outside the current snapshot");
+    return offset;
+}
 Json rpc_error(const Json& id, int code, const std::string& message) {
     return {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", code}, {"message", message}}}};
 }
@@ -94,8 +110,34 @@ struct McpServer::ActiveCall {
         }
     }
 };
-McpServer::McpServer(const Registry& registry, std::string name)
-    : registry_(registry), name_(std::move(name)) {}
+McpServer::McpServer(const Registry& registry, std::string name, McpServerOptions options)
+    : registry_(registry), name_(std::move(name)), options_(std::move(options)) {
+    if (!options_.page_size || options_.page_size > 1000 || options_.cache_ttl.count() < 0)
+        throw Error("InvalidOptions", "Invalid MCP catalogue options");
+}
+Json McpServer::tool_page(const Json& params) {
+    auto snapshot = registry_.catalogue();
+    std::string generation;
+    {
+        std::lock_guard lock(mutex_);
+        if (snapshot != catalogue_) {
+            catalogue_ = snapshot;
+            catalogue_generation_ = random_token(16);
+        }
+        generation = catalogue_generation_;
+    }
+    const auto offset = page_offset(params, generation, snapshot->size());
+    const auto end = std::min(snapshot->size(), offset + options_.page_size);
+    Json tools = Json::array();
+    for (auto n = offset; n < end; ++n)
+        tools.push_back((*snapshot)[n]);
+    Json result = {
+        {"tools", tools}, {"ttlMs", options_.cache_ttl.count()}, {"cacheScope", "private"}};
+    if (end < snapshot->size())
+        result["nextCursor"] = generation + ":" + std::to_string(end);
+    result["_meta"] = {{"com.cymcp/catalogueRevision", generation}};
+    return result;
+}
 void McpServer::cancel_all() {
     std::lock_guard lock(mutex_);
     for (const auto& [id, cancel] : active_)
@@ -103,7 +145,9 @@ void McpServer::cancel_all() {
 }
 std::shared_ptr<McpServer::ActiveCall> McpServer::reserve(const Json& request,
                                                           const CallContext& input, Json& error) {
-    if (!request.is_object() || request.value("method", Json()) != "tools/call" ||
+    if (!request.is_object() ||
+        (request.value("method", Json()) != "tools/call" &&
+         request.value("method", Json()) != "resources/read") ||
         !request.contains("id") ||
         !(request["id"].is_string() || request["id"].is_number_integer()))
         return {};
@@ -170,15 +214,19 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                 return rpc_error(id, -32602, "Client capabilities metadata required");
         }
         Json result;
+        Json capabilities = {{"tools", Json::object()},
+                             {"experimental", {{"com.cymcp/toolLookup", Json::object()}}}};
+        if (options_.resources)
+            capabilities["resources"] = Json::object();
         if (method == "server/discover") {
             if (!current)
                 return rpc_error(id, -32602, "Discovery requires version metadata");
             result = {
                 {"supportedVersions", Json::array({modern, legacy, mcp_http::june_2025})},
-                {"capabilities", {{"tools", Json::object()}}},
+                {"capabilities", capabilities},
                 {"_meta",
                  {{"io.modelcontextprotocol/serverInfo", {{"name", name_}, {"version", version}}}}},
-                {"ttlMs", 0},
+                {"ttlMs", options_.cache_ttl.count()},
                 {"cacheScope", "private"}};
         } else if (method == "initialize") {
             if (!mcp_http::legacy_version(params.value("protocolVersion", std::string())))
@@ -188,7 +236,7 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                 initialized_ = true;
             }
             result = {{"protocolVersion", params["protocolVersion"]},
-                      {"capabilities", {{"tools", Json::object()}}},
+                      {"capabilities", capabilities},
                       {"serverInfo", {{"name", name_}, {"version", version}}}};
         } else {
             if (!current) {
@@ -199,14 +247,35 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
             if (method == "ping")
                 result = Json::object();
             else if (method == "tools/list") {
+                result = tool_page(params);
+            } else if (method == "cymcp/tools/get") {
+                result = {{"tool", registry_.describe(params.at("name").get<std::string>())},
+                          {"ttlMs", options_.cache_ttl.count()},
+                          {"cacheScope", "private"}};
+            } else if (method == "resources/list" && options_.resources) {
+                auto revision = options_.resources->revision();
+                auto first = options_.resources->list(0, 1);
+                const auto generation = "resources-" + std::to_string(revision);
+                const auto offset =
+                    page_offset(params, generation, first.at("total").get<std::size_t>());
+                auto page = options_.resources->list(offset, options_.page_size);
+                if (page.at("revision") != revision)
+                    throw Error("InvalidParameters",
+                                "Resource catalogue changed; restart pagination");
+                result = {{"resources", page.at("resources")},
+                          {"ttlMs", options_.cache_ttl.count()},
+                          {"cacheScope", "private"}};
+                const auto end = offset + result.at("resources").size();
+                if (end < page.at("total").get<std::size_t>())
+                    result["nextCursor"] = generation + ":" + std::to_string(end);
+            } else if (method == "resources/templates/list" && options_.resources) {
                 if (params.contains("cursor"))
-                    return rpc_error(id, -32602,
-                                     "This server returns its bounded tool catalogue in one page");
-                result = {{"tools", registry_.describe()}};
-                if (current) {
-                    result["ttlMs"] = 0;
-                    result["cacheScope"] = "private";
-                }
+                    throw Error("InvalidParameters", "Resource templates have no next page");
+                result = {{"resourceTemplates", Json::array()},
+                          {"ttlMs", options_.cache_ttl.count()},
+                          {"cacheScope", "private"}};
+            } else if (method == "resources/read" && options_.resources) {
+                result = options_.resources->read(params.at("uri").get<std::string>(), input);
             } else if (method == "tools/call") {
                 if (!params.contains("name") || !params["name"].is_string() ||
                     (params.contains("arguments") && !params["arguments"].is_object()))
@@ -219,6 +288,15 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
                         {"isError", false}};
                     if (value.is_object())
                         result["structuredContent"] = value;
+                    if (options_.resources && value.is_object() && value.contains("resource") &&
+                        value["resource"].is_object() &&
+                        value["resource"]
+                            .value("uri", std::string())
+                            .starts_with("cymcp://result/"))
+                        result["content"].push_back({{"type", "resource_link"},
+                                                     {"uri", value["resource"]["uri"]},
+                                                     {"name", "Tool result"},
+                                                     {"mimeType", "application/json"}});
                 } catch (const Error& e) {
                     result = {
                         {"content",
@@ -236,7 +314,12 @@ Json McpServer::dispatch(const Json& request, const CallContext& input) {
     } catch (const Json::exception&) {
         return rpc_error(id, -32602, "Invalid method parameters");
     } catch (const Error& e) {
-        return rpc_error(id, -32603, e.what());
+        return rpc_error(id,
+                         e.code == "InvalidParameters" || e.code == "UnknownOperation" ? -32602
+                         : e.code == "ResourceNotFound"                                ? -32002
+                         : e.code == "AccessDenied"                                    ? -32001
+                                                                                       : -32603,
+                         e.what());
     } catch (...) {
         return rpc_error(id, -32603, "Internal error");
     }
@@ -316,6 +399,23 @@ struct McpClient::Impl {
     std::string session_id;
     std::int64_t counter = 0;
     bool connected = false;
+    bool tool_lookup = false;
+    McpClientOptions cache_options;
+    struct Cached {
+        Json value;
+        Clock::time_point expires;
+        std::size_t bytes;
+        std::uint64_t used;
+    };
+    std::map<std::string, Cached> cache;
+    McpCacheStats stats;
+    std::uint64_t cache_tick = 0;
+    void clear_cache() {
+        cache.clear();
+        stats.bytes = 0;
+        stats.entries = 0;
+        tool_headers.reset();
+    }
     std::mutex mutex;
     using HeaderCatalogue = std::map<std::string, std::optional<HeaderParameters>>;
     std::optional<HeaderCatalogue> tool_headers;
@@ -351,6 +451,7 @@ struct McpClient::Impl {
         process.reset();
         session_id.clear();
         connected = false;
+        clear_cache();
     }
     Json list_tools(const Cancellation&);
     Json exchange(std::string method, Json params, const Cancellation& cancel,
@@ -380,6 +481,13 @@ struct McpClient::Impl {
                     if (line.stderr_stream)
                         continue;
                     Json next = parse_json(line.text, provider_message_limit);
+                    if (next.is_object() &&
+                        (next.value("method", Json()) == "notifications/tools/list_changed" ||
+                         next.value("method", Json()) == "notifications/resources/list_changed" ||
+                         next.value("method", Json()) == "notifications/resources/updated")) {
+                        clear_cache();
+                        continue;
+                    }
                     // JSON-RPC answers an undeterminable request with id null: on this ordered
                     // channel it is the reply to the request just written.
                     if (next.is_object() && next.contains("error") && next.contains("id") &&
@@ -520,19 +628,70 @@ struct McpClient::Impl {
         return reply;
     }
     Json call(std::string method, Json params, const Cancellation& cancel) {
-        auto response = exchange(std::move(method), std::move(params), cancel);
+        cancel.check();
+        const bool cacheable = method == "tools/list" || method == "cymcp/tools/get" ||
+                               method == "resources/list" || method == "resources/read" ||
+                               method == "resources/templates/list";
+        const auto key = cacheable ? method + "\n" + params.dump() : std::string();
+        if (cacheable) {
+            auto found = cache.find(key);
+            if (found != cache.end()) {
+                if (found->second.expires > Clock::now()) {
+                    ++stats.hits;
+                    found->second.used = ++cache_tick;
+                    return found->second.value;
+                }
+                stats.bytes -= found->second.bytes;
+                cache.erase(found);
+                stats.entries = cache.size();
+            }
+            ++stats.misses;
+        }
+        auto response = exchange(method, params, cancel);
         if (response.contains("error"))
             throw Error("RemoteError", response["error"].dump());
         if (!response.contains("result"))
             throw Error("ProtocolError", "Missing MCP result");
-        return response["result"];
+        auto result = std::move(response["result"]);
+        if (cacheable && result.is_object() &&
+            result.value("resultType", std::string("complete")) == "complete" &&
+            result.contains("ttlMs") && result["ttlMs"].is_number_integer() &&
+            cache_options.cache_entries && cache_options.cache_bytes &&
+            cache_options.max_cache_ttl.count() > 0) {
+            const auto ttl = std::min<std::int64_t>(result["ttlMs"].get<std::int64_t>(),
+                                                    cache_options.max_cache_ttl.count());
+            const auto bytes = result.dump().size();
+            if (ttl > 0 && bytes <= cache_options.cache_bytes) {
+                while (!cache.empty() && (cache.size() >= cache_options.cache_entries ||
+                                          bytes > cache_options.cache_bytes - stats.bytes)) {
+                    auto oldest = std::min_element(
+                        cache.begin(), cache.end(),
+                        [](const auto& a, const auto& b) { return a.second.used < b.second.used; });
+                    stats.bytes -= oldest->second.bytes;
+                    cache.erase(oldest);
+                }
+                cache.emplace(key, Cached{result, Clock::now() + std::chrono::milliseconds(ttl),
+                                          bytes, ++cache_tick});
+                stats.bytes += bytes;
+                stats.entries = cache.size();
+            }
+        }
+        return result;
     }
 };
-McpClient::McpClient(ProcessOptions options) : impl_(std::make_unique<Impl>()) {
+McpClient::McpClient(ProcessOptions options, McpClientOptions cache)
+    : impl_(std::make_unique<Impl>()) {
+    if (cache.max_cache_ttl.count() < 0 || cache.max_cache_ttl > std::chrono::hours(24))
+        throw Error("InvalidOptions", "Invalid MCP cache TTL");
+    impl_->cache_options = cache;
     impl_->options = std::move(options);
 }
 #ifdef CYMCP_HAS_HTTP
-McpClient::McpClient(std::string url, std::string token) : impl_(std::make_unique<Impl>()) {
+McpClient::McpClient(std::string url, std::string token, McpClientOptions cache)
+    : impl_(std::make_unique<Impl>()) {
+    if (cache.max_cache_ttl.count() < 0 || cache.max_cache_ttl > std::chrono::hours(24))
+        throw Error("InvalidOptions", "Invalid MCP cache TTL");
+    impl_->cache_options = cache;
     parse_url(url);
     impl_->url = std::move(url);
     impl_->token = std::move(token);
@@ -550,7 +709,8 @@ void McpClient::connect(const Cancellation& input) {
     if (p.connected)
         throw Error("InvalidState", "MCP client already connected");
     p.protocol = modern;
-    p.tool_headers.reset();
+    p.clear_cache();
+    p.tool_lookup = false;
     try {
         if (p.url.empty())
             p.process = std::make_unique<Process>(p.options);
@@ -572,10 +732,18 @@ void McpClient::connect(const Cancellation& input) {
             p.protocol = negotiated.at("protocolVersion").get<std::string>();
             if (!mcp_http::legacy_version(p.protocol))
                 throw Error("Unsupported", "Peer negotiated an unsupported MCP protocol version");
+            p.tool_lookup = negotiated.value("capabilities", Json::object())
+                                .value("experimental", Json::object())
+                                .contains("com.cymcp/toolLookup");
             p.exchange("notifications/initialized", Json::object(), cancel, true);
         } else if (!discovery.contains("result") ||
                    !discovery["result"].contains("supportedVersions"))
             throw Error("ProtocolError", "Invalid discovery response");
+        if (discovery.contains("result"))
+            p.tool_lookup = discovery["result"]
+                                .value("capabilities", Json::object())
+                                .value("experimental", Json::object())
+                                .contains("com.cymcp/toolLookup");
         p.connected = true;
     } catch (...) {
         p.close();
@@ -621,11 +789,11 @@ Json McpClient::Impl::list_tools(const Cancellation& cancel) {
             }
             tools.push_back(tool);
         }
-        auto cursor = result.value("nextCursor", std::string());
-        if (cursor.empty()) {
+        if (!result.contains("nextCursor")) {
             tool_headers = std::move(headers);
             return tools;
         }
+        auto cursor = result.at("nextCursor").get<std::string>();
         if (!seen.insert(cursor).second)
             throw Error("ProtocolError", "Cyclic tool pagination");
         params["cursor"] = cursor;
@@ -638,13 +806,90 @@ Json McpClient::call_tool(const std::string& name, const Json& args, const Cance
     if (!p.connected)
         throw Error("InvalidState", "Connect MCP client first");
     try {
-        if (!p.url.empty() && p.protocol == modern && !p.tool_headers)
-            p.list_tools(input);
-        return p.call("tools/call", {{"name", name}, {"arguments", args}}, input);
+        if (!p.url.empty() && p.protocol == modern) {
+            if (p.tool_lookup) {
+                const auto tool = p.call("cymcp/tools/get", {{"name", name}}, input).at("tool");
+                HeaderParameters parameters;
+                std::set<std::string> names;
+                const bool valid = collect_headers(tool.at("inputSchema"), Json::json_pointer(),
+                                                   true, parameters, names);
+                if (!p.tool_headers)
+                    p.tool_headers.emplace();
+                (*p.tool_headers)[name] =
+                    valid ? std::optional<HeaderParameters>(std::move(parameters)) : std::nullopt;
+            } else if (!p.tool_headers)
+                p.list_tools(input);
+        }
+        auto result = p.call("tools/call", {{"name", name}, {"arguments", args}}, input);
+        if (result.value("isError", false))
+            p.clear_cache();
+        return result;
     } catch (const Error& e) {
         if (e.code == "UnexpectedEOF" || e.code == "ProcessClosed")
             p.close();
         throw;
     }
+}
+Json McpClient::list_tools_page(std::optional<std::string> cursor, const Cancellation& cancel) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    if (!p.connected)
+        throw Error("InvalidState", "Connect MCP client first");
+    Json args = Json::object();
+    if (cursor)
+        args["cursor"] = std::move(*cursor);
+    return p.call("tools/list", std::move(args), cancel);
+}
+Json McpClient::get_tool(const std::string& name, const Cancellation& cancel) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    if (!p.connected)
+        throw Error("InvalidState", "Connect MCP client first");
+    if (p.tool_lookup)
+        return p.call("cymcp/tools/get", {{"name", name}}, cancel).at("tool");
+    for (const auto& tool : p.list_tools(cancel))
+        if (tool.at("name") == name)
+            return tool;
+    throw Error("UnknownOperation", "Peer does not expose this tool");
+}
+Json McpClient::list_resources(const Cancellation& cancel) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    if (!p.connected)
+        throw Error("InvalidState", "Connect MCP client first");
+    Json all = Json::array(), params = Json::object();
+    std::set<std::string> seen;
+    for (std::size_t page = 0; page < 1000; ++page) {
+        auto result = p.call("resources/list", params, cancel);
+        if (!result.contains("resources") || !result.at("resources").is_array())
+            throw Error("ProtocolError", "Missing resource catalogue");
+        for (const auto& resource : result.at("resources")) {
+            if (all.size() >= 10000)
+                throw Error("ResponseTooLarge", "Resource catalogue exceeds limit");
+            all.push_back(resource);
+        }
+        if (!result.contains("nextCursor"))
+            return all;
+        const auto cursor = result.at("nextCursor").get<std::string>();
+        if (!seen.insert(cursor).second)
+            throw Error("ProtocolError", "Cyclic resource pagination");
+        params["cursor"] = cursor;
+    }
+    throw Error("ResponseTooLarge", "Too many resource pages");
+}
+Json McpClient::read_resource(const std::string& uri, const Cancellation& cancel) {
+    auto& p = *impl_;
+    std::lock_guard lock(p.mutex);
+    if (!p.connected)
+        throw Error("InvalidState", "Connect MCP client first");
+    return p.call("resources/read", {{"uri", uri}}, cancel);
+}
+void McpClient::clear_cache() {
+    std::lock_guard lock(impl_->mutex);
+    impl_->clear_cache();
+}
+McpCacheStats McpClient::cache_stats() const {
+    std::lock_guard lock(impl_->mutex);
+    return impl_->stats;
 }
 } // namespace cymcp

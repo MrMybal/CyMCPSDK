@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.5.6</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.6.0</strong></a><br><strong>IN DEVELOPMENT</strong></p>
       <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Download Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ A modular C++20 library for application developers who want AI agents to use the
 conversations inside the app, and connections to other applications' tools. It provides
 native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
-> **IN DEVELOPMENT · 0.5.6**
+> **IN DEVELOPMENT · 0.6.0**
 >
 > The Windows chat example is available as a portable ZIP. Linux/macOS distribution and dependency
 > installation work remain in progress. Read the [version notes and known issues](VERSION.md).
@@ -67,6 +67,10 @@ pre-fills conventional settings; remote APIs display their catalogue for an expl
 Host policies can restrict operations or explicitly permit all registered actions. Native agent
 permissions remain separate. No Python runtime, AI CLI, inference engine, model, CUDA runtime
 or driver is bundled. Android is deferred.
+
+Large tool catalogues use on-demand discovery while keeping every command accessible.
+Native MCP resources, private TTL caches and chunked results reduce traffic. Native resource
+grep and optional workspace ripgrep are described in the [optimization guide](Documentation/Documentation.html#/en/optimization).
 
 ---
 

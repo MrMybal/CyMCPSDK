@@ -4,7 +4,7 @@ title: CyMCPSDK
 description: Ajouter conversations IA et outils applicatifs à une application C++ native.
 section: Guides
 order: 0
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Choisir un parcours {#workflows}
@@ -20,6 +20,7 @@ optionnel affiche les conversations.
 | Configurer un tchat et ses outils | [Chat Lab](doc:chat-lab) |
 | Ajouter la bibliothèque à votre application | [Intégration C++](doc:integration) |
 | Permettre à une IA ou une autre app d'appeler vos opérations | [Opérations applicatives](doc:operations) |
+| Charger les outils à la demande et rechercher du texte | [Optimisation et grep](doc:optimization) |
 | Choisir les règles d'accès | [Droits](doc:permissions) |
 | Utiliser un moteur local installé | [Moteurs locaux](doc:local-engines) |
 

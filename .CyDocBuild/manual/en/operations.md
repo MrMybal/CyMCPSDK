@@ -5,7 +5,7 @@ description: Share one typed registry between native calls, SDK JSON, MCP and su
 section: SDK
 parent: integration
 order: 1
-revision: 1
+revision: 2
 ---
 
 ## Define a registry {#registry}
@@ -68,3 +68,6 @@ Supply a shared registry in `ProviderConfig.tools` for supported API providers o
 tools. The registry owns the policy for actual app operations. For other CLIs, expose MCP and pass
 their provider-native MCP configuration. ACP uses `settings.mcp_servers` as an ACP-format array.
 See [permissions](doc:permissions) before exposing mutations.
+
+For large registries, see [on-demand tools, resources and grep](doc:optimization). These features
+preserve the original commands and policy while reducing what is loaded into an AI's context.

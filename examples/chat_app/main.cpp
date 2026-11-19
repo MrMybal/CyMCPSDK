@@ -386,14 +386,15 @@ struct App {
             attachment_host.open(*file, false);
             return;
         }
-        if (target.size() > 8192 || std::any_of(target.begin(), target.end(),
-                [](unsigned char c) { return c <= 32 || c == 127 || c == '\\'; }))
+        if (target.size() > 8192 || std::any_of(target.begin(), target.end(), [](unsigned char c) {
+                return c <= 32 || c == 127 || c == '\\';
+            }))
             throw Error("InvalidUrl", "Invalid link");
         if (!target.starts_with("mailto:"))
             parse_url(target.substr(0, target.find('#')));
         const auto url = std::filesystem::u8path(target).wstring();
-        if (reinterpret_cast<INT_PTR>(ShellExecuteW(window, L"open", url.c_str(), nullptr,
-                                                   nullptr, SW_SHOWNORMAL)) <= 32)
+        if (reinterpret_cast<INT_PTR>(
+                ShellExecuteW(window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
             throw Error("FileError", "Cannot open link");
     }
     ChatPanelOptions panel_options() {
@@ -422,7 +423,9 @@ struct App {
         options.paste = [this](std::string& text, std::vector<std::filesystem::path>& paths) {
             return clipboard.paste(window, text, paths);
         };
-        options.preview_attachment = [this](const auto& path) { return attachment_host.preview(path); };
+        options.preview_attachment = [this](const auto& path) {
+            return attachment_host.preview(path);
+        };
         return options;
     }
     explicit App(HWND w)
@@ -559,6 +562,13 @@ struct App {
         auto command_config = config.value("app_commands", Json::object());
         app_tools = command_config.value("attach_to_ai", false);
         commands.allow_changes(command_config.value("allow_changes", false));
+        commands.deferred_tools(command_config.value("deferred_tools", false));
+        if (command_config.contains("workspace")) {
+            const auto& workspace = command_config.at("workspace");
+            commands.configure_workspace(
+                std::filesystem::u8path(workspace.at("root").get<std::string>()),
+                std::filesystem::u8path(workspace.value("ripgrep", std::string())));
+        }
         if (command_config.value("mcp", false))
             commands.start();
         if (config.contains("history")) {
@@ -594,7 +604,7 @@ struct App {
             if (transport == "app-server-stdio" || transport == "responses-sse" ||
                 transport == "messages-sse" || transport == "chat-completions-sse" ||
                 transport == "chat-ndjson")
-                connection.provider.tools = commands.registry();
+                connection.provider.tools = commands.ai_registry();
             else
                 throw Error("Unsupported",
                             "This CLI uses native MCP tools; attach its MCP configuration instead");
@@ -842,9 +852,13 @@ struct App {
             confirm_delete = false;
         }
         const auto delete_title = cyui::tr("Delete this turn?") + "###delete-turn";
-        if (ImGui::BeginPopupModal(delete_title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextUnformatted(cyui::tr("The message and its reply will be removed from the conversation history.").c_str());
-            if (cyui::button(cyui::trLabel("Cancel").c_str()) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        if (ImGui::BeginPopupModal(delete_title.c_str(), nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextUnformatted(
+                cyui::tr("The message and its reply will be removed from the conversation history.")
+                    .c_str());
+            if (cyui::button(cyui::trLabel("Cancel").c_str()) ||
+                ImGui::IsKeyPressed(ImGuiKey_Escape))
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
             ImGui::SameLine();
@@ -854,9 +868,8 @@ struct App {
             }
             ImGui::EndPopup();
         }
-        attachment_host.draw(chat.state(), [this](const std::string& link) {
-            action([&] { open_link(link); });
-        });
+        attachment_host.draw(chat.state(),
+                             [this](const std::string& link) { action([&] { open_link(link); }); });
         if (!chat.state().busy)
             clipboard.discard_unused(panel.pending_attachments());
         if (page == 0) {
@@ -870,14 +883,16 @@ struct App {
             const float close_width = ImGui::CalcTextSize(close_label.c_str(), nullptr, true).x +
                                       2 * ImGui::GetStyle().FramePadding.x;
             const float tabs_width = std::max(1.f, ImGui::GetContentRegionAvail().x - close_width -
-                                                   ImGui::GetStyle().ItemSpacing.x);
+                                                       ImGui::GetStyle().ItemSpacing.x);
             const auto fixed = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-            ImGui::BeginChild("##settings-tabs", {tabs_width, ImGui::GetFrameHeight()}, ImGuiChildFlags_None, fixed);
+            ImGui::BeginChild("##settings-tabs", {tabs_width, ImGui::GetFrameHeight()},
+                              ImGuiChildFlags_None, fixed);
             if (ImGui::BeginTabBar("##settings")) {
                 const char* labels[]{"Providers", "Logs", "Help"};
                 for (int index = 1; index <= 3; ++index) {
                     if (ImGui::BeginTabItem(cyui::trLabel(labels[index - 1]).c_str(), nullptr,
-                                            requested == index ? ImGuiTabItemFlags_SetSelected : 0)) {
+                                            requested == index ? ImGuiTabItemFlags_SetSelected
+                                                               : 0)) {
                         if (!requested || requested == index)
                             last_settings_page = page = index;
                         ImGui::EndTabItem();

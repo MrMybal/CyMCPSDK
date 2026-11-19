@@ -5,7 +5,7 @@ description: Partager un registre typé entre appels natifs, SDK JSON, MCP et ou
 section: SDK
 parent: integration
 order: 1
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Définir un registre {#registry}
@@ -69,3 +69,6 @@ Fournir un registre partagé dans `ProviderConfig.tools` pour les API compatible
 dynamiques Codex. Ce registre porte la politique des opérations réelles de l'app. Pour les autres
 CLI, exposer MCP et passer leur configuration MCP native. ACP utilise `settings.mcp_servers`
 sous forme de tableau au format ACP. Consulter les [droits](doc:permissions) avant d'exposer des mutations.
+
+Voir [les outils à la demande, ressources et grep](doc:optimization) pour réduire les échanges
+tout en conservant toutes les commandes et leur politique d'accès.

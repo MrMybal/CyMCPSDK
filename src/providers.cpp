@@ -1,7 +1,16 @@
 #include <cymcp/ai.hpp>
+#include <limits>
 namespace cymcp {
 ProviderDiscoveryHints builtin_discovery(const std::string&);
 namespace {
+std::size_t tool_threshold(const Json& settings) {
+    if (!settings.value("deferred_tools", true))
+        return std::numeric_limits<std::size_t>::max();
+    const auto value = settings.value("tool_discovery_threshold", 32LL);
+    if (value < 0)
+        throw Error("InvalidOptions", "Tool discovery threshold must be nonnegative");
+    return static_cast<std::size_t>(value);
+}
 std::chrono::milliseconds duration(const Json& settings, const char* key, long long fallback) {
     auto value = settings.value(key, fallback);
     if (value < 1 || value > 86400000)
@@ -41,10 +50,9 @@ Json builtin_settings(const std::string& id) {
     if (api || compatible) {
         // Agent conventions: unlimited tool rounds and output (the model maximum), no turn
         // deadline; timeout_ms only detects a silent connection.
-        Json settings = {{"timeout_ms", 600000},
-                         {"turn_timeout_ms", 0},
-                         {"max_tool_rounds", 0},
-                         {"max_output_tokens", 0}};
+        Json settings = {{"timeout_ms", 600000},   {"turn_timeout_ms", 0},
+                         {"max_tool_rounds", 0},   {"max_output_tokens", 0},
+                         {"deferred_tools", true}, {"tool_discovery_threshold", 32}};
         if (id == "openai")
             settings["base_url"] = "https://api.openai.com/v1";
         else if (id == "anthropic")
@@ -63,6 +71,8 @@ Json builtin_settings(const std::string& id) {
                      {"turn_timeout_ms", 0},
                      {"allow_all_actions", false}};
     if (id == "codex") {
+        settings["deferred_tools"] = true;
+        settings["tool_discovery_threshold"] = 32;
         settings["approval_policy"] = "never";
     } else if (id == "codex-exec") {
         return settings;
@@ -116,6 +126,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                         config.settings.value("approval_policy", std::string("never"));
                     options.tools = config.tools;
                     options.approvals = allow ? Policy::allow_all() : config.approvals;
+                    options.tool_discovery_threshold = tool_threshold(config.settings);
                     options.request_handler = config.request_handler;
                     return std::make_shared<CodexProvider>(std::move(options));
                 });
@@ -285,6 +296,7 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                     [protocol](const ProviderConfig& config) {
                         ApiOptions options;
                         options.protocol = protocol;
+                        options.tool_discovery_threshold = tool_threshold(config.settings);
                         if (protocol == ApiProtocol::Ollama && config.settings.contains("think"))
                             options.ollama_think = config.settings.at("think");
                         options.base_url = config.settings.value("base_url", std::string());
@@ -293,32 +305,35 @@ ProviderRegistry::ProviderRegistry(bool builtins) {
                         options.max_tool_rounds = count(config.settings, "max_tool_rounds");
                         options.max_output_tokens = config.settings.value("max_output_tokens", 0);
                         options.timeout = duration(config.settings, "timeout_ms", 600000);
-                        options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
+                        options.turn_timeout =
+                            optional_duration(config.settings, "turn_timeout_ms");
                         return std::make_shared<ApiProvider>(std::move(options));
                     });
     }
     for (const std::string id : {"openai-compatible", "llama.cpp", "lmstudio"}) {
-        add_builtin({id,
-                     id == "llama.cpp"  ? "llama.cpp server"
-                     : id == "lmstudio" ? "LM Studio"
-                                        : "Compatible Chat Completions",
-                     "chat-completions-sse",
-                     "optional-api-key",
-                     {true, false, true, true, true, true, true, false, false}},
-                    [id](const ProviderConfig& config) {
-                        HttpChatOptions options;
-                        options.base_url = config.settings.value(
-                            "base_url", std::string(id == "lmstudio"    ? "http://127.0.0.1:1234/v1"
-                                                    : id == "llama.cpp" ? "http://127.0.0.1:8080/v1"
-                                                                        : "http://127.0.0.1:9931/v1"));
-                        options.api_key = config.api_key;
-                        options.tools = config.tools;
-                        options.max_tool_rounds = count(config.settings, "max_tool_rounds");
-                        options.max_output_tokens = config.settings.value("max_output_tokens", 0);
-                        options.timeout = duration(config.settings, "timeout_ms", 600000);
-                        options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
-                        return std::make_shared<HttpChatProvider>(std::move(options));
-                    });
+        add_builtin(
+            {id,
+             id == "llama.cpp"  ? "llama.cpp server"
+             : id == "lmstudio" ? "LM Studio"
+                                : "Compatible Chat Completions",
+             "chat-completions-sse",
+             "optional-api-key",
+             {true, false, true, true, true, true, true, false, false}},
+            [id](const ProviderConfig& config) {
+                HttpChatOptions options;
+                options.tool_discovery_threshold = tool_threshold(config.settings);
+                options.base_url = config.settings.value(
+                    "base_url", std::string(id == "lmstudio"    ? "http://127.0.0.1:1234/v1"
+                                            : id == "llama.cpp" ? "http://127.0.0.1:8080/v1"
+                                                                : "http://127.0.0.1:9931/v1"));
+                options.api_key = config.api_key;
+                options.tools = config.tools;
+                options.max_tool_rounds = count(config.settings, "max_tool_rounds");
+                options.max_output_tokens = config.settings.value("max_output_tokens", 0);
+                options.timeout = duration(config.settings, "timeout_ms", 600000);
+                options.turn_timeout = optional_duration(config.settings, "turn_timeout_ms");
+                return std::make_shared<HttpChatProvider>(std::move(options));
+            });
     }
 }
 void ProviderRegistry::add(ProviderDescriptor descriptor, ProviderFactory factory) {
@@ -342,14 +357,10 @@ Json defaults(const ProviderDescriptor& d) {
     auto settings = d.default_settings;
     auto endpoint = settings.value("base_url", h.default_endpoint);
     settings.erase("base_url");
-    return {{"settings", std::move(settings)},
-            {"base_url", endpoint},
-            {"endpoint_env", h.endpoint_env},
-            {"credential_env", h.api_key_env},
-            {"executables", h.executables},
-            {"npm_packages", h.npm_packages},
-            {"login_arguments", h.login_arguments},
-            {"local_service", h.local_service}};
+    return {{"settings", std::move(settings)},      {"base_url", endpoint},
+            {"endpoint_env", h.endpoint_env},       {"credential_env", h.api_key_env},
+            {"executables", h.executables},         {"npm_packages", h.npm_packages},
+            {"login_arguments", h.login_arguments}, {"local_service", h.local_service}};
 }
 } // namespace
 Json ProviderRegistry::describe() const {

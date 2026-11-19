@@ -23,6 +23,7 @@ struct Server {
 std::string sse(const Json& value) {
     return "data: " + value.dump() + "\n\n";
 }
+#include "deferred_providers.hpp"
 int main(int argc, char** argv) {
     try {
         if (argc != 2)
@@ -381,8 +382,9 @@ int main(int argc, char** argv) {
             bool output = body.at("messages").back().at("role") == "tool";
             std::string data;
             if (mode == 2) {
-                data += sse({{"choices", Json::array({{{"index", 0},
-                                                       {"delta", {{"content", "Partial text"}}}}})}});
+                data += sse(
+                    {{"choices",
+                      Json::array({{{"index", 0}, {"delta", {{"content", "Partial text"}}}}})}});
                 data += sse({{"error",
                               {{"code", 503},
                                {"message", wire_refusal},
@@ -674,6 +676,7 @@ int main(int argc, char** argv) {
         check(registry.describe().dump().find("test-key") == std::string::npos,
               "Provider catalogue contains no credentials");
         check(!invalid_body.load(), "All native API protocol checks passed");
+        deferred_provider_tests();
         std::cout << checks << " provider checks passed\n";
         return 0;
     } catch (const std::exception& error) {

@@ -27,7 +27,33 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("server", help="Path to the built cymcp_example executable")
     parser.add_argument("--transport", choices=["both", "stdio", "http"], default="both")
+    parser.add_argument("--gateway-server", help="Optional cymcp_mcp_optimization_tests executable")
     args = parser.parse_args()
+    if args.gateway_server:
+        async with stdio_client(StdioServerParameters(command=args.gateway_server, args=["--serve"])) as streams:
+            async with ClientSession(*streams) as session:
+                initialized = await session.initialize()
+                assert initialized.capabilities.resources is not None
+                names, cursor = set(), None
+                while True:
+                    page = await session.list_tools(cursor=cursor)
+                    names.update(item.name for item in page.tools)
+                    cursor = page.nextCursor
+                    if cursor is None:
+                        break
+                assert len(names) == 5
+                result = await session.call_tool("cy_tools_call", {"name": "large"})
+                assert not result.isError and result.content[1].type == "resource_link"
+                manifest = await session.read_resource(result.content[1].uri)
+                uri = json.loads(manifest.contents[0].text)["firstUri"]
+                pieces = []
+                while uri:
+                    part = await session.read_resource(uri)
+                    pieces.append(part.contents[0].text)
+                    uri = part.model_dump(by_alias=True)["_meta"]["com.cymcp/chunk"].get("nextUri")
+                assert json.loads("".join(pieces))["text"] == "x" * 200000 + " é🙂"
+                assert not (await session.list_resources()).resources
+        print("Official MCP client passed paged gateway tools, resource links and complete UTF-8 chunks")
     if args.transport in ("both", "stdio"):
         async with stdio_client(StdioServerParameters(command=args.server, args=["mcp"])) as streams:
             await check(*streams)

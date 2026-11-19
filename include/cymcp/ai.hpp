@@ -65,10 +65,12 @@ class Provider {
 struct HttpChatOptions {
     std::string base_url = "http://127.0.0.1:9931/v1", api_key;
     std::shared_ptr<const Registry> tools;
-    std::size_t max_tool_rounds = 0;            // 0 = unlimited
-    std::chrono::milliseconds timeout{600000};  // idle timeout of each HTTP request
-    int max_output_tokens = 0;                  // 0 = server/model default (not sent)
-    std::chrono::milliseconds turn_timeout{0};  // optional whole-turn deadline; 0 = none
+    std::size_t max_tool_rounds = 0;           // 0 = unlimited
+    std::chrono::milliseconds timeout{600000}; // idle timeout of each HTTP request
+    int max_output_tokens = 0;                 // 0 = server/model default (not sent)
+    std::chrono::milliseconds turn_timeout{0}; // optional whole-turn deadline; 0 = none
+    // Above this many tools, use on-demand discovery. size_t max preserves full definitions.
+    std::size_t tool_discovery_threshold = 32;
 };
 class HttpChatProvider final : public Provider {
     HttpChatOptions options_;
@@ -98,6 +100,7 @@ struct CodexOptions {
     std::shared_ptr<const Registry> tools;
     Policy approvals;
     ProviderRequestHandler request_handler;
+    std::size_t tool_discovery_threshold = 32;
 };
 class CodexProvider final : public Provider {
     struct Impl;
@@ -154,6 +157,7 @@ struct ApiOptions {
     std::chrono::milliseconds timeout{600000}; // idle timeout of each HTTP request
     std::chrono::milliseconds turn_timeout{0}; // optional whole-turn deadline; 0 = none
     Json ollama_think = nullptr; // omitted, on/off, or a reasoning level supported by the model
+    std::size_t tool_discovery_threshold = 32;
 };
 class ApiProvider final : public Provider {
     ApiOptions options_;

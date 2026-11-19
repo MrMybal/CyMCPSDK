@@ -1,4 +1,5 @@
 #include <cymcp/core.hpp>
+#include <cymcp/resources.hpp>
 #ifdef CONSUMER_HAS_AI
 #include <cymcp/ai.hpp>
 #endif
@@ -16,6 +17,12 @@ int main() {
         conversation.status().at("state") != "disconnected")
         return 3;
 #endif
-    cymcp::Registry operations(cymcp::Policy::allow_all());
-    return operations.describe().empty() ? 0 : 1;
+    auto operations = std::make_shared<cymcp::Registry>(cymcp::Policy::allow_all());
+    cymcp::ToolGateway gateway(operations);
+    return operations->describe().empty() && gateway.tools()->describe().size() == 5 &&
+                   gateway.tools()
+                       ->invoke("cy_tools_search", cymcp::Json::object())["tools"]
+                       .empty()
+               ? 0
+               : 1;
 }

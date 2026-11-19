@@ -1,10 +1,20 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.5.6 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.6.0 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 
 ## Work on the SDK
+
+- Large API/Codex tool registries use five discovery tools by default (threshold 32).
+  Search, load a full schema, then call the original operation. Every operation remains
+  accessible and its policy is always enforced. `deferred_tools=false` opts out.
+- MCP resources use bounded manifests/chunks. Follow firstUri/nextUri; never assume
+  a preview is the entire result or retry a mutation to recover an expired handle.
+- Resource grep is native. Optional FileSearch uses a separately supplied ripgrep
+  executable and an explicit host-selected root; no workspace is exposed by default.
+- MCP client caches only read-only positive-TTL results, privately per client.
+  Use clear_cache() after known external changes. Never cache tools/call results.
 
 - Read the host project's instructions before changing its integration.
 - Use `CyMCP::Core` for operations and policies, `CyMCP::MCP` for tool transport,

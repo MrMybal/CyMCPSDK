@@ -1,5 +1,6 @@
 #include "provider_error.hpp"
 #include <cymcp/ai.hpp>
+#include <cymcp/resources.hpp>
 #include <limits>
 #include <set>
 namespace cymcp {
@@ -207,7 +208,8 @@ struct Tools {
 };
 // Result recorded for a call that never ran because the turn was cancelled or timed out.
 std::string interrupted_output(const std::string& code) {
-    return Json({{"error", {{"code", code}, {"message", "Tool call interrupted before completion"}}}})
+    return Json({{"error",
+                  {{"code", code}, {"message", "Tool call interrupted before completion"}}}})
         .dump();
 }
 std::string protocol_id(ApiProtocol protocol) {
@@ -298,6 +300,7 @@ ApiProvider::ApiProvider(ApiOptions options)
                : options.protocol == ApiProtocol::Ollama            ? "ollama"
                                                                     : "openrouter"),
       options_(std::move(options)) {
+    options_.tools = compact_tools(std::move(options_.tools), options_.tool_discovery_threshold);
     if (options_.base_url.empty())
         switch (options_.protocol) {
         case ApiProtocol::OpenAIResponses:
@@ -385,9 +388,8 @@ Json ApiProvider::list_models(const CallContext& input) {
             if (!row.is_object() || !row.contains("id") || !row.at("id").is_string() ||
                 row.at("id").get<std::string>().empty())
                 throw Error("ProtocolError", "Invalid model catalogue entry");
-            if (options_.protocol == ApiProtocol::AnthropicMessages &&
-                row.contains("max_tokens") && row.at("max_tokens").is_number_integer() &&
-                row.at("max_tokens").get<int>() > 0) {
+            if (options_.protocol == ApiProtocol::AnthropicMessages && row.contains("max_tokens") &&
+                row.at("max_tokens").is_number_integer() && row.at("max_tokens").get<int>() > 0) {
                 std::lock_guard lock(limits_mutex_);
                 output_limits_[row.at("id").get<std::string>()] = row.at("max_tokens").get<int>();
             }
@@ -446,6 +448,7 @@ ChatResult ApiProvider::send(Session& session, Json& messages, const CallContext
         HttpChatOptions opts{options_.base_url,        options_.api_key, options_.tools,
                              options_.max_tool_rounds, options_.timeout, options_.max_output_tokens,
                              options_.turn_timeout};
+        opts.tool_discovery_threshold = options_.tool_discovery_threshold;
         return HttpChatProvider(std::move(opts)).send(session, messages, context);
     }
     Tools tools(options_.tools);

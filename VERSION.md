@@ -2,7 +2,21 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
-## 0.5.6 — In development
+## 0.6.0 — In development
+
+- Add optional on-demand tool discovery without removing access to any application command.
+  API/Codex registries above 32 tools use it automatically; full definitions remain selectable.
+- Cache immutable operation descriptions and positive-TTL MCP discovery/resource reads.
+  MCP clients support individual schema lookup, paged catalogues and explicit invalidation.
+- Add native MCP resources, UTF-8/binary chunks and private, expiring large-result handles.
+  Original tools retain their original output schemas and behavior.
+- Add streaming literal grep over application resources and an optional ripgrep adapter
+  with regex, glob filters, ignored-file opt-in, paged matches and bounded file reads.
+- Chat Lab can enable compact tools and a read-only workspace in its configuration.
+  See the [optimization and search guide](Documentation/Documentation.html#/en/optimization).
+- Validation runs locally. The latest downloadable Chat Lab ZIP remains 0.5.6.
+
+## 0.5.6
 
 - Fix the fifteen issues recorded in the conformance audit and add regression coverage.
   All twelve Windows suites and all eight Linux suites pass. [Fixes and verification (French)](Docs/Audit-0.5.6.md)

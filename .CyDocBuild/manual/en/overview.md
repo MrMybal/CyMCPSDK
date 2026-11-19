@@ -4,7 +4,7 @@ title: CyMCPSDK
 description: Add AI conversations and application tools to a native C++ application.
 section: Guides
 order: 0
-revision: 2
+revision: 3
 ---
 
 ## Choose your workflow {#workflows}
@@ -19,6 +19,7 @@ to CLI agents, APIs or a local model service. The optional CyUI panel displays c
 | Configure a chat and use its tools | [Chat Lab](doc:chat-lab) |
 | Add the library to your application | [C++ integration](doc:integration) |
 | Let an AI or another app call your operations | [Application operations](doc:operations) |
+| Discover tools on demand, read chunks and search text | [Optimization and grep](doc:optimization) |
 | Choose access rules | [Permissions](doc:permissions) |
 | Use an installed local engine | [Local engines](doc:local-engines) |
 

@@ -30,7 +30,7 @@ std::string path_utf8(const std::filesystem::path&);
 // conventional authorization fields, removes control characters and bounds the UTF-8 text.
 std::string redact_error_message(std::string_view message,
                                  const std::vector<std::string>& secrets = {});
-inline constexpr const char* version = "0.5.6";
+inline constexpr const char* version = "0.6.0";
 class Error : public std::runtime_error {
   public:
     std::string code;
@@ -102,11 +102,23 @@ class Registry {
     mutable std::mutex mutex_;
     std::map<std::string, std::shared_ptr<const Operation>> operations_;
     Policy policy_;
+    mutable std::shared_ptr<const Json> catalogue_;
+    mutable std::shared_ptr<const Json> summaries_;
+    std::uint64_t revision_ = 0;
+    void register_operation(Operation, bool replace);
 
   public:
     explicit Registry(Policy policy = {});
     void add(Operation operation);
+    void replace(Operation operation);
+    void remove(const std::string& name);
     Json describe() const;
+    Json describe(const std::string& name) const;
+    // Immutable catalogue snapshot, rebuilt only after a registry change.
+    std::shared_ptr<const Json> catalogue() const;
+    std::shared_ptr<const Json> summaries() const;
+    std::size_t size() const;
+    std::uint64_t revision() const;
     Json invoke(const std::string& name, const Json& arguments,
                 const CallContext& context = {}) const;
 };

@@ -1,6 +1,7 @@
 #include "provider_error.hpp"
 #include <algorithm>
 #include <cymcp/ai.hpp>
+#include <cymcp/resources.hpp>
 #include <limits>
 #include <set>
 #include <sstream>
@@ -65,6 +66,7 @@ std::string latest_text(const Json& messages) {
 } // namespace
 HttpChatProvider::HttpChatProvider(HttpChatOptions opts)
     : Provider("openai-compatible"), options_(std::move(opts)) {
+    options_.tools = compact_tools(std::move(options_.tools), options_.tool_discovery_threshold);
     while (!options_.base_url.empty() && options_.base_url.back() == '/')
         options_.base_url.pop_back();
     parse_url(options_.base_url);
@@ -540,7 +542,8 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
             event.data.at("text").is_string()) {
             const auto& delta = event.data.at("text").get_ref<const std::string&>();
             if (first_token < 0 && !delta.empty())
-                first_token = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+                first_token =
+                    std::chrono::duration<double, std::milli>(Clock::now() - started).count();
             partial += delta;
         }
         context.emit(event.type, event.data);
@@ -558,7 +561,8 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
         s.last_error_message.clear();
         s.last_provider_code.clear();
     }
-    auto failed = [&](const std::string& code, std::string_view reason, std::string_view native = {}) {
+    auto failed = [&](const std::string& code, std::string_view reason,
+                      std::string_view native = {}) {
         const auto detail = s.provider->error_message(reason);
         const auto provider_code = s.provider->error_message(native);
         // A locally rejected attachment must not become a future provider input.
@@ -571,14 +575,19 @@ ChatResult Conversation::send_reserved(Json content, const CallContext& context,
             s.last_error_message = detail;
             s.last_provider_code = provider_code;
             s.phase = s.disconnect_requested.load() ? "disconnected"
-                      : code == "Cancelled" ? "interrupted" : "failed";
+                      : code == "Cancelled"         ? "interrupted"
+                                                    : "failed";
             if (committed)
-                s.failed_turns.push_back({{"after", s.messages.size()}, {"code", code}, {"provider_code", provider_code},
-                                          {"message", detail}, {"partial", std::move(partial)}});
+                s.failed_turns.push_back({{"after", s.messages.size()},
+                                          {"code", code},
+                                          {"provider_code", provider_code},
+                                          {"message", detail},
+                                          {"partial", std::move(partial)}});
         }
         if (context.events)
-            context.events({code == "Cancelled" ? "TurnCancelled" : "TurnFailed",
-                            {{"code", code}, {"message", detail}, {"provider_code", provider_code}}});
+            context.events(
+                {code == "Cancelled" ? "TurnCancelled" : "TurnFailed",
+                 {{"code", code}, {"message", detail}, {"provider_code", provider_code}}});
         return Error(code, detail, provider_code);
     };
     try {
@@ -758,7 +767,8 @@ Json Conversation::transcript() const {
         const auto& partial = failure->at("partial").get_ref<const std::string&>();
         if (rows.back().at("role") != "assistant" || rows.back().contains("tool_calls")) {
             rows.push_back({{"role", "assistant"}, {"content", partial}});
-        } else if (auto& content = rows.back().at("content"); content.is_string() &&
+        } else if (auto& content = rows.back().at("content");
+                   content.is_string() &&
                    partial.starts_with(content.get_ref<const std::string&>())) {
             content = partial;
         }
@@ -784,8 +794,10 @@ void Conversation::disconnect() noexcept {
 }
 Json Conversation::status() const {
     std::lock_guard lock(state_->history);
-    return {{"state", state_->phase}, {"last_error", state_->last_error},
-            {"last_error_message", state_->last_error_message}, {"last_provider_code", state_->last_provider_code},
+    return {{"state", state_->phase},
+            {"last_error", state_->last_error},
+            {"last_error_message", state_->last_error_message},
+            {"last_provider_code", state_->last_provider_code},
             {"metrics", state_->metrics}};
 }
 Json Conversation::checkpoint() const {
@@ -819,7 +831,8 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
     if (!turn.owns_lock())
         throw Error("Busy", "Conversation busy");
     Json messages;
-    std::string id, model, native_model, system, previous_error, previous_message, previous_provider_code;
+    std::string id, model, native_model, system, previous_error, previous_message,
+        previous_provider_code;
     Json failed_turns;
     Json native_system_messages = Json::array();
     const bool native_turn = s.provider->uses_native_turn_context();
@@ -853,8 +866,10 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
         native_model = snapshot.at("session").at("model").get<std::string>();
         id = snapshot.at("session").at("id").get<std::string>();
         previous_error = snapshot.value("last_error", std::string());
-        previous_message = s.provider->error_message(snapshot.value("last_error_message", std::string()));
-        previous_provider_code = s.provider->error_message(snapshot.value("last_provider_code", std::string()));
+        previous_message =
+            s.provider->error_message(snapshot.value("last_error_message", std::string()));
+        previous_provider_code =
+            s.provider->error_message(snapshot.value("last_provider_code", std::string()));
         failed_turns = snapshot.value("failed_turns", Json::array());
         if (!failed_turns.is_array())
             throw Error("InvalidCheckpoint", "Invalid failed turns");
@@ -867,7 +882,8 @@ void Conversation::restore(const Json& snapshot, const CallContext& input) {
             previous_index = after.get<std::size_t>();
             failure["message"] =
                 s.provider->error_message(failure.at("message").get_ref<const std::string&>());
-            failure["provider_code"] = s.provider->error_message(failure.value("provider_code", std::string()));
+            failure["provider_code"] =
+                s.provider->error_message(failure.value("provider_code", std::string()));
         }
         // Older versions saved locally rejected inputs and later unsuccessful retries. Only
         // repair the unanswered user suffix, preserving completed messages and tool results.

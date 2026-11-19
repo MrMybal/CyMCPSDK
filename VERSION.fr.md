@@ -2,7 +2,21 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
-## 0.5.6 — En développement
+## 0.6.0 — En développement
+
+- Ajouter la découverte d'outils à la demande sans retirer aucune commande de l'application.
+  Les registres API/Codex de plus de 32 outils l'utilisent par défaut ; le mode complet reste disponible.
+- Mettre en cache les descriptions immuables et les lectures MCP avec une durée de validité positive.
+  Ajouter les catalogues paginés, le schéma individuel et l'invalidation explicite.
+- Ajouter les ressources MCP, les morceaux UTF-8/binaires et les références privées temporaires
+  des gros résultats. Les outils d'origine conservent leurs schémas et leur comportement.
+- Ajouter le grep natif des ressources et un adaptateur ripgrep optionnel : regex, filtres,
+  inclusion explicite des fichiers ignorés, résultats paginés et lecture bornée des fichiers.
+- Chat Lab peut activer les outils compacts et un dossier en lecture seule par configuration.
+  Voir le [guide d'optimisation et recherche](Documentation/Documentation.html#/fr/optimization).
+- La validation reste locale. Le dernier ZIP Chat Lab téléchargeable reste la version 0.5.6.
+
+## 0.5.6
 
 - Corriger les quinze écarts de l’audit de conformité et ajouter leurs tests de régression.
   Les douze suites Windows et les huit suites Linux passent. [Corrections et validations](Docs/Audit-0.5.6.md)

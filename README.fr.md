@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Licence de la bibliothèque</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.5.6</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.6.0</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
       <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Télécharger Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ Une bibliothèque C++20 modulaire pour les développeurs qui veulent permettre a
 d'utiliser leur app, intégrer des conversations et accéder aux outils d'autres applications.
 Elle fournit des transports SDK/MCP natifs et un panneau de tchat Markdown CyUI optionnel.
 
-> **EN DÉVELOPPEMENT · 0.5.6**
+> **EN DÉVELOPPEMENT · 0.6.0**
 >
 > L'exemple de tchat Windows est disponible en ZIP portable. La distribution Linux/macOS et les
 > installations de dépendances restent en cours de réalisation. Consulter les [notes de version et problèmes connus](VERSION.fr.md).
@@ -68,6 +68,10 @@ catalogue pour un choix explicite du modèle.
 Les politiques hôtes peuvent restreindre les opérations ou autoriser explicitement toutes les
 actions enregistrées. Les droits de l'agent natif restent distincts. Aucun runtime Python, CLI IA,
 moteur d'inférence, modèle, runtime CUDA ou pilote n'est embarqué. Android est reporté.
+
+Les gros catalogues utilisent la découverte à la demande en gardant toutes les commandes accessibles.
+Ressources MCP, caches privés avec TTL et résultats par morceaux réduisent les échanges. Le grep
+natif et ripgrep optionnel sont décrits dans le [guide optimisation](Documentation/Documentation.html#/fr/optimization).
 
 ---
 

@@ -576,7 +576,9 @@ int main(int argc, char** argv) {
                                  {{"action", "raw-log"}, {"enabled", true}, {"page", 2}},
                                  {{"action", "click-close"}, {"page", 0}, {"draft", "**Unsent**"}},
                                  {{"action", "help-key"}, {"page", 3}},
-                                 {{"action", "close-key"}, {"page", 0}, {"draft", "**Unsent**"},
+                                 {{"action", "close-key"},
+                                  {"page", 0},
+                                  {"draft", "**Unsent**"},
                                   {"messages", 0}}}));
             report.push_back(run.finish());
         }
@@ -640,21 +642,32 @@ int main(int argc, char** argv) {
             private_directory(folder);
             const auto turns = folder / "turn-starts.txt";
             std::ofstream(turns, std::ios::trunc).close();
-            Json native = {{"provider", "codex"}, {"model", "gpt-6.2-sol"},
-                           {"process", {{"executable", argv[2]},
-                                        {"arguments", {"--codex-fixture", "--fixture-account-models"}},
-                                        {"environment", {{"CYMCP_FIXTURE_TURNS_FILE", path_utf8(turns)}}}}}};
+            Json native = {{"provider", "codex"},
+                           {"model", "gpt-6.2-sol"},
+                           {"process",
+                            {{"executable", argv[2]},
+                             {"arguments", {"--codex-fixture", "--fixture-account-models"}},
+                             {"environment", {{"CYMCP_FIXTURE_TURNS_FILE", path_utf8(turns)}}}}}};
             Run run(argv[1], folder, native,
                     Json::array({{{"action", "connect"}, {"model", "gpt-6.2-sol"}},
                                  {{"action", "draft"}, {"text", "account-model-test"}},
-                                 {{"action", "click-send"}, {"error", "UnknownModel"},
-                                  {"turn_error_contains", refusal}, {"provider_code", "model_not_found"},
-                                  {"reply", ""}, {"messages", 2}},
-                                 {{"action", "select-model"}, {"id", "gpt-6-luna"},
-                                  {"model", "gpt-6-luna"}, {"same_session", true}, {"messages", 2}},
+                                 {{"action", "click-send"},
+                                  {"error", "UnknownModel"},
+                                  {"turn_error_contains", refusal},
+                                  {"provider_code", "model_not_found"},
+                                  {"reply", ""},
+                                  {"messages", 2}},
+                                 {{"action", "select-model"},
+                                  {"id", "gpt-6-luna"},
+                                  {"model", "gpt-6-luna"},
+                                  {"same_session", true},
+                                  {"messages", 2}},
                                  {{"action", "draft"}, {"text", "account-model-test"}},
-                                 {{"action", "click-send"}, {"reply", "Hello fixture"},
-                                  {"model", "gpt-6-luna"}, {"same_session", true}, {"messages", 4}}}));
+                                 {{"action", "click-send"},
+                                  {"reply", "Hello fixture"},
+                                  {"model", "gpt-6-luna"},
+                                  {"same_session", true},
+                                  {"messages", 4}}}));
             report.push_back(run.finish());
             std::ifstream journal(run.journal);
             std::size_t failures = 0;
@@ -664,19 +677,26 @@ int main(int argc, char** argv) {
                 const auto row = parse_json(line);
                 if (row.at("code") == "UnknownModel" && row.at("operation") == "generating") {
                     ++failures;
-                    check(row.at("message") == refusal && row.at("provider_code") == "model_not_found",
-                          "A stringified Codex backend rejection retains only its explanation and code");
+                    check(row.at("message") == refusal &&
+                              row.at("provider_code") == "model_not_found",
+                          "A stringified Codex backend rejection retains only its explanation and "
+                          "code");
                 }
             }
             std::ifstream count(turns);
-            check(failures == 1 &&
-                      std::count(std::istreambuf_iterator<char>(count), std::istreambuf_iterator<char>(), '\n') == 2,
+            check(failures == 1 && std::count(std::istreambuf_iterator<char>(count),
+                                              std::istreambuf_iterator<char>(), '\n') == 2,
                   "Changing the model leaves both turns visible and sends only on explicit clicks");
         }
-        for (bool writable : {false, true}) {
-            Json mcp_config = {{"provider", "demo"},
-                               {"app_commands", {{"allow_changes", writable}}}};
-            Run run(argv[1], output / (writable ? "mcp-allow" : "mcp-deny"), mcp_config,
+        for (const auto [writable, deferred] : {std::pair{false, false}, std::pair{true, false},
+                                                std::pair{false, true}, std::pair{true, true}}) {
+            Json mcp_config = {
+                {"provider", "demo"},
+                {"app_commands", {{"allow_changes", writable}, {"deferred_tools", deferred}}}};
+            Run run(argv[1],
+                    output / ((writable ? "mcp-allow" : "mcp-deny") +
+                              std::string(deferred ? "-deferred" : "")),
+                    mcp_config,
                     Json::array(
                         {{{"action", "wait"}, {"wait_ms", 1800}, {"counter", writable ? 42 : 0}}}),
                     true);
@@ -699,9 +719,23 @@ int main(int argc, char** argv) {
                   "Real app MCP rejects browser origins");
             McpClient client(ready.at("endpoint"), ready.at("token"));
             client.connect(timeout);
-            check(client.list_tools(timeout).size() == 2,
+            check(client.list_tools(timeout).size() == (deferred ? 5 : 2),
                   "External client discovers the app's actual command registry");
-            auto read_value = client.call_tool("get_counter", Json::object(), timeout);
+            check(client.list_resources(timeout).size() == 1 &&
+                      client.read_resource("app://chat-lab/commands", timeout).contains("contents"),
+                  "Real Chat Lab exposes its read-only MCP command resource");
+            auto invoke = [&](const std::string& name, const Json& arguments) {
+                return deferred
+                           ? client.call_tool("cy_tools_call",
+                                              {{"name", name}, {"arguments", arguments}}, timeout)
+                           : client.call_tool(name, arguments, timeout);
+            };
+            if (deferred)
+                check(client.call_tool("cy_tools_search", Json::object(),
+                                       timeout)["structuredContent"]["tools"]
+                              .size() == 2,
+                      "Compact Chat Lab still discovers every original app command");
+            auto read_value = invoke("get_counter", Json::object());
             check(read_value.at("structuredContent").at("value") == 0,
                   "External MCP reads visible app state");
             request.headers.erase("Origin");
@@ -728,19 +762,16 @@ int main(int argc, char** argv) {
                            : sdk_write.status == 403 &&
                                  sdk_result.at("error").at("code") == "AccessDenied",
                   "External SDK mutations obey the same live permission policy");
-            check(client.call_tool("get_counter", Json::object(), timeout)
-                          .at("structuredContent")
-                          .at("value") == (writable ? 41 : 0),
+            check(invoke("get_counter", Json::object()).at("structuredContent").at("value") ==
+                      (writable ? 41 : 0),
                   "Direct SDK changes are visible immediately through MCP");
-            auto changed = client.call_tool("set_counter", {{"value", 42}}, timeout);
+            auto changed = invoke("set_counter", {{"value", 42}});
             check(changed.value("isError", false) == !writable,
                   "MCP mutations obey the app's live policy");
-            check(client.call_tool("get_counter", Json::object(), timeout)
-                          .at("structuredContent")
-                          .at("value") == (writable ? 42 : 0),
+            check(invoke("get_counter", Json::object()).at("structuredContent").at("value") ==
+                      (writable ? 42 : 0),
                   "MCP changes reach the real app state");
-            check(client.call_tool("set_counter", {{"value", 1000001}}, timeout)
-                      .value("isError", false),
+            check(invoke("set_counter", {{"value", 1000001}}).value("isError", false),
                   "MCP rejects values outside the schema bounds");
             report.push_back(run.finish());
         }

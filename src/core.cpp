@@ -6,7 +6,8 @@ namespace cymcp {
 Error::Error(std::string value, std::string message)
     : std::runtime_error(std::move(message)), code(std::move(value)) {}
 Error::Error(std::string value, std::string message, std::string native)
-    : std::runtime_error(std::move(message)), code(std::move(value)), provider_code(std::move(native)) {}
+    : std::runtime_error(std::move(message)), code(std::move(value)),
+      provider_code(std::move(native)) {}
 std::string path_utf8(const std::filesystem::path& path) {
     auto text = path.u8string();
     return std::string(reinterpret_cast<const char*>(text.data()), text.size());
@@ -70,6 +71,20 @@ Json dispatch_app(const Registry& registry, const Json& request, const CallConte
     throw Error("UnknownMethod", "Unknown application method");
 }
 void Registry::add(Operation op) {
+    register_operation(std::move(op), false);
+}
+void Registry::replace(Operation op) {
+    register_operation(std::move(op), true);
+}
+void Registry::remove(const std::string& name) {
+    std::lock_guard lock(mutex_);
+    if (!operations_.erase(name))
+        throw Error("UnknownOperation", "Unknown operation");
+    ++revision_;
+    catalogue_.reset();
+    summaries_.reset();
+}
+void Registry::register_operation(Operation op, bool replace) {
     if (op.name.empty() || op.name.size() > 128 ||
         !std::regex_match(op.name, std::regex("[A-Za-z0-9_.-]+")) || !op.handler)
         throw Error("InvalidOperation", "Operation needs a portable name and handler");
@@ -83,23 +98,75 @@ void Registry::add(Operation op) {
                     "Operation parameters and declared structured outputs must be object schemas");
     std::lock_guard lock(mutex_);
     const auto name = op.name;
-    if (!operations_.emplace(name, std::make_shared<const Operation>(std::move(op))).second)
+    const auto found = operations_.find(name);
+    if (!replace && found != operations_.end())
         throw Error("DuplicateOperation", "Operation already registered");
+    if (replace && found == operations_.end())
+        throw Error("UnknownOperation", "Unknown operation");
+    operations_[name] = std::make_shared<const Operation>(std::move(op));
+    ++revision_;
+    catalogue_.reset();
+    summaries_.reset();
 }
+namespace {
+Json operation_description(const Operation& operation) {
+    const auto* op = &operation;
+    const auto& name = op->name;
+    Json value = {
+        {"name", name},
+        {"description", op->description},
+        {"inputSchema", op->input_schema},
+        {"annotations", {{"readOnlyHint", op->read_only}, {"destructiveHint", !op->read_only}}}};
+    if (!op->output_schema.empty())
+        value["outputSchema"] = op->output_schema;
+    return value;
+}
+} // namespace
 Json Registry::describe() const {
+    return *catalogue();
+}
+std::shared_ptr<const Json> Registry::catalogue() const {
     std::lock_guard lock(mutex_);
-    Json result = Json::array();
-    for (const auto& [name, op] : operations_) {
-        Json value = {{"name", name},
-                      {"description", op->description},
-                      {"inputSchema", op->input_schema},
-                      {"annotations",
-                       {{"readOnlyHint", op->read_only}, {"destructiveHint", !op->read_only}}}};
-        if (!op->output_schema.empty())
-            value["outputSchema"] = op->output_schema;
-        result.push_back(std::move(value));
+    if (!catalogue_) {
+        Json result = Json::array();
+        for (const auto& [name, op] : operations_)
+            result.push_back(operation_description(*op));
+        catalogue_ = std::make_shared<const Json>(std::move(result));
     }
-    return result;
+    return catalogue_;
+}
+std::shared_ptr<const Json> Registry::summaries() const {
+    std::lock_guard lock(mutex_);
+    if (!summaries_) {
+        Json result = Json::array();
+        for (const auto& [name, op] : operations_)
+            result.push_back(
+                {{"name", name},
+                 {"description", op->description},
+                 {"annotations",
+                  {{"readOnlyHint", op->read_only}, {"destructiveHint", !op->read_only}}}});
+        summaries_ = std::make_shared<const Json>(std::move(result));
+    }
+    return summaries_;
+}
+std::size_t Registry::size() const {
+    std::lock_guard lock(mutex_);
+    return operations_.size();
+}
+Json Registry::describe(const std::string& name) const {
+    std::shared_ptr<const Operation> operation;
+    {
+        std::lock_guard lock(mutex_);
+        auto found = operations_.find(name);
+        if (found == operations_.end())
+            throw Error("UnknownOperation", "Unknown operation");
+        operation = found->second;
+    }
+    return operation_description(*operation);
+}
+std::uint64_t Registry::revision() const {
+    std::lock_guard lock(mutex_);
+    return revision_;
 }
 Json Registry::invoke(const std::string& name, const Json& args, const CallContext& context) const {
     context.cancellation.check();

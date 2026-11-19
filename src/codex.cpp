@@ -1,5 +1,6 @@
-#include <cymcp/ai.hpp>
 #include "provider_error.hpp"
+#include <cymcp/ai.hpp>
+#include <cymcp/resources.hpp>
 #include <set>
 namespace cymcp {
 namespace {
@@ -77,10 +78,11 @@ struct CodexProvider::Impl {
             if (reason == body.end() || !reason->is_object())
                 return {};
             const auto http = body.find("status");
-            if (!status && http != body.end() && http->is_number_integer() &&
-                *http >= 100 && *http <= 599)
+            if (!status && http != body.end() && http->is_number_integer() && *http >= 100 &&
+                *http <= 599)
                 status = http->get<int>();
-            const auto decoded = detail::structured_provider_error(*reason, "code", secrets, "", "");
+            const auto decoded =
+                detail::structured_provider_error(*reason, "code", secrets, "", "");
             upstream_code = decoded.provider_code;
             return decoded.what();
         };
@@ -88,7 +90,7 @@ struct CodexProvider::Impl {
         if (message.empty())
             message = explanation("additionalDetails");
         const std::string code =
-            interrupted                   ? "Cancelled"
+            interrupted                          ? "Cancelled"
             : upstream_code == "model_not_found" ? "UnknownModel"
             : category == "unauthorized" || status == 401 || status == 403
                 ? "AuthenticationRequired"
@@ -105,7 +107,8 @@ struct CodexProvider::Impl {
         }
         auto provider_code = upstream_code.empty() ? category : upstream_code;
         if (!interrupted) {
-            Json event = {{"code", code}, {"message", message},
+            Json event = {{"code", code},
+                          {"message", message},
                           {"native_code", category.empty() ? "other" : category},
                           {"http_status", status}};
             const auto rpc_code = error.find("code");
@@ -223,11 +226,14 @@ struct CodexProvider::Impl {
     }
 };
 CodexProvider::CodexProvider(CodexOptions options)
-    : Provider("codex"), impl_(std::make_unique<Impl>(std::move(options))) {}
+    : Provider("codex"), impl_(std::make_unique<Impl>(std::move(options))) {
+    impl_->options.tools =
+        compact_tools(std::move(impl_->options.tools), impl_->options.tool_discovery_threshold);
+}
 CodexProvider::~CodexProvider() = default;
 ProviderCapabilities CodexProvider::capabilities() const {
-    return {true,  true, static_cast<bool>(impl_->options.tools), true, true, true, false,
-            false, true, true};
+    return {true, true, static_cast<bool>(impl_->options.tools), true, true, true, false, false,
+            true, true};
 }
 void CodexProvider::connect(const CallContext& input) {
     auto& p = *impl_;
@@ -348,7 +354,8 @@ ChatResult CodexProvider::send(Session& session, Json& messages, const CallConte
     std::vector<std::string> order;
     std::map<std::string, std::string> final_items;
     try {
-        Json turn_params = {{"threadId", session.id}, {"input", content},
+        Json turn_params = {{"threadId", session.id},
+                            {"input", content},
                             {"approvalPolicy", p.options.approval_policy}};
         if (!session.model.empty())
             turn_params["model"] = session.model;
