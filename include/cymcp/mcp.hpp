@@ -57,7 +57,8 @@ class McpClient {
   public:
     explicit McpClient(ProcessOptions, McpClientOptions = {});
 #ifdef CYMCP_HAS_HTTP
-    McpClient(std::string url, std::string token, McpClientOptions = {});
+    // An empty token omits the HTTP Authorization header.
+    McpClient(std::string url, std::string token = {}, McpClientOptions = {});
 #endif
     ~McpClient();
     void connect(const Cancellation& = {});

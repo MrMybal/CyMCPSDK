@@ -5,7 +5,7 @@ description: Choose host operation policies and native agent approval behavior i
 section: SDK
 parent: integration
 order: 2
-revision: 1
+revision: 2
 ---
 
 ## Choose the host policy {#policy}
@@ -27,9 +27,9 @@ allow-all policy. Cancellation and resource budgets are separate from permission
 ## Agent approval and app operations {#agents}
 
 Native agent permissions are separate from the operation registry. In Chat Lab,
-**Allow all actions** requests the provider's unrestricted mode; **Allow counter changes**
-controls the example operation registry. An enabled switch cannot remove restrictions imposed
-by an external provider or operating system.
+**Allow all actions** requests the provider's unrestricted mode. The **MCP access profile**
+controls permissions on the example operation registry. The provider and operating system apply
+their own permissions.
 
 ACP filesystem and terminal client services are not announced by default. An embedding host
 must declare `settings.client_capabilities`, provide `request_handler` and choose its approval
@@ -38,9 +38,11 @@ does not create a terminal service.
 
 ## Authenticate a local server {#network}
 
-The loopback HTTP server requires a token of at least 32 characters and rejects requests carrying
-`Origin`. Pass the token in `Authorization: Bearer ...`. Chat Lab generates a new random token
-when its server starts; it displays only the endpoint and offers an explicit token-copy action.
+The token-protected loopback server accepts a strong token of at least 32 characters in
+`Authorization: Bearer ...` or a credential validated by the host's authentication callback.
+For explicit local access without credentials, use `LocalHttpServer::UnauthenticatedLoopback`.
+The server binds to `127.0.0.1` and rejects requests carrying `Origin` in both modes.
 
-Authentication identifies an allowed client; it does not replace operation authorization.
-Keep the local server's lifetime, token distribution and domain policy under the host's control.
+`local_access_settings(LocalAccessProfile)` provides presets for the token requirement and the
+host's operation policy. Choose the transport and registry policy separately from those settings.
+See the [Chat Lab profiles](doc:chat-lab#external) for the four combinations.

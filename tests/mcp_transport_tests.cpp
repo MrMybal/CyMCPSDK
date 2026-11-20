@@ -320,7 +320,7 @@ void independent_peer() {
         Json reply;
         if (req.get_header_value("Mcp-Method") != method ||
             req.get_header_value("MCP-Protocol-Version") != revision ||
-            req.has_header("Mcp-Session-Id")) {
+            req.has_header("Mcp-Session-Id") || req.has_header("Authorization")) {
             res.status = 400;
             return;
         }
@@ -423,12 +423,12 @@ void independent_peer() {
     });
     check(response.status == 200 && seen == 8,
           "A stream longer than the idle interval stays alive when bytes keep arriving");
-    McpClient client("http://127.0.0.1:" + std::to_string(port) + "/mcp", random_token());
+    McpClient client("http://127.0.0.1:" + std::to_string(port) + "/mcp");
     client.connect();
     check(!client.call_tool(name, {{"item", {{"sku", 42}}}, {"tag", " tag "}})
                .at("isError")
                .get<bool>(),
-          "A direct call mirrors method, encoded name and nested annotated parameters");
+          "A tokenless call omits Authorization and mirrors required routing headers");
     auto tools = client.list_tools();
     check(tools.size() == 1 && tools[0].at("name") == name,
           "Invalid header annotation excluded from catalogue");

@@ -27,6 +27,8 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("server", help="Path to the built cymcp_example executable")
     parser.add_argument("--transport", choices=["both", "stdio", "http"], default="both")
+    parser.add_argument("--http-without-token", action="store_true",
+                        help="Use the explicit tokenless loopback mode for the HTTP test")
     parser.add_argument("--gateway-server", help="Optional cymcp_mcp_optimization_tests executable")
     args = parser.parse_args()
     if args.gateway_server:
@@ -61,8 +63,12 @@ async def main():
     if args.transport == "stdio":
         return
     token = secrets.token_hex(32)
+    headers = {} if args.http_without_token else {"Authorization": "Bearer " + token}
+    server_args = ["serve", "0"]
+    if args.http_without_token:
+        server_args.append("--no-token")
     server = await asyncio.create_subprocess_exec(
-        args.server, "serve", "0", env={**os.environ, "CYMCP_TOKEN": token},
+        args.server, *server_args, env={**os.environ, "CYMCP_TOKEN": token},
         stderr=asyncio.subprocess.PIPE,
     )
     try:
@@ -70,10 +76,10 @@ async def main():
         address = re.search(rb"http://127\.0\.0\.1:[0-9]+", line)
         if not address:
             raise RuntimeError("The SDK example did not start its local server")
-        async with httpx.AsyncClient(headers={"Authorization": "Bearer " + token}, trust_env=False) as http:
+        async with httpx.AsyncClient(headers=headers, trust_env=False) as http:
             async with streamable_http_client(address.group().decode() + "/mcp", http_client=http) as streams:
                 await check(*streams[:2])
-        print("Official MCP client passed over HTTP")
+        print("Official MCP client passed over HTTP" + (" without a token" if args.http_without_token else ""))
     finally:
         if server.returncode is None:
             server.terminate()

@@ -19,6 +19,8 @@ Mets à jour la référence à CyMCPSDK et reconstruis les modules utilisés par
 
 Adapte les appels, configurations et scripts concernés. Préserve les noms des opérations métier, leurs arguments et résultats publics, le comportement des scripts, les droits et les règles de confirmation. Si un changement de format est nécessaire, prévois une migration et vérifie-la sur des copies de données produites par l’ancienne version. Cela inclut les configurations, les historiques et les jobs persistés utilisés par le projet.
 
+Si la révision ajoute les profils d’accès MCP, rends le profil par défaut configurable. Vérifie les quatre combinaisons du jeton et des droits métier. Préserve le comportement des configurations existantes sans profil et vérifie que le mode Free est sélectionnable explicitement.
+
 Vérifie que le chat, le CLI et le serveur MCP appellent les opérations du registre partagé et agissent sur la bonne instance. Si le point d’entrée CLI prévu par l’intégration initiale manque, complète-le dans l’application. Il doit permettre de lister, décrire et exécuter les opérations métier, avec une sortie JSON et des codes de sortie exploitables en script. Conserve les commandes et options CLI préexistantes. Vérifie le mode sans interface pour les opérations compatibles et le ciblage de l’instance ouverte pour celles qui en dépendent.
 
 3. Adapte les options aux nouveautés utiles

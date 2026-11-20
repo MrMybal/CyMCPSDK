@@ -5,7 +5,7 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 8
+sourceRevision: 10
 ---
 
 ## Se connecter {#connect}
@@ -117,7 +117,7 @@ signale sa saturation ou un problème d'écriture. Le journal n'annule jamais un
 Dans Fournisseurs, déplier **Droits et outils de l’app**. La démonstration expose `get_counter` et `set_counter`,
 pour des entiers entre −1 000 000 et 1 000 000. Le panneau affiche la valeur actuelle.
 
-1. Activer **Autoriser la modification du compteur** pour permettre les écritures.
+1. Choisir **Free** ou **Jeton seul** dans **Profil d’accès MCP** pour autoriser les écritures.
 2. Activer **L'IA peut appeler les commandes de l'app**, puis créer une connexion Codex ou API compatible.
 3. Demander à l'IA de modifier le compteur de démonstration, puis de le relire.
 
@@ -126,14 +126,42 @@ Les autres CLI utilisent leur configuration MCP native et renvoient `Unsupported
 
 ## Connecter une autre application {#external}
 
-**Activer le MCP local** crée un serveur loopback authentifié sur un port libre.
-Copier l'adresse affichée et utiliser **Copier le jeton MCP** pour configurer le client.
-Utiliser `/mcp` pour les outils MCP ou `/v1` sur le même port pour le SDK JSON direct.
+Dans **Droits et outils de l’app**, choisir le **Profil d’accès MCP**, puis **Activer le MCP local**.
+En l’absence de configuration `app_commands`, Chat Lab sélectionne **Free** au démarrage.
+
+| Profil | Valeur de configuration | Connexion | Opérations sur le compteur |
+| --- | --- | --- | --- |
+| Free | `free` | Adresse seule | Lecture et écriture |
+| Local contrôlé | `local_controlled` | Adresse seule | Lecture seule |
+| Jeton seul | `token_only` | Adresse et jeton | Lecture et écriture |
+| Protégé | `protected` | Adresse et jeton | Lecture seule |
+
+Utiliser **Copier l’adresse MCP** pour configurer le client et **Copier le jeton MCP** pour les
+profils qui l’exigent. Le serveur écoute sur `127.0.0.1`. Avec un profil sans jeton, tout
+programme sur cet ordinateur peut appeler les opérations autorisées. Arrêter le MCP local
+avant de modifier l’exigence de jeton. Les droits des opérations peuvent changer à chaud.
+
+Utiliser `/mcp` pour les outils MCP ou `/v1` sur le même port pour le SDK JSON direct. Les deux
+routes et le chat intégré partagent la politique des commandes métier. Les droits natifs du
+fournisseur se configurent séparément.
+
+Pour retrouver la même adresse à chaque démarrage, choisir `mcp_port` dans la configuration
+passée à `--config`. La valeur par défaut `0` sélectionne un port libre. Cette configuration
+démarre le MCP local avec le profil Free sur le port 8765.
+
+```json
+{"provider":"demo","app_commands":{"mcp":true,"access_profile":"free","mcp_port":8765}}
+```
+
+Dans un fichier de configuration, `access_profile` est prioritaire sur les anciennes options
+`mcp_without_token` et `allow_changes`. Une section `app_commands` sans profil garde ses
+réglages et ses valeurs par défaut précédentes.
+
+Pour appeler une opération autorisée directement sur `/v1`, envoyer la requête SDK JSON suivante.
 
 ```json
 {"method":"invoke","name":"get_counter","arguments":{}}
 ```
 
-Les deux routes partagent le compteur et la politique d'écriture active. Interdire les écritures
-ne déconnecte pas le client. Désactiver le serveur ferme l'adresse ; le réactiver crée un nouveau
+Arrêter le MCP local ferme l’adresse. En mode protégé, le démarrage suivant génère un nouveau
 jeton. Consulter les [opérations](doc:operations) et les [droits](doc:permissions).

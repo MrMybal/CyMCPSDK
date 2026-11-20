@@ -5,7 +5,7 @@ description: Choisir séparément la politique des opérations hôtes et les aut
 section: SDK
 parent: integration
 order: 2
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Choisir la politique hôte {#policy}
@@ -27,9 +27,9 @@ permissive. L'annulation et les budgets de ressources sont distincts des décisi
 ## Autorisations de l'agent et opérations {#agents}
 
 Les droits natifs de l'agent sont distincts du registre d'opérations. Dans Chat Lab,
-**Autoriser toutes les actions** demande le mode permissif du fournisseur ; **Autoriser la
-modification du compteur** contrôle le registre de démonstration. Une option activée ne retire
-pas les restrictions imposées par un fournisseur externe ou le système d'exploitation.
+**Autoriser toutes les actions** demande le mode permissif du fournisseur. Le **Profil d’accès MCP**
+règle les droits du registre de démonstration. Le fournisseur et le système d’exploitation
+appliquent leurs propres droits.
 
 Les services client ACP de fichiers et terminal ne sont pas annoncés par défaut. L'hôte doit
 déclarer `settings.client_capabilities`, fournir `request_handler` et choisir sa politique
@@ -38,9 +38,11 @@ capacité déclarée ne crée aucun service de terminal.
 
 ## Authentifier un serveur local {#network}
 
-Le serveur HTTP loopback exige un jeton d'au moins 32 caractères et refuse les requêtes portant
-`Origin`. Passer le jeton dans `Authorization: Bearer ...`. Chat Lab crée un nouveau jeton aléatoire
-au démarrage du serveur ; il affiche uniquement l'adresse et propose une copie explicite du jeton.
+En mode protégé, le serveur HTTP local accepte dans `Authorization: Bearer ...` un jeton fort
+d’au moins 32 caractères ou un identifiant validé par le callback d’authentification de l’hôte.
+Pour ouvrir explicitement l’accès local sans identifiant, utiliser `LocalHttpServer::UnauthenticatedLoopback`.
+Le serveur écoute sur `127.0.0.1` et refuse les requêtes portant `Origin` dans les deux modes.
 
-L'authentification identifie un client autorisé ; elle ne remplace pas les droits des opérations.
-La durée de vie du serveur, la distribution du jeton et la politique du domaine restent contrôlées par l'hôte.
+`local_access_settings(LocalAccessProfile)` fournit des profils d’exigence du jeton et de politique
+métier. L’hôte applique ces réglages séparément au transport et au registre. Les
+[profils de Chat Lab](doc:chat-lab#external) présentent les quatre combinaisons.

@@ -227,13 +227,10 @@ struct Run {
         private_directory(directory);
         auto input = directory / "config.json", plan = directory / "plan.json";
         report = directory / "report.json";
-        write(input, config);
         write(plan, {{"steps", steps}});
         ProcessOptions options;
         options.executable = std::filesystem::u8path(app);
         options.arguments = {"--hidden",
-                             "--config",
-                             path_utf8(input),
                              "--exercise",
                              path_utf8(plan),
                              "--report",
@@ -244,6 +241,10 @@ struct Run {
                              theme,
                              "--capture",
                              path_utf8(directory / "screen.png")};
+        if (!config.is_null()) {
+            write(input, config);
+            options.arguments.insert(options.arguments.end(), {"--config", path_utf8(input)});
+        }
         if (ready)
             options.arguments.push_back("--test-ready-stdout");
         journal = directory / "application.log";
@@ -688,19 +689,35 @@ int main(int argc, char** argv) {
                                               std::istreambuf_iterator<char>(), '\n') == 2,
                   "Changing the model leaves both turns visible and sends only on explicit clicks");
         }
-        for (const auto [writable, deferred] : {std::pair{false, false}, std::pair{true, false},
-                                                std::pair{false, true}, std::pair{true, true}}) {
-            Json mcp_config = {
-                {"provider", "demo"},
-                {"app_commands", {{"allow_changes", writable}, {"deferred_tools", deferred}}}};
-            if (deferred) {
-                mcp_config["performance"] = {{"enabled", true}};
-                mcp_config["app_commands"]["notifications"] = true;
+        struct McpScenario {
+            const char* name;
+            Json access;
+            bool writable, deferred, tokenless;
+        };
+        const McpScenario mcp_scenarios[] = {
+            {"mcp-default", nullptr, true, false, true},
+            {"mcp-free", {{"access_profile", "free"}}, true, true, true},
+            {"mcp-local-controlled", {{"access_profile", "local_controlled"}}, false, false, true},
+            {"mcp-token-only", {{"access_profile", "token_only"}}, true, false, false},
+            {"mcp-protected", {{"access_profile", "protected"}}, false, true, false},
+            {"mcp-legacy-default", Json::object(), false, false, false},
+            {"mcp-legacy-write", {{"allow_changes", true}}, true, true, false},
+            {"mcp-legacy-tokenless", {{"mcp_without_token", true}}, false, true, true},
+        };
+        for (const auto& [name, access, writable, deferred, tokenless] : mcp_scenarios) {
+            Json mcp_config;
+            if (!access.is_null()) {
+                auto commands = access;
+                commands["mcp"] = true;
+                if (deferred) {
+                    commands["deferred_tools"] = true;
+                    commands["notifications"] = true;
+                    mcp_config["performance"] = {{"enabled", true}};
+                }
+                mcp_config["provider"] = "demo";
+                mcp_config["app_commands"] = std::move(commands);
             }
-            Run run(argv[1],
-                    output / ((writable ? "mcp-allow" : "mcp-deny") +
-                              std::string(deferred ? "-deferred" : "")),
-                    mcp_config,
+            Run run(argv[1], output / name, mcp_config,
                     Json::array(
                         {{{"action", "wait"}, {"wait_ms", 1800}, {"counter", writable ? 42 : 0}}}),
                     true);
@@ -714,14 +731,25 @@ int main(int argc, char** argv) {
             request.method = "POST";
             request.url = ready.at("endpoint");
             request.headers["Content-Type"] = "application/json";
-            request.body = "{}";
-            check(HttpClient().perform(request).status == 401,
-                  "Real app MCP rejects missing token");
-            request.headers["Authorization"] = "Bearer " + ready.at("token").get<std::string>();
+            request.body =
+                R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}})";
+            const auto response = HttpClient().perform(request, timeout);
+            const auto token = ready.at("token").get<std::string>();
+            check(tokenless ? token.empty() && response.status == 200 &&
+                                  parse_json(response.body).contains("result")
+                            : !token.empty() && response.status == 401,
+                  "The real app accepts missing credentials only when explicitly opened");
+            if (!tokenless)
+                request.headers["Authorization"] = "Bearer " + token;
             request.headers["Origin"] = "http://untrusted.invalid";
             check(HttpClient().perform(request).status == 403,
                   "Real app MCP rejects browser origins");
-            McpClient client(ready.at("endpoint"), ready.at("token"));
+            request.headers.erase("Origin");
+            request.headers["Host"] = "untrusted.invalid";
+            check(HttpClient().perform(request, timeout).status == 403,
+                  "Real app MCP rejects non-local Host headers in both access modes");
+            request.headers.erase("Host");
+            McpClient client(ready.at("endpoint"), token);
             client.connect(timeout);
             check(client.list_tools(timeout).size() == (deferred ? 5 : 2),
                   "External client discovers the app's actual command registry");
@@ -745,7 +773,6 @@ int main(int argc, char** argv) {
             auto read_value = invoke("get_counter", Json::object());
             check(read_value.at("structuredContent").at("value") == 0,
                   "External MCP reads visible app state");
-            request.headers.erase("Origin");
             request.url = ready.at("endpoint").get<std::string>();
             request.url.replace(request.url.size() - 4, 4, "/v1");
             request.body = Json({{"method", "describe"}}).dump();

@@ -41,6 +41,8 @@ Configure un fournisseur capable d’appeler les outils par un transport qui les
 
 Expose les opérations aux IA externes via le serveur MCP. Documente le lancement ou la connexion, le transport, la configuration et l’authentification applicables. Le client externe doit pouvoir découvrir les outils et agir sur l’état réel de l’application.
 
+Pour un serveur HTTP local, rends le profil d’accès configurable par l’hôte. Les profils Free, Local contrôlé, Jeton seul et Protégé combinent l’exigence d’un jeton et l’application des droits métier. L’hôte peut choisir Free par défaut pour autoriser toutes ses opérations enregistrées avec l’adresse seule. Conserve le choix des opérations exposées et la validation de leurs arguments.
+
 5. Configure les optimisations utiles au projet
 
 - Découverte à la demande. Pour un catalogue important, utilise le mode compact afin que l’assistant puisse rechercher une commande, charger son schéma complet puis l’appeler. Garde la découverte complète accessible aux clients qui en ont besoin.

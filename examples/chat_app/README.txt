@@ -1,4 +1,4 @@
-CyMCPSDK Chat Lab 0.7.0 - Windows x64
+CyMCPSDK Chat Lab 0.7.1 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
 Chat opens directly. Settings contains Providers, Logs and Help. Close returns to the draft.
@@ -39,13 +39,19 @@ saved automatically; Restore saved chat loads that exact history/session.
 Native resume requires the selected CLI's support and the same model/provider.
 History contains private messages and attachments. API keys are not stored in it.
 
-App commands exposes get_counter and set_counter. Allow counter changes permits
-writes; AI may use app commands attaches them on the next Codex or API connection.
+App commands exposes get_counter and set_counter. AI may use app commands attaches
+them on the next Codex or API connection.
 Other CLIs use their own native MCP configuration; direct attachment is Unsupported.
-Expose local MCP starts an authenticated loopback endpoint. Copy MCP token copies
-its private Bearer token for another client. SDK JSON commands use /v1 on that port.
+Choose an MCP access profile and use Expose local MCP to start on 127.0.0.1.
+Free (selected without an app_commands section) allows reads and writes without a token.
+Local controlled allows reads without a token. Token only requires a token for reads
+and writes. Protected requires a token and allows reads. Use Copy MCP address and,
+when required, Copy MCP token. Any program on this computer can call permitted
+commands on /mcp or /v1 when the selected profile allows address-only access.
+In JSON set app_commands.access_profile to free, local_controlled, token_only or
+protected. An app_commands section without a profile keeps its legacy settings. Set app_commands.mcp_port
+to a fixed port to reuse the address. The default 0 selects a free port.
 The demonstration commands only access the counter, with no file or system access.
-All three app_commands configuration options are false by default.
 
 Optional arguments:
   --config PATH.json             Load an SDK chat configuration (manual by default).

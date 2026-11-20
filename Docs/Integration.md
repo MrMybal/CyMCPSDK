@@ -239,3 +239,45 @@ LocalHttpServer accepts a TokenAuthenticator returning an opaque authenticated p
 plus a request byte bound. Never derive identity from business JSON. The strong-token
 constructor remains supported. McpServerOptions::result_text optionally projects text
 for existing clients; structuredContent and output validation retain the original result.
+
+## Serveur HTTP local sans jeton
+
+Le serveur local accepte un mode sans jeton sur demande explicite de l’hôte.
+
+```cpp
+cymcp::LocalHttpServer server(cymcp::LocalHttpServer::UnauthenticatedLoopback{}, handler);
+const int port = server.start(8765);
+cymcp::McpClient client("http://127.0.0.1:" + std::to_string(port) + "/mcp");
+```
+
+En mode ouvert, `/mcp` et `/v1` acceptent les appelants locaux et leur attribuent le principal
+commun `unauthenticated-local`. La politique d’opérations reste celle choisie par l’hôte. Ce mode
+convient aux opérations que l’hôte accepte d’exposer à tous les processus de la machine.
+Le serveur écoute sur `127.0.0.1`, et les contrôles `Host` et `Origin` s’appliquent aussi à ce mode.
+Les constructeurs recevant un jeton ou un callback exigent toujours des identifiants valides.
+
+Pour essayer ce mode avec les outils de démonstration depuis un terminal, lancer
+`cymcp_example serve 8765 --no-token` et connecter un client à `http://127.0.0.1:8765/mcp`.
+
+### Profils d’accès de l’hôte
+
+L’hôte peut choisir son profil par défaut avec `local_access_settings(LocalAccessProfile)`.
+Les quatre profils combinent l’exigence d’un jeton et le contrôle des opérations.
+
+| Profil | Jeton | Droits métier |
+| --- | --- | --- |
+| `free` | Adresse seule | Toutes les opérations enregistrées par l’hôte sont autorisées |
+| `local_controlled` | Adresse seule | Politique de l’hôte |
+| `token_only` | Requis | Toutes les opérations enregistrées par l’hôte sont autorisées |
+| `protected_access` | Requis | Politique de l’hôte |
+
+```cpp
+constexpr auto access = cymcp::local_access_settings(cymcp::LocalAccessProfile::free);
+cymcp::Registry commands(access.control_operations ? host_policy : cymcp::Policy::allow_all());
+// Register the permitted app operations, then pass their handler to LocalHttpServer.
+// Use UnauthenticatedLoopback when access.require_token is false.
+```
+
+Ces profils décrivent des réglages. L’hôte choisit le constructeur HTTP et la politique du
+registre qui les appliquent. Un registre en libre accès valide toujours les arguments selon les
+schémas des opérations. Les limites techniques du transport restent configurables indépendamment.

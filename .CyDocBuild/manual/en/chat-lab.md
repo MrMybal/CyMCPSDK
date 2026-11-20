@@ -5,7 +5,7 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 8
+revision: 10
 ---
 
 ## Connect {#connect}
@@ -108,7 +108,7 @@ when it stops growing or cannot be written. Logging never cancels a conversation
 In Providers, expand **Permissions and app tools**. The demonstration exposes `get_counter` and `set_counter`,
 with integer values between −1,000,000 and 1,000,000. The current value is visible in the panel.
 
-1. Enable **Allow counter changes** if you want writes to succeed.
+1. Select **Free** or **Token only** in **MCP access profile** to allow counter writes.
 2. Enable **AI may use app commands**, then make a new connection to Codex or a supported API transport.
 3. Ask the AI to set the demonstration counter and read it back.
 
@@ -117,14 +117,43 @@ Other CLIs use their native MCP configuration and return `Unsupported` for this 
 
 ## Connect another application {#external}
 
-**Expose local MCP** creates an authenticated loopback server on a free port.
-Copy the displayed endpoint and use **Copy MCP token** to configure your client.
-Use `/mcp` for MCP tools, or `/v1` on the same port for direct SDK JSON.
+Find **MCP access profile** in **Permissions and app tools**. Choose a profile, then enable
+**Expose local MCP**. Chat Lab starts with **Free** selected when there is no `app_commands`
+configuration.
+
+| Profile | Configuration value | Connection | Counter operations |
+| --- | --- | --- | --- |
+| Free | `free` | Address alone | Read and write |
+| Local controlled | `local_controlled` | Address alone | Read only |
+| Token only | `token_only` | Address and token | Read and write |
+| Protected | `protected` | Address and token | Read only |
+
+Use **Copy MCP address** to configure the client and **Copy MCP token** for profiles that require
+one. The listener binds to `127.0.0.1`. With an address-only profile, any program on the same
+computer can call permitted operations. Stop local MCP before changing the token requirement.
+You can change operation permissions while the server runs.
+
+Use `/mcp` for MCP tools or `/v1` on the same port for direct SDK JSON. Both routes and the
+integrated chat share the policy for app operations. Native provider permissions are configured
+separately.
+
+For the same address across launches, include a fixed `mcp_port` in the Chat Lab configuration
+passed with `--config`. The default `0` selects a free port at startup. This configuration opens
+local MCP with the Free profile on port 8765.
+
+```json
+{"provider":"demo","app_commands":{"mcp":true,"access_profile":"free","mcp_port":8765}}
+```
+
+In a configuration file, `access_profile` takes precedence over the older `mcp_without_token`
+and `allow_changes` settings. An `app_commands` section without a profile retains the previous
+settings and defaults.
+
+You can call an allowed operation directly on `/v1` with this SDK JSON request.
 
 ```json
 {"method":"invoke","name":"get_counter","arguments":{}}
 ```
 
-Both routes share the same counter and live write policy. Disabling writes does not
-disconnect the client. Disabling the MCP server closes the endpoint; enabling it again
-creates a new token. See [operations](doc:operations) and [permissions](doc:permissions).
+Stopping local MCP closes the endpoint. In protected mode, starting it again generates a new token.
+See [operations](doc:operations) and [permissions](doc:permissions).

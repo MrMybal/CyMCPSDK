@@ -1,4 +1,5 @@
 #pragma once
+#include "commands.hpp"
 #include "journal.hpp"
 #include <algorithm>
 #include <cyui/Core.h>
@@ -248,10 +249,34 @@ template <class App> void draw_app_tools(App& app) {
     }
     cyui::textMono("%s: %d", cyui::tr("Counter").c_str(),
                    app.commands.snapshot().at("value").template get<int>());
-    bool writable = app.commands.changes_allowed();
-    if (cyui::toggleSwitch(cyui::trLabel("Allow counter changes").c_str(), &writable))
-        app.commands.allow_changes(writable);
     bool exposed = !app.commands.endpoint().empty();
+    const auto access = app.commands.mcp_access();
+    const auto current = std::find_if(
+        std::begin(mcp_access_options), std::end(mcp_access_options), [access](const auto& option) {
+            return cymcp::local_access_settings(option.profile) == access;
+        });
+    ImGui::TextUnformatted(cyui::tr("MCP access profile").c_str());
+    ImGui::SetNextItemWidth(-1.f);
+    if (ImGui::BeginCombo("##mcp-access", cyui::tr(current->label).c_str())) {
+        for (const auto& option : mcp_access_options) {
+            auto selected = cymcp::local_access_settings(option.profile);
+            cyui::ScopedDisabled disabled(exposed &&
+                                          selected.require_token != access.require_token);
+            if (ImGui::Selectable(cyui::trLabel(option.label).c_str(), selected == access))
+                app.action(
+                    [&] { app.commands.configure_mcp_access(selected, app.commands.mcp_port()); });
+        }
+        if (exposed)
+            ImGui::TextDisabled(
+                "%s", cyui::tr("Stop local MCP to change the token requirement.").c_str());
+        ImGui::EndCombo();
+    }
+    if (!app.commands.mcp_access().require_token)
+        ImGui::TextWrapped(
+            "%s", cyui::tr("Any program on this computer can call the app's permitted operations.")
+                      .c_str());
+    if (app.commands.mcp_access().control_operations)
+        ImGui::TextWrapped("%s", cyui::tr("Counter changes are blocked by this profile.").c_str());
     if (cyui::toggleSwitch(cyui::trLabel("Expose local MCP").c_str(), &exposed))
         app.action([&] {
             if (exposed)
@@ -261,10 +286,15 @@ template <class App> void draw_app_tools(App& app) {
             app.journal.add("info", "", "app-tools", exposed ? "ServerStarted" : "ServerStopped",
                             "Local MCP state changed");
         });
-    if (exposed) {
+    if (!app.commands.endpoint().empty()) {
         ImGui::TextUnformatted(app.commands.endpoint().c_str());
-        if (cyui::button(cyui::trLabel("Copy MCP token").c_str()))
-            ImGui::SetClipboardText(app.commands.token().c_str());
+        if (cyui::button(cyui::trLabel("Copy MCP address").c_str()))
+            ImGui::SetClipboardText(app.commands.endpoint().c_str());
+        if (app.commands.mcp_access().require_token) {
+            ImGui::SameLine();
+            if (cyui::button(cyui::trLabel("Copy MCP token").c_str()))
+                ImGui::SetClipboardText(app.commands.token().c_str());
+        }
     }
     cyui::endSection();
 }

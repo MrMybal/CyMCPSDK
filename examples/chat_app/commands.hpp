@@ -1,12 +1,36 @@
 #pragma once
 #include <cymcp/changes.hpp>
+#include <cymcp/http.hpp>
 #include <cymcp/mcp.hpp>
 #include <cymcp/search.hpp>
 
 namespace chat_example {
+struct McpAccessOption {
+    cymcp::LocalAccessProfile profile;
+    std::string_view id;
+    const char* label;
+};
+inline constexpr McpAccessOption mcp_access_options[] = {
+    {cymcp::LocalAccessProfile::free, "free", "Free"},
+    {cymcp::LocalAccessProfile::local_controlled, "local_controlled", "Local controlled"},
+    {cymcp::LocalAccessProfile::token_only, "token_only", "Token only"},
+    {cymcp::LocalAccessProfile::protected_access, "protected", "Protected"},
+};
+inline cymcp::LocalAccessSettings mcp_access_from_config(const cymcp::Json& config) {
+    if (!config.contains("access_profile"))
+        return {!config.value("mcp_without_token", false), !config.value("allow_changes", false)};
+    auto id = config.at("access_profile").get<std::string>();
+    for (const auto& option : mcp_access_options)
+        if (option.id == id)
+            return cymcp::local_access_settings(option.profile);
+    throw cymcp::Error("InvalidOptions", "Unknown local MCP access profile");
+}
+
 // Counter commands by default. Workspace text search is enabled only for an explicit host root.
 class Commands {
-    std::atomic_bool writable_{false};
+    static constexpr auto default_access_ =
+        cymcp::local_access_settings(cymcp::LocalAccessProfile::free);
+    std::atomic_bool writable_{!default_access_.control_operations};
     std::atomic_int value_{0}, reads_{0}, writes_{0}, denied_{0};
     std::shared_ptr<cymcp::Registry> registry_;
     std::unique_ptr<cymcp::McpServer> mcp_;
@@ -16,6 +40,8 @@ class Commands {
     bool deferred_ = false;
     std::unique_ptr<cymcp::LocalHttpServer> server_;
     std::string token_, endpoint_;
+    bool require_token_ = default_access_.require_token;
+    int port_ = 0;
     std::shared_ptr<cymcp::ChangeFeed> changes_;
     std::shared_ptr<cymcp::PerformanceMonitor> performance_;
     static cymcp::Resource counter_resource(int value) {
@@ -44,8 +70,9 @@ class Commands {
               }))) {
         resources_ = std::make_shared<cymcp::ResourceRegistry>(cymcp::Policy::allow_all());
         const auto help = std::make_shared<const std::string>(
-            "Chat Lab exposes get_counter and set_counter. Counter writes require Allow counter "
-            "changes. Optional workspace.grep and workspace.read expose only a host-selected "
+            "Chat Lab exposes get_counter and set_counter. The Free and Token only profiles "
+            "allow counter changes. Optional workspace.grep and workspace.read expose only a "
+            "host-selected "
             "folder, read only.");
         cymcp::Resource resource;
         resource.uri = "app://chat-lab/commands";
@@ -126,9 +153,6 @@ class Commands {
         gateway_ = std::make_unique<cymcp::ToolGateway>(registry_, cymcp::ToolGatewayOptions{},
                                                         resources_);
     }
-    bool changes_allowed() const {
-        return writable_.load();
-    }
     std::shared_ptr<const cymcp::Registry> registry() const {
         return registry_;
     }
@@ -157,24 +181,46 @@ class Commands {
                 {"denied", denied_.load()},
                 {"writable", writable_.load()}};
     }
+    void configure_mcp_access(cymcp::LocalAccessSettings access, int port) {
+        if (server_ && (access.require_token != require_token_ || port != port_))
+            throw cymcp::Error("Busy",
+                               "Stop local MCP before changing its token requirement or port");
+        if (port < 0 || port > 65535)
+            throw cymcp::Error("InvalidOptions", "The local MCP port must be between 0 and 65535");
+        require_token_ = access.require_token;
+        allow_changes(!access.control_operations);
+        port_ = port;
+    }
+    cymcp::LocalAccessSettings mcp_access() const {
+        return {require_token_, !writable_.load()};
+    }
+    int mcp_port() const {
+        return port_;
+    }
     void start() {
         if (server_)
             return;
-        token_ = cymcp::random_token();
         cymcp::McpServerOptions options;
         options.resources = resources_;
         options.changes = changes_;
         options.performance = performance_;
-        mcp_ = std::make_unique<cymcp::McpServer>(*ai_registry(), "CyMCPSDK Chat Lab", options);
-        auto server = std::make_unique<cymcp::LocalHttpServer>(
-            token_, [this](const cymcp::Json& request, const cymcp::CallContext& context) {
-                const auto method = request.value("method", std::string());
-                if (method == "invoke" || method == "describe")
-                    return cymcp::dispatch_app(*registry_, request, context);
-                return mcp_->handle(request, context);
-            });
-        auto port = server->start();
+        auto mcp = std::make_unique<cymcp::McpServer>(*ai_registry(), "CyMCPSDK Chat Lab", options);
+        auto endpoint = [this, mcp = mcp.get()](const cymcp::Json& request,
+                                                const cymcp::CallContext& context) {
+            const auto method = request.value("method", std::string());
+            if (method == "invoke" || method == "describe")
+                return cymcp::dispatch_app(*registry_, request, context);
+            return mcp->handle(request, context);
+        };
+        auto token = require_token_ ? cymcp::random_token() : std::string{};
+        auto server = require_token_
+                          ? std::make_unique<cymcp::LocalHttpServer>(token, endpoint)
+                          : std::make_unique<cymcp::LocalHttpServer>(
+                                cymcp::LocalHttpServer::UnauthenticatedLoopback{}, endpoint);
+        auto port = server->start(port_);
         endpoint_ = "http://127.0.0.1:" + std::to_string(port) + "/mcp";
+        token_ = std::move(token);
+        mcp_ = std::move(mcp);
         server_ = std::move(server);
     }
     void stop() noexcept {

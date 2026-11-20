@@ -106,10 +106,8 @@ struct LocalHttpServer::Impl {
     }
     Impl(TokenAuthenticator auth, JsonEndpoint fn, std::size_t workers, std::size_t bytes)
         : authenticate(std::move(auth)), max_request_bytes(bytes), endpoint(std::move(fn)) {
-        if (!authenticate || !endpoint || workers < 1 || workers > 64 || !bytes ||
-            bytes > provider_message_limit)
-            throw Error("InvalidOptions",
-                        "Server requires a strong token, endpoint and worker limit");
+        if (!endpoint || workers < 1 || workers > 64 || !bytes || bytes > provider_message_limit)
+            throw Error("InvalidOptions", "Server requires an endpoint and valid limits");
         server.new_task_queue = [workers] {
             return new httplib::ThreadPool(workers, workers, 128, 30);
         };
@@ -128,19 +126,21 @@ struct LocalHttpServer::Impl {
                 res.status = 403;
                 return;
             }
-            std::string principal;
-            try {
-                const auto header = req.get_header_value("Authorization");
-                if (req.get_header_value_count("Authorization") != 1 ||
-                    header.rfind("Bearer ", 0) != 0 || header.size() <= 7)
-                    throw Error("AuthenticationRequired", "Bearer credential required");
-                principal = authenticate(std::string_view(header).substr(7));
-                if (principal.empty())
-                    throw Error("AuthenticationRequired", "Empty principal");
-            } catch (...) {
-                res.status = 401;
-                res.set_header("WWW-Authenticate", "Bearer");
-                return;
+            std::string principal = "unauthenticated-local";
+            if (authenticate) {
+                try {
+                    const auto header = req.get_header_value("Authorization");
+                    if (req.get_header_value_count("Authorization") != 1 ||
+                        header.rfind("Bearer ", 0) != 0 || header.size() <= 7)
+                        throw Error("AuthenticationRequired", "Bearer credential required");
+                    principal = authenticate(std::string_view(header).substr(7));
+                    if (principal.empty())
+                        throw Error("AuthenticationRequired", "Empty principal");
+                } catch (...) {
+                    res.status = 401;
+                    res.set_header("WWW-Authenticate", "Bearer");
+                    return;
+                }
             }
             if (req.method == "GET") {
                 // This transport has no standalone SSE stream, including on legacy sessions.
@@ -280,8 +280,14 @@ LocalHttpServer::LocalHttpServer(std::string token, JsonEndpoint endpoint, std::
     impl_ = std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes);
 }
 LocalHttpServer::LocalHttpServer(TokenAuthenticator auth, JsonEndpoint endpoint,
+                                 std::size_t workers, std::size_t bytes) {
+    if (!auth)
+        throw Error("InvalidOptions", "Server requires an authentication callback");
+    impl_ = std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes);
+}
+LocalHttpServer::LocalHttpServer(UnauthenticatedLoopback, JsonEndpoint endpoint,
                                  std::size_t workers, std::size_t bytes)
-    : impl_(std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes)) {}
+    : impl_(std::make_unique<Impl>(TokenAuthenticator{}, std::move(endpoint), workers, bytes)) {}
 LocalHttpServer::~LocalHttpServer() {
     stop();
 }

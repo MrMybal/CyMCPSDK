@@ -66,29 +66,45 @@ int main(int argc, char** argv) {
         }
 #ifdef CYMCP_HAS_HTTP
         if (command == "serve") {
-            const char* key = std::getenv("CYMCP_TOKEN");
-            if (!key)
-                throw Error("AuthenticationRequired",
-                            "Set CYMCP_TOKEN to a strong random token (32+ characters)");
-            std::string token = key;
-            LocalHttpServer server(token, [&](const Json& request, const CallContext& context) {
+            int port = 0;
+            bool tokenless = argc > 2 && std::string_view(argv[argc - 1]) == "--no-token";
+            const int positional = argc - (tokenless ? 1 : 0);
+            if (positional > 3)
+                throw Error("InvalidArguments", "Usage: cymcp_example serve [PORT] [--no-token]");
+            if (positional == 3) {
+                std::size_t consumed = 0;
+                port = std::stoi(argv[2], &consumed);
+                if (consumed != std::string_view(argv[2]).size() || port < 0 || port > 65535)
+                    throw Error("InvalidArguments", "Port must be between 0 and 65535");
+            }
+            auto endpoint = [&](const Json& request, const CallContext& context) {
                 if (request.contains("jsonrpc"))
                     return mcp.handle(request, context);
                 return dispatch_app(operations, request, context);
-            });
-            int port = server.start(argc > 2 ? std::stoi(argv[2]) : 0);
+            };
+            std::unique_ptr<LocalHttpServer> server;
+            if (tokenless) {
+                server = std::make_unique<LocalHttpServer>(
+                    LocalHttpServer::UnauthenticatedLoopback{}, endpoint);
+            } else {
+                const char* key = std::getenv("CYMCP_TOKEN");
+                if (!key)
+                    throw Error("AuthenticationRequired",
+                                "Set CYMCP_TOKEN to a strong random token (32+ characters)");
+                server = std::make_unique<LocalHttpServer>(std::string(key), endpoint);
+            }
+            port = server->start(port);
             std::signal(SIGINT, stop);
             std::signal(SIGTERM, stop);
             std::cerr << "Listening on http://127.0.0.1:" << port << " (/v1, /mcp)\n";
             while (!stopped)
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            server.stop();
+            server->stop();
             return 0;
         }
 #endif
-        throw Error(
-            "InvalidArguments",
-            "Usage: cymcp_example describe | invoke NAME PARAMS.json | jsonl | mcp | serve [PORT]");
+        throw Error("InvalidArguments", "Usage: cymcp_example describe | invoke NAME PARAMS.json | "
+                                        "jsonl | mcp | serve [PORT] [--no-token]");
     } catch (const Error& e) {
         std::cerr << Json({{"error", {{"code", e.code}, {"message", e.what()}}}}).dump() << '\n';
         return 1;

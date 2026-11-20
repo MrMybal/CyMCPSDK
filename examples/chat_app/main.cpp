@@ -265,10 +265,20 @@ void translations() {
             {"Windows test application", "Application de test Windows"},
             {"App commands", "Commandes de l’application"},
             {"Counter", "Compteur"},
-            {"Allow counter changes", "Autoriser la modification du compteur"},
             {"AI may use app commands", "L’IA peut appeler les commandes de l’app"},
             {"Expose local MCP", "Activer le MCP local"},
             {"Copy MCP token", "Copier le jeton MCP"},
+            {"Copy MCP address", "Copier l’adresse MCP"},
+            {"MCP access profile", "Profil d’accès MCP"},
+            {"Local controlled", "Local contrôlé"},
+            {"Token only", "Jeton seul"},
+            {"Protected", "Protégé"},
+            {"Counter changes are blocked by this profile.",
+             "Ce profil bloque les modifications du compteur."},
+            {"Stop local MCP to change the token requirement.",
+             "Arrêtez le MCP local pour changer l’exigence de jeton."},
+            {"Any program on this computer can call the app's permitted operations.",
+             "Tout programme sur cet ordinateur peut appeler les opérations autorisées de l’app."},
             {"Help (F1)", "Aide (F1)"},
             {"Automatic connection", "Connexion automatique"},
             {"Detect again", "Relancer la détection"},
@@ -591,8 +601,10 @@ struct App {
             commands.configure_services(std::move(storage_options),
                                         command_config.value("notifications", false), performance);
         app_tools = command_config.value("attach_to_ai", false);
-        commands.allow_changes(command_config.value("allow_changes", false));
         commands.deferred_tools(command_config.value("deferred_tools", false));
+        if (config.contains("app_commands"))
+            commands.configure_mcp_access(chat_example::mcp_access_from_config(command_config),
+                                          command_config.value("mcp_port", 0));
         if (command_config.contains("workspace")) {
             const auto& workspace = command_config.at("workspace");
             commands.configure_workspace(
