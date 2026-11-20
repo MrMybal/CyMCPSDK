@@ -1,4 +1,4 @@
-CyMCPSDK Chat Lab 0.7.1 - Windows x64
+CyMCPSDK Chat Lab 0.7.2 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
 Chat opens directly. Settings contains Providers, Logs and Help. Close returns to the draft.

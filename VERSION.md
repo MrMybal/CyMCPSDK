@@ -1,10 +1,18 @@
-## 0.7.1 — host integration
-
-Optional checked host schema validators preserve full application contracts. Native HTTP can derive opaque principals with a host Bearer authenticator and an explicit request bound. MCP can project legacy result text while keeping structuredContent unchanged. Default policies and schema validation remain fail-closed.
-
 # CyMCPSDK version notes
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
+
+## 0.7.2 — Local MCP access profiles
+
+- Choose among Free, Local controlled, Token only and Protected independently of provider permissions.
+- Chat Lab selects Free when no `app_commands` configuration is provided. Older `app_commands`
+  sections retain their settings. Set `access_profile` to `free` to opt in when updating an existing app.
+- Hosts can expose MCP and SDK commands on `127.0.0.1` without a token. Choose a fixed `mcp_port`
+  in Chat Lab to reuse the address. See the [Chat Lab setup](Documentation/Documentation.html#/en/chat-lab).
+
+## 0.7.1 — Host integration
+
+Optional checked host schema validators preserve full application contracts. Native HTTP can derive opaque principals with a host Bearer authenticator and an explicit request bound. MCP can project legacy result text while keeping structuredContent unchanged. Default policies and schema validation remain fail-closed.
 
 ## 0.7.0 — In development
 

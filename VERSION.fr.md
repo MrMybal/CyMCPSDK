@@ -1,10 +1,18 @@
-## 0.7.1 — intégration hôte
-
-Validation de schémas déléguée explicitement au validateur hôte ; authentification HTTP par callback avec principal opaque et limite de requête explicite ; présentation du texte MCP adaptable sans changer structuredContent. Les politiques et schémas par défaut restent stricts.
-
 # Notes de version de CyMCPSDK
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
+
+## 0.7.2 — Profils d’accès MCP local
+
+- Choisir entre Free, Local contrôlé, Jeton seul et Protégé indépendamment des droits du fournisseur IA.
+- Chat Lab sélectionne Free en l’absence de configuration `app_commands`. Les sections existantes
+  gardent leurs réglages. Pour passer en Free dans une configuration existante, définir `access_profile` à `free`.
+- L’hôte peut exposer MCP et les commandes SDK sur `127.0.0.1` sans jeton. Dans Chat Lab, un `mcp_port`
+  fixe permet de réutiliser la même adresse. Voir la [configuration de Chat Lab](Documentation/Documentation.html#/fr/chat-lab).
+
+## 0.7.1 — Intégration hôte
+
+Validation de schémas déléguée explicitement au validateur hôte ; authentification HTTP par callback avec principal opaque et limite de requête explicite ; présentation du texte MCP adaptable sans changer structuredContent. Les politiques et schémas par défaut restent stricts.
 
 ## 0.7.0 — En développement
 
