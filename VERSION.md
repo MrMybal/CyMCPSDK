@@ -2,6 +2,12 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
+## 0.7.3 — ChatUI
+
+- Build the optional `CyMCP::ChatUI` module with CyUI `14e1c6f` or later to get the transcript text
+  selection and scrollbar wrapping fixes. Rebuild the SDK and the host with the same CyUI revision.
+- Chat Lab exposes its local server controls in a dedicated **Local MCP** settings tab.
+
 ## 0.7.2 — Local MCP access profiles
 
 - Choose among Free, Local controlled, Token only and Protected independently of provider permissions.

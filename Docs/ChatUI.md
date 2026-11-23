@@ -156,6 +156,10 @@ Une erreur de sauvegarde est affichée séparément de la réussite de la géné
 
 ## Intégration dans une autre application
 
+Utiliser CyUI `14e1c6f` ou une révision ultérieure pour intégrer les corrections de sélection
+et de retour à la ligne du tchat. Le SDK et l’application hôte doivent être compilés avec
+la même révision de CyUI, car le correctif modifie la disposition d’états internes au rendu.
+
 Avec le SDK et CyUI comme sources :
 
 ```cmake
@@ -176,7 +180,7 @@ Avec une installation CMake du SDK compilée avec l'interface :
 
 ```cmake
 # Ajouter d'abord CyUI::DocumentViews, avec l'ImGui utilisé par l'application.
-find_package(CyMCPSDK 0.5 CONFIG REQUIRED COMPONENTS ChatUI)
+find_package(CyMCPSDK 0.7.3 CONFIG REQUIRED COMPONENTS ChatUI)
 target_link_libraries(my_app PRIVATE CyMCP::ChatUI)
 ```
 

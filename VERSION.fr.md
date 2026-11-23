@@ -2,6 +2,13 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
+## 0.7.3 — ChatUI
+
+- Compiler le module optionnel `CyMCP::ChatUI` avec CyUI `14e1c6f` ou une révision ultérieure pour
+  corriger la sélection du texte et le retour à la ligne près de la barre de défilement.
+  Recompiler le SDK et l’application hôte avec la même révision de CyUI.
+- Chat Lab regroupe ses réglages du serveur dans l’onglet **MCP local**.
+
 ## 0.7.2 — Profils d’accès MCP local
 
 - Choisir entre Free, Local contrôlé, Jeton seul et Protégé indépendamment des droits du fournisseur IA.

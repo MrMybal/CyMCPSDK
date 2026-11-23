@@ -5,12 +5,12 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 10
+revision: 11
 ---
 
 ## Connect {#connect}
 
-Chat opens directly. **Settings** contains **Providers**, **Logs** and **Help**. **Close** returns
+Chat opens directly. **Settings** contains **Providers**, **Local MCP**, **Logs** and **Help**. **Close** returns
 to the conversation and its draft. **F1** opens Help.
 Open **Providers** to search the catalogue, select a provider and edit its own fields. Selecting
 a provider keeps the other providers' fields in memory for this run. Use **Connect / New chat**
@@ -106,10 +106,10 @@ when it stops growing or cannot be written. Logging never cancels a conversation
 ## Let an AI use app commands {#commands}
 
 In Providers, expand **Permissions and app tools**. The demonstration exposes `get_counter` and `set_counter`,
-with integer values between −1,000,000 and 1,000,000. The current value is visible in the panel.
+with integer values between −1,000,000 and 1,000,000. The current value is visible in **Local MCP**.
 
-1. Select **Free** or **Token only** in **MCP access profile** to allow counter writes.
-2. Enable **AI may use app commands**, then make a new connection to Codex or a supported API transport.
+1. In **Local MCP**, select **Free** or **Token only** to allow counter writes.
+2. In **Providers**, enable **AI may use app commands**, then make a new connection to Codex or a supported API transport.
 3. Ask the AI to set the demonstration counter and read it back.
 
 Direct attachment supports Codex, Responses, Messages, Chat Completions/OpenRouter and Ollama.
@@ -117,7 +117,7 @@ Other CLIs use their native MCP configuration and return `Unsupported` for this 
 
 ## Connect another application {#external}
 
-Find **MCP access profile** in **Permissions and app tools**. Choose a profile, then enable
+Open **Settings → Local MCP**. Choose an **MCP access profile**, then enable
 **Expose local MCP**. Chat Lab starts with **Free** selected when there is no `app_commands`
 configuration.
 

@@ -4,7 +4,7 @@ title: Integrate the C++ library
 description: Link only the modules your host needs and keep provider work outside its UI thread.
 section: SDK
 order: 0
-revision: 1
+revision: 2
 ---
 
 ## Build requirements {#build}
@@ -52,6 +52,8 @@ to the UI. `cancel()` requests cancellation; `reconnect()` is explicit.
 `CYMCP_BUILD_CHAT_UI` and `CYMCP_BUILD_CHAT_APP` are off by default. The host supplies
 `CyUI::DocumentViews`, or sets `CYMCP_CYUI_SOURCE_DIR` to a compatible CyUI checkout.
 An installed consumer creates its CyUI target before requesting `COMPONENTS ChatUI`.
+Use CyUI `14e1c6f` or later for the transcript selection and wrapping fixes.
+Build the SDK and the host with the same CyUI revision.
 
 ```cpp
 #include <cymcp/chat_ui.hpp>

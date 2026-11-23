@@ -5,13 +5,13 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 10
+sourceRevision: 11
 ---
 
 ## Se connecter {#connect}
 
 Le tchat s’ouvre directement. La roue **Paramètres** donne accès aux onglets **Fournisseurs**,
-**Journal** et **Aide**. **Fermer** revient à la conversation et à son brouillon. **F1** ouvre l’aide.
+**MCP local**, **Journal** et **Aide**. **Fermer** revient à la conversation et à son brouillon. **F1** ouvre l’aide.
 Dans Fournisseurs, rechercher le catalogue, sélectionner une carte et modifier ses propres champs.
 Les réglages des autres fournisseurs restent en mémoire pour cette exécution. **Connecter / Nouveau tchat**
 ouvre la connexion et revient au tchat ; un double-clic sur une carte connecte directement.
@@ -115,10 +115,10 @@ signale sa saturation ou un problème d'écriture. Le journal n'annule jamais un
 ## Permettre à une IA d'utiliser les commandes {#commands}
 
 Dans Fournisseurs, déplier **Droits et outils de l’app**. La démonstration expose `get_counter` et `set_counter`,
-pour des entiers entre −1 000 000 et 1 000 000. Le panneau affiche la valeur actuelle.
+pour des entiers entre −1 000 000 et 1 000 000. L’onglet **MCP local** affiche la valeur actuelle.
 
-1. Choisir **Free** ou **Jeton seul** dans **Profil d’accès MCP** pour autoriser les écritures.
-2. Activer **L'IA peut appeler les commandes de l'app**, puis créer une connexion Codex ou API compatible.
+1. Dans **MCP local**, choisir **Free** ou **Jeton seul** pour autoriser les écritures.
+2. Dans **Fournisseurs**, activer **L'IA peut appeler les commandes de l'app**, puis créer une connexion Codex ou API compatible.
 3. Demander à l'IA de modifier le compteur de démonstration, puis de le relire.
 
 L'attachement direct prend en charge Codex, Responses, Messages, Chat Completions/OpenRouter et Ollama.
@@ -126,7 +126,7 @@ Les autres CLI utilisent leur configuration MCP native et renvoient `Unsupported
 
 ## Connecter une autre application {#external}
 
-Dans **Droits et outils de l’app**, choisir le **Profil d’accès MCP**, puis **Activer le MCP local**.
+Dans **Paramètres → MCP local**, choisir le **Profil d’accès MCP**, puis **Activer le MCP local**.
 En l’absence de configuration `app_commands`, Chat Lab sélectionne **Free** au démarrage.
 
 | Profil | Valeur de configuration | Connexion | Opérations sur le compteur |

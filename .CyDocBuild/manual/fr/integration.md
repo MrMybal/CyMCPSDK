@@ -4,7 +4,7 @@ title: Intégrer la bibliothèque C++
 description: Lier uniquement les modules nécessaires et déporter les fournisseurs hors du thread UI.
 section: SDK
 order: 0
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## Prérequis de compilation {#build}
@@ -53,6 +53,8 @@ l'interface. `cancel()` demande l'annulation ; `reconnect()` reste explicite.
 `CYMCP_BUILD_CHAT_UI` et `CYMCP_BUILD_CHAT_APP` sont désactivés par défaut. L'hôte fournit
 `CyUI::DocumentViews`, ou renseigne `CYMCP_CYUI_SOURCE_DIR` avec une copie compatible de CyUI.
 Un consommateur installé crée sa cible CyUI avant de demander `COMPONENTS ChatUI`.
+Utiliser CyUI `14e1c6f` ou une révision ultérieure pour les corrections de sélection et de retour
+à la ligne. Compiler le SDK et l’application hôte avec la même révision de CyUI.
 
 ```cpp
 #include <cymcp/chat_ui.hpp>

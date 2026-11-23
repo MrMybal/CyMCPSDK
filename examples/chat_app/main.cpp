@@ -319,6 +319,8 @@ void translations() {
         });
 }
 struct App {
+    static constexpr int local_mcp_page = 4;
+
     HWND window;
     std::shared_ptr<ProviderRegistry> registry = chat_example::providers();
     chat_example::Commands commands;
@@ -334,7 +336,7 @@ struct App {
     chat_example::Journal journal;
     std::filesystem::path log_path;
     std::uint64_t last_diagnostic = 0;
-    int page = 0, last_settings_page = 1; // Chat, Providers, Logs, Help
+    int page = 0, last_settings_page = 1; // Chat, Providers, Logs, Help, Local MCP
     bool page_changed = false, log_errors_only = false, log_follow = true, log_raw = false;
     bool log_jump = true;
     std::uint64_t log_last_id = 0;
@@ -494,7 +496,7 @@ struct App {
         }
     }
     void show_page(int value) {
-        if (value < 0 || value > 3)
+        if (value < 0 || value > local_mcp_page)
             throw Error("InvalidOptions", "Unknown settings page");
         if (value)
             last_settings_page = value;
@@ -932,9 +934,10 @@ struct App {
             ImGui::BeginChild("##settings-tabs", {tabs_width, ImGui::GetFrameHeight()},
                               ImGuiChildFlags_None, fixed);
             if (ImGui::BeginTabBar("##settings")) {
-                const char* labels[]{"Providers", "Logs", "Help"};
-                for (int index = 1; index <= 3; ++index) {
-                    if (ImGui::BeginTabItem(cyui::trLabel(labels[index - 1]).c_str(), nullptr,
+                constexpr std::pair<int, const char*> tabs[]{
+                    {1, "Providers"}, {local_mcp_page, "Local MCP"}, {2, "Logs"}, {3, "Help"}};
+                for (const auto& [index, label] : tabs) {
+                    if (ImGui::BeginTabItem(cyui::trLabel(label).c_str(), nullptr,
                                             requested == index ? ImGuiTabItemFlags_SetSelected
                                                                : 0)) {
                         if (!requested || requested == index)
@@ -953,6 +956,8 @@ struct App {
                 ImGui::BeginChild("##settings-content", {}, ImGuiChildFlags_None, fixed);
                 if (page == 1)
                     chat_example::draw_providers(*this);
+                else if (page == local_mcp_page)
+                    chat_example::draw_local_mcp(*this);
                 else if (page == 2)
                     chat_example::draw_logs(*this);
                 else

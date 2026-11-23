@@ -10,6 +10,7 @@ inline void workspace_translations() {
     cyui::registerTranslations(
         "fr",
         {{"Providers", "Fournisseurs"},
+         {"Local MCP", "MCP local"},
          {"Saved", "Enregistré"},
          {"Could not save attachment", "Impossible d’enregistrer la pièce jointe"},
          {"No preview for this file type. Save the attachment to use it.",
@@ -247,6 +248,10 @@ template <class App> void draw_app_tools(App& app) {
         cyui::toggleSwitch(cyui::trLabel("Allow all actions").c_str(), &app.allow_all);
         cyui::toggleSwitch(cyui::trLabel("AI may use app commands").c_str(), &app.app_tools);
     }
+    cyui::endSection();
+}
+template <class App> void draw_local_mcp(App& app) {
+    ImGui::PushItemWidth(std::min(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 24.f));
     cyui::textMono("%s: %d", cyui::tr("Counter").c_str(),
                    app.commands.snapshot().at("value").template get<int>());
     bool exposed = !app.commands.endpoint().empty();
@@ -256,7 +261,6 @@ template <class App> void draw_app_tools(App& app) {
             return cymcp::local_access_settings(option.profile) == access;
         });
     ImGui::TextUnformatted(cyui::tr("MCP access profile").c_str());
-    ImGui::SetNextItemWidth(-1.f);
     if (ImGui::BeginCombo("##mcp-access", cyui::tr(current->label).c_str())) {
         for (const auto& option : mcp_access_options) {
             auto selected = cymcp::local_access_settings(option.profile);
@@ -271,6 +275,7 @@ template <class App> void draw_app_tools(App& app) {
                 "%s", cyui::tr("Stop local MCP to change the token requirement.").c_str());
         ImGui::EndCombo();
     }
+    ImGui::PopItemWidth();
     if (!app.commands.mcp_access().require_token)
         ImGui::TextWrapped(
             "%s", cyui::tr("Any program on this computer can call the app's permitted operations.")
@@ -296,7 +301,6 @@ template <class App> void draw_app_tools(App& app) {
                 ImGui::SetClipboardText(app.commands.token().c_str());
         }
     }
-    cyui::endSection();
 }
 template <class App> void draw_appearance(App&) {
     if (!cyui::beginSection(cyui::trLabel("Appearance").c_str(), false))

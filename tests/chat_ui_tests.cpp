@@ -693,6 +693,40 @@ int main() {
             check(rendered_texture(79) && posted_images >= 2 &&
                       layout_chat.state().messages.front().markdown == posted,
                   "The inline reference and attachment card use the saved texture without rewriting the source");
+            ImVec2 selection_start{}, selection_end{};
+            check(rendered_word(*font, "Needle", &selection_start) &&
+                      rendered_word(*font, "authoritative", &selection_end) &&
+                      selection_end.y > selection_start.y,
+                  "Both messages are visible for the selection test");
+            auto& platform = ImGui::GetPlatformIO();
+            const auto copy = platform.Platform_SetClipboardTextFn;
+            auto* clipboard_data = platform.Platform_ClipboardUserData;
+            std::string selected_text;
+            platform.Platform_ClipboardUserData = &selected_text;
+            platform.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* value) {
+                *static_cast<std::string*>(ImGui::GetPlatformIO().Platform_ClipboardUserData) =
+                    value;
+            };
+            io.AddMousePosEvent(selection_start.x - 1.f, selection_start.y);
+            draw();
+            io.AddMouseButtonEvent(0, true);
+            draw();
+            io.AddMousePosEvent(selection_end.x + 50.f, selection_end.y);
+            draw();
+            io.AddMouseButtonEvent(0, false);
+            draw();
+            const auto copy_modifier = io.ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
+            io.AddKeyEvent(copy_modifier, true);
+            io.AddKeyEvent(ImGuiKey_C, true);
+            draw();
+            io.AddKeyEvent(ImGuiKey_C, false);
+            io.AddKeyEvent(copy_modifier, false);
+            draw();
+            platform.Platform_SetClipboardTextFn = copy;
+            platform.Platform_ClipboardUserData = clipboard_data;
+            check(selected_text.starts_with("Needle in the conversation ") &&
+                      selected_text.find("authoritative") == std::string::npos,
+                  "Dragging into the next message copies only text from the originating message");
             const auto sends_before_model_change = probe->sends.load();
             click(model);
             draw();

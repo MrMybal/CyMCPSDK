@@ -1,7 +1,7 @@
-CyMCPSDK Chat Lab 0.7.2 - Windows x64
+CyMCPSDK Chat Lab 0.7.3 - Windows x64
 
 Launch cymcp_chat_app.exe. Choose English or French under Appearance.
-Chat opens directly. Settings contains Providers, Logs and Help. Close returns to the draft.
+Chat opens directly. Settings contains Providers, Local MCP, Logs and Help. Close returns to the draft.
 The Settings gear is at the bottom right. The status is next to the provider and model.
 Click the current Codex model in the footer to choose another for the next message.
 Search provider cards, edit their own connection fields, then Connect / New chat.
@@ -42,7 +42,7 @@ History contains private messages and attachments. API keys are not stored in it
 App commands exposes get_counter and set_counter. AI may use app commands attaches
 them on the next Codex or API connection.
 Other CLIs use their own native MCP configuration; direct attachment is Unsupported.
-Choose an MCP access profile and use Expose local MCP to start on 127.0.0.1.
+In Settings, open Local MCP, choose an MCP access profile and use Expose local MCP to start on 127.0.0.1.
 Free (selected without an app_commands section) allows reads and writes without a token.
 Local controlled allows reads without a token. Token only requires a token for reads
 and writes. Protected requires a token and allows reads. Use Copy MCP address and,
