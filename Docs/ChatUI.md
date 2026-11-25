@@ -180,7 +180,7 @@ Avec une installation CMake du SDK compilée avec l'interface :
 
 ```cmake
 # Ajouter d'abord CyUI::DocumentViews, avec l'ImGui utilisé par l'application.
-find_package(CyMCPSDK 0.7.3 CONFIG REQUIRED COMPONENTS ChatUI)
+find_package(CyMCPSDK 0.7.4 CONFIG REQUIRED COMPONENTS ChatUI)
 target_link_libraries(my_app PRIVATE CyMCP::ChatUI)
 ```
 

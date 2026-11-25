@@ -5,7 +5,7 @@ description: Understand the MIT SDK license and separately licensed optional com
 section: Guides
 parent: overview
 order: 5
-revision: 1
+revision: 2
 ---
 
 ## CyMCPSDK {#sdk}
@@ -21,7 +21,7 @@ Keep the copyright and permission notice with redistributed copies. The source r
 | nlohmann/json 3.12.0 | MIT | SDK JSON representation and validation |
 | cpp-httplib 0.66.0 | MIT | Local HTTP server and test fixtures |
 | PicoSHA2 | MIT | Artifact verification |
-| System libcurl | curl license and host TLS terms | HTTP(S) on Linux/macOS |
+| Host libcurl | curl license and host TLS terms | HTTP(S) on Windows/Linux/macOS |
 | CyUI, Dear ImGui, MD4C | MIT | Optional native chat rendering |
 | Lexilla/Scintilla lexers | Their permissive notices | Optional code highlighting through CyUI |
 | JetBrains Mono | SIL Open Font License 1.1 | CyUI's embedded font |

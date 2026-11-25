@@ -1,15 +1,8 @@
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <cymcp/http.hpp>
-#include <limits>
-#include <sstream>
-#ifdef _WIN32
-#include <windows.h>
-#include <winhttp.h>
-#else
 #include <curl/curl.h>
-#endif
+#include <limits>
 namespace cymcp {
 Url parse_url(const std::string& input) {
     if (input.size() > 8192 ||
@@ -93,38 +86,6 @@ void validate_request(const HttpRequest& r) {
             value.find('\0') != std::string::npos)
             throw Error("InvalidOptions", "Invalid HTTP header");
 }
-#ifdef _WIN32
-std::wstring wide_http(const std::string& s) {
-    if (s.empty())
-        return {};
-    int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s.data(), static_cast<int>(s.size()),
-                                nullptr, 0);
-    if (!n)
-        throw Error("InvalidEncoding", "Expected UTF-8");
-    std::wstring out(n, 0);
-    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s.data(), static_cast<int>(s.size()),
-                        out.data(), n);
-    return out;
-}
-struct Internet {
-    std::atomic<HINTERNET> value{nullptr};
-    explicit Internet(HINTERNET h) : value(h) {
-        if (!h)
-            throw Error("NetworkError", "Cannot open HTTP connection");
-    }
-    ~Internet() {
-        close();
-    }
-    void close() {
-        auto h = value.exchange(nullptr);
-        if (h)
-            WinHttpCloseHandle(h);
-    }
-    HINTERNET get() const {
-        return value.load();
-    }
-};
-#endif
 } // namespace
 HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation& input,
                                  ChunkSink sink) const {
@@ -136,9 +97,8 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     cancel.check();
     HttpResponse result;
     std::size_t received = 0;
-    // Idle detection shared by both back ends: any received byte restarts the interval.
+    // Any received byte restarts idle detection.
     std::atomic<std::int64_t> last_activity{Clock::now().time_since_epoch().count()};
-    std::atomic_bool idle_expired{false};
     auto accept = [&](const char* data, std::size_t size) {
         last_activity.store(Clock::now().time_since_epoch().count());
         cancel.check();
@@ -158,128 +118,6 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
             result.body.append(data, size);
         return true;
     };
-#ifdef _WIN32
-    auto user_agent = wide_http(std::string("CyMCPSDK/") + version);
-    Internet session(WinHttpOpen(user_agent.c_str(),
-                                 url.loopback ? WINHTTP_ACCESS_TYPE_NO_PROXY
-                                              : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
-    // WinHTTP send/receive timeouts are per operation: they bound silence, not a whole stream.
-    // Zero means infinite; the total deadline is enforced by the watcher below.
-    const auto idle = request.idle_timeout.count() > 0 ? request.idle_timeout : request.timeout;
-    auto timeout =
-        static_cast<int>(std::min<std::int64_t>(idle.count(), std::numeric_limits<int>::max()));
-    WinHttpSetTimeouts(session.get(), timeout ? std::min(timeout, 10000) : 10000,
-                       timeout ? std::min(timeout, 10000) : 10000, timeout, timeout);
-    Internet connection(WinHttpConnect(session.get(), wide_http(url.host).c_str(),
-                                       static_cast<INTERNET_PORT>(url.port), 0));
-    Internet handle(WinHttpOpenRequest(connection.get(), wide_http(request.method).c_str(),
-                                       wide_http(url.target).c_str(), nullptr, WINHTTP_NO_REFERER,
-                                       WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                       url.scheme == "https" ? WINHTTP_FLAG_SECURE : 0));
-    // Waiting for the response headers is a silence too (default would be 90 s, or infinite
-    // for a zero idle value).
-    DWORD header_wait = static_cast<DWORD>(timeout);
-    WinHttpSetOption(handle.get(), WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT, &header_wait,
-                     sizeof(header_wait));
-    DWORD disabled = WINHTTP_DISABLE_REDIRECTS;
-    WinHttpSetOption(handle.get(), WINHTTP_OPTION_DISABLE_FEATURE, &disabled, sizeof(disabled));
-    std::jthread watcher([&](std::stop_token stop) {
-        std::mutex mutex;
-        std::condition_variable_any wake;
-        std::unique_lock wait(mutex);
-        while (!stop.stop_requested()) {
-            if (cancel.cancelled() || Clock::now() >= cancel.deadline) {
-                handle.close();
-                return;
-            }
-            if (request.idle_timeout.count() > 0 &&
-                Clock::now() - Clock::time_point(Clock::duration(last_activity.load())) >
-                    request.idle_timeout) {
-                idle_expired.store(true);
-                handle.close();
-                return;
-            }
-            wake.wait_for(wait, stop, std::chrono::milliseconds(20), [] { return false; });
-        }
-    });
-    std::wstring headers;
-    for (const auto& [key, value] : request.headers)
-        headers += wide_http(key + ": " + value + "\r\n");
-    auto failed = [&] {
-        const auto code = GetLastError();
-        cancel.check();
-        if (code == ERROR_WINHTTP_TIMEOUT || idle_expired.load())
-            throw Error("Timeout", "HTTP connection stayed silent beyond its idle timeout");
-        throw Error("NetworkError",
-                    "HTTP request failed (system code " + std::to_string(code) + ")");
-    };
-    if (request.body.size() > std::numeric_limits<DWORD>::max())
-        throw Error("InvalidOptions", "Request body too large");
-    if (!WinHttpSendRequest(
-            handle.get(), headers.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : headers.c_str(),
-            static_cast<DWORD>(headers.size()),
-            request.body.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(request.body.data()),
-            static_cast<DWORD>(request.body.size()), static_cast<DWORD>(request.body.size()), 0) ||
-        !WinHttpReceiveResponse(handle.get(), nullptr))
-        failed();
-    DWORD status = 0, size = sizeof(status);
-    if (!WinHttpQueryHeaders(handle.get(), WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX))
-        failed();
-    result.status = static_cast<int>(status);
-    last_activity.store(Clock::now().time_since_epoch().count());
-    DWORD header_size = 0;
-    WinHttpQueryHeaders(handle.get(), WINHTTP_QUERY_RAW_HEADERS_CRLF, nullptr, nullptr,
-                        &header_size, nullptr);
-    if (header_size > 65536)
-        throw Error("ResponseTooLarge", "HTTP headers exceed limit");
-    std::wstring raw(header_size / sizeof(wchar_t), 0);
-    if (header_size && WinHttpQueryHeaders(handle.get(), WINHTTP_QUERY_RAW_HEADERS_CRLF, nullptr,
-                                           raw.data(), &header_size, nullptr)) {
-        std::string ascii;
-        for (auto c : raw)
-            if (c > 0 && c < 128)
-                ascii += static_cast<char>(c);
-        std::istringstream stream(ascii);
-        std::string line;
-        while (std::getline(stream, line)) {
-            auto p = line.find(':');
-            if (p == std::string::npos)
-                continue;
-            auto value = line.substr(p + 1);
-            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
-                value.erase(value.begin());
-            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
-                value.pop_back();
-            result.headers[lower(line.substr(0, p))] = value;
-        }
-    }
-    std::array<char, 16384> buffer{};
-    while (true) {
-        DWORD wanted = static_cast<DWORD>(buffer.size());
-        if (sink) {
-            // A synchronous ReadData tries to fill its buffer. For SSE/NDJSON,
-            // read only the bytes already available instead of waiting for EOF.
-            DWORD available = 0;
-            if (!WinHttpQueryDataAvailable(handle.get(), &available))
-                failed();
-            if (!available)
-                break;
-            wanted = std::min(wanted, available);
-        }
-        DWORD bytes = 0;
-        if (!WinHttpReadData(handle.get(), buffer.data(), wanted, &bytes))
-            failed();
-        if (!bytes)
-            break;
-        if (!accept(buffer.data(), bytes))
-            break;
-    }
-    watcher.request_stop();
-    if (idle_expired.load())
-        throw Error("Timeout", "HTTP connection stayed silent beyond its idle timeout");
-#else
     static const auto initialized = curl_global_init(CURL_GLOBAL_DEFAULT);
     if (initialized != CURLE_OK)
         throw Error("NetworkError", "Cannot initialize TLS transport");
@@ -306,9 +144,15 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
         bool error_body_discarded = false;
     } state{&accept, cancel, &result, handle, last_activity, 0, {}, 0, false};
     curl_easy_setopt(handle, CURLOPT_URL, request.url.c_str());
+    const auto user_agent = std::string("CyMCPSDK/") + version;
+    curl_easy_setopt(handle, CURLOPT_USERAGENT, user_agent.c_str());
     curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, static_cast<long>(request.timeout.count()));
+    // The polling loop enforces longer deadlines when libcurl's long is only 32 bits.
+    const long timeout = request.timeout.count() > std::numeric_limits<long>::max()
+                             ? 0L
+                             : static_cast<long>(request.timeout.count());
+    curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, timeout);
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
     if (url.loopback)
         curl_easy_setopt(handle, CURLOPT_NOPROXY, "*");
@@ -443,8 +287,6 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
     long status = 0;
     curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &status);
     result.status = static_cast<int>(status);
-    last_activity.store(Clock::now().time_since_epoch().count());
-#endif
     cancel.check();
     return result;
 }

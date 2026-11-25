@@ -2,7 +2,8 @@ param(
     [string]$CyUISource = (Join-Path $PSScriptRoot '../../CyImgui_Interface'),
     [string]$BuildDirectory = (Join-Path $PSScriptRoot '../build-chat-native'),
     [string]$PortableDirectory = (Join-Path $PSScriptRoot '../out/ChatLab-windows-x64'),
-    [switch]$Run
+    [switch]$Run,
+    [string]$CurlRoot = ''
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
@@ -25,8 +26,10 @@ function Invoke-Native([string]$Program, [string[]]$NativeArguments) {
     & $Program @NativeArguments
     if ($LASTEXITCODE -ne 0) { throw "Native command failed with exit code $LASTEXITCODE." }
 }
-Invoke-Native $cmake @('-S', $projectRoot, '-B', $buildRoot, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+$configureArguments = @('-S', $projectRoot, '-B', $buildRoot, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
     "-DCMAKE_MAKE_PROGRAM=$ninja", '-DCYMCP_BUILD_CHAT_APP=ON', "-DCYMCP_CYUI_SOURCE_DIR=$cyuiRoot")
+if ($CurlRoot) { $configureArguments += "-DCURL_ROOT=$((Resolve-Path -LiteralPath $CurlRoot).Path)" }
+Invoke-Native $cmake $configureArguments
 # Some localized MSVC installations emit UTF-8 while CMake decodes the include
 # prefix with the OEM code page. Ninja then misses header dependencies entirely.
 $compilerInfo = Get-ChildItem -Path (Join-Path $buildRoot 'CMakeFiles/*/CMakeCXXCompiler.cmake') |

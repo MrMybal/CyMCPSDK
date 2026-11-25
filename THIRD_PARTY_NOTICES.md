@@ -11,8 +11,10 @@ CyMCPSDK source is MIT. These small, vendored components are MIT as well:
 Upstreams: https://github.com/nlohmann/json, https://github.com/yhirose/cpp-httplib,
 https://github.com/okdshin/PicoSHA2.
 
-Windows networking and cryptography use system APIs. Linux/macOS HTTPS uses the
-host's libcurl, under its own permissive curl license and TLS backend notices.
+HTTP(S) clients on Windows, Linux and macOS use the host's libcurl, under its
+permissive curl license and TLS backend notices. The curl license is included in
+`third_party/curl/COPYING`. Redistributed curl builds also need their selected
+dependencies' notices. Windows cryptography uses system APIs.
 No Python runtime, model weights, inference engine, GPU runtime or driver
 is shipped in the SDK. The optional ChatUI module uses the host's CyUI (MIT),
 Dear ImGui (MIT), MD4C (MIT), Lexilla/Scintilla's permissive lexer libraries and

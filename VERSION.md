@@ -2,6 +2,16 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
+## 0.7.4 — Shared libcurl HTTP transport
+
+- Use libcurl for HTTP(S) clients on Windows, Linux and macOS.
+- Export the libcurl dependency for installed SDK consumers. Hosts provide its development
+  files and a TLS backend through `CURL::libcurl`.
+- Accept `CURL_ROOT` or `CMAKE_PREFIX_PATH` for custom installations and `-CurlRoot` in the
+  Windows example build script.
+- Preserve client identification, binary request bodies and long request deadlines across
+  the shared transport. Include the curl license in SDK installations.
+
 ## 0.7.3 — ChatUI
 
 - Build the optional `CyMCP::ChatUI` module with CyUI `14e1c6f` or later to get the transcript text

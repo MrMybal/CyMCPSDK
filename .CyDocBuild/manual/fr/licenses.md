@@ -5,7 +5,7 @@ description: Comprendre la licence MIT du SDK et les conditions des composants o
 section: Guides
 parent: overview
 order: 5
-sourceRevision: 1
+sourceRevision: 2
 ---
 
 ## CyMCPSDK {#sdk}
@@ -21,7 +21,7 @@ Conserver copyright et autorisation dans les copies redistribuées. `LICENSE` et
 | nlohmann/json 3.12.0 | MIT | Représentation JSON et validation du SDK |
 | cpp-httplib 0.66.0 | MIT | Serveur HTTP local et transports de test |
 | PicoSHA2 | MIT | Vérification des artefacts |
-| libcurl système | Licence curl et conditions TLS de l'hôte | HTTP(S) Linux/macOS |
+| libcurl de l'hôte | Licence curl et conditions TLS de l'hôte | HTTP(S) Windows/Linux/macOS |
 | CyUI, Dear ImGui, MD4C | MIT | Rendu du tchat natif optionnel |
 | Lexers Lexilla/Scintilla | Leurs notices permissives | Coloration du code optionnelle via CyUI |
 | JetBrains Mono | SIL Open Font License 1.1 | Police embarquée par CyUI |

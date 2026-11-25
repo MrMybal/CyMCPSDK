@@ -1,6 +1,6 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.7.3 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.7.4 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 

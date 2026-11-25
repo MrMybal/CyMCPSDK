@@ -262,6 +262,13 @@ int main(int argc, char** argv) {
             fake.server.Get("/component", [&](const auto&, auto& res) {
                 res.set_content(component, "application/octet-stream");
             });
+            fake.server.Get("/redirect", [&](const auto&, auto& res) {
+                res.set_redirect(fake.base + "/component");
+            });
+            fake.server.Post("/echo", [](const auto& req, auto& res) {
+                res.set_header("X-Client-Agent", req.get_header_value("User-Agent"));
+                res.set_content(req.body, "application/octet-stream");
+            });
             fake.server.Get("/rejected", [](const auto&, auto& res) {
                 res.status = 400;
                 res.set_content("rejected body", "text/plain");
@@ -304,6 +311,31 @@ int main(int argc, char** argv) {
                 res.set_content(stream, "text/event-stream");
             });
             fake.start();
+            {
+                HttpRequest request;
+                request.url = fake.base + "/redirect";
+                check(HttpClient().perform(request).status == 302,
+                      "HTTP redirects remain explicit");
+                request.url = fake.base + "/component";
+                request.method = "HEAD";
+                auto response = HttpClient().perform(request);
+                check(response.status == 200 && response.body.empty(),
+                      "HTTP HEAD preserves status without a response body");
+                request.method = "POST";
+                request.url = fake.base + "/echo";
+                request.body = std::string("UTF-8 é\0binary", 15);
+                request.timeout = std::chrono::hours(24 * 365);
+                response = HttpClient().perform(request);
+                check(response.body == request.body &&
+                          response.headers.at("x-client-agent") == std::string("CyMCPSDK/") + version,
+                      "HTTP preserves binary bodies, client identity and long deadlines");
+                request.max_response_bytes = 3;
+                expect_error("ResponseTooLarge", [&] { HttpClient().perform(request); });
+                request.max_response_bytes = 1024;
+                expect_error("Cancelled", [&] {
+                    HttpClient().perform(request, {}, [](const char*, std::size_t) { return false; });
+                });
+            }
             {
                 HttpRequest request;
                 request.url = fake.base + "/rejected";

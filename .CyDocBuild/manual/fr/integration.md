@@ -4,15 +4,23 @@ title: Intégrer la bibliothèque C++
 description: Lier uniquement les modules nécessaires et déporter les fournisseurs hors du thread UI.
 section: SDK
 order: 0
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Prérequis de compilation {#build}
 
 Utiliser CMake 3.24+, C++20 et les threads système. Windows utilise Visual Studio 2022 C++,
-Windows SDK, WinHTTP et BCrypt. Linux/macOS utilisent les API POSIX et les fichiers de
-développement libcurl pour HTTP(S). Les limites de distribution multiplateforme actuelles
+Windows SDK et BCrypt. Linux/macOS utilisent les API POSIX. HTTP(S) utilise libcurl
+sur les trois plateformes. Installer ses fichiers de développement avec un backend TLS
+et renseigner `CURL_ROOT` ou `CMAKE_PREFIX_PATH` pour une installation personnalisée.
+Le script de compilation de Chat Lab accepte `-CurlRoot CHEMIN`. Les consommateurs du
+SDK installé ont aussi besoin de `CURL::libcurl`. Les limites de distribution multiplateforme actuelles
 figurent dans les notes de version des sources.
+
+Le transport HTTP peut se compiler sur Android avec libcurl compilée par le NDK pour l’ABI choisie.
+HTTPS nécessite aussi un backend TLS et un ensemble de certificats de confiance configuré pour ce build.
+Le SDK nécessite une bibliothèque standard C++20 qui fournit `std::jthread` et `std::stop_token`.
+L’intégration Android complète, y compris les fournisseurs CLI natifs, reste reportée.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

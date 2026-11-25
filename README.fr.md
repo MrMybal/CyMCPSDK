@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Licence de la bibliothèque</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.7.3</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.7.4</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
       <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Télécharger Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ Une bibliothèque C++20 modulaire pour les développeurs qui veulent permettre a
 d'utiliser leur app, intégrer des conversations et accéder aux outils d'autres applications.
 Elle fournit des transports SDK/MCP natifs et un panneau de tchat Markdown CyUI optionnel.
 
-> **EN DÉVELOPPEMENT · 0.7.3**
+> **EN DÉVELOPPEMENT · 0.7.4**
 >
 > L'exemple de tchat Windows est disponible en ZIP portable. La distribution Linux/macOS et les
 > installations de dépendances restent en cours de réalisation. Consulter les [notes de version et problèmes connus](VERSION.fr.md).
@@ -101,7 +101,9 @@ affiche les sources et n'est pas le lecteur du manuel. La lecture locale ne dema
 
 - CMake 3.24+, compilateur C++20 et threads système.
 - Windows : outils C++ Visual Studio 2022 et Windows SDK.
-- Linux/macOS : API POSIX et fichiers de développement libcurl pour HTTP(S) ; voir les problèmes de plateforme actuels.
+- HTTP(S) Windows/Linux/macOS nécessite les fichiers de développement libcurl avec un backend TLS.
+  CMake utilise `CURL::libcurl`. Renseigner `CURL_ROOT` ou `CMAKE_PREFIX_PATH` pour une installation personnalisée.
+- Linux/macOS : API POSIX ; voir les problèmes de plateforme actuels.
 - Interface de tchat optionnelle : copie hôte de [CyUI](https://github.com/MrMybal/CyUI) avec DocumentViews.
 
 ```sh
@@ -150,7 +152,7 @@ Les moteurs externes, modèles et services fournisseurs gardent leurs conditions
 | [nlohmann/json](https://github.com/nlohmann/json) 3.12.0 | [MIT](third_party/nlohmann/LICENSE.MIT) | Types JSON et validation du SDK |
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) 0.66.0 | [MIT](third_party/httplib/LICENSE) | Serveur HTTP local ; transports de test de développement |
 | [PicoSHA2](https://github.com/okdshin/PicoSHA2) | [MIT](third_party/picosha2/LICENSE) | Empreintes des artefacts |
-| [libcurl](https://curl.se/libcurl/) | [Licence curl et notices TLS](THIRD_PARTY_NOTICES.md) | Dépendance hôte HTTP(S) Linux/macOS |
+| [libcurl](https://curl.se/libcurl/) | [Licence curl et notices TLS](THIRD_PARTY_NOTICES.md) | Dépendance hôte HTTP(S) Windows/Linux/macOS |
 | [CyUI](https://github.com/MrMybal/CyUI), Dear ImGui, MD4C | [Notices MIT](THIRD_PARTY_NOTICES.md) | Modules UI/Markdown natifs optionnels |
 | Lexers Lexilla/Scintilla | [Notices permissives](THIRD_PARTY_NOTICES.md) | Coloration du code CyUI optionnelle |
 | JetBrains Mono | [Notice SIL OFL 1.1](THIRD_PARTY_NOTICES.md) | Police CyUI embarquée optionnelle |

@@ -2,6 +2,16 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
+## 0.7.4 — Transport HTTP commun avec libcurl
+
+- Utiliser libcurl pour les clients HTTP(S) Windows, Linux et macOS.
+- Exporter la dépendance libcurl pour les consommateurs du SDK installé. L’hôte fournit ses
+  fichiers de développement et son backend TLS via `CURL::libcurl`.
+- Accepter `CURL_ROOT` ou `CMAKE_PREFIX_PATH` pour les installations personnalisées et
+  `-CurlRoot` dans le script de compilation de l’exemple Windows.
+- Préserver l’identification du client, les corps de requête binaires et les délais longs
+  avec le transport commun. Inclure la licence curl dans les installations du SDK.
+
 ## 0.7.3 — ChatUI
 
 - Compiler le module optionnel `CyMCP::ChatUI` avec CyUI `14e1c6f` ou une révision ultérieure pour

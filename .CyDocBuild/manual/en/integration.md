@@ -4,14 +4,22 @@ title: Integrate the C++ library
 description: Link only the modules your host needs and keep provider work outside its UI thread.
 section: SDK
 order: 0
-revision: 2
+revision: 3
 ---
 
 ## Build requirements {#build}
 
 Use CMake 3.24+, C++20 and system threads. Windows uses Visual Studio 2022 C++, Windows SDK,
-WinHTTP and BCrypt. Linux/macOS use POSIX APIs and libcurl development files for HTTP(S).
+and BCrypt. Linux/macOS use POSIX APIs. HTTP(S) uses libcurl on all three platforms.
+Install libcurl development files with a TLS backend and set `CURL_ROOT` or
+`CMAKE_PREFIX_PATH` for a custom installation. Windows Chat Lab's build script accepts
+`-CurlRoot PATH`. Installed SDK consumers also need `CURL::libcurl`.
 Current cross-platform distribution limits are listed in the source version notes.
+
+Android can build the HTTP transport with an NDK-built libcurl for the selected ABI.
+HTTPS also requires a TLS backend and a trusted CA bundle configured for that build.
+The SDK needs a C++20 standard library with `std::jthread` and `std::stop_token`.
+The complete Android application integration, including native CLI providers, remains deferred.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

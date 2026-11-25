@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.7.3</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.7.4</strong></a><br><strong>IN DEVELOPMENT</strong></p>
       <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Download Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
@@ -23,7 +23,7 @@ A modular C++20 library for application developers who want AI agents to use the
 conversations inside the app, and connections to other applications' tools. It provides
 native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
-> **IN DEVELOPMENT · 0.7.3**
+> **IN DEVELOPMENT · 0.7.4**
 >
 > The Windows chat example is available as a portable ZIP. Linux/macOS distribution and dependency
 > installation work remain in progress. Read the [version notes and known issues](VERSION.md).
@@ -100,7 +100,9 @@ file viewer displays source, so it is not the manual reader. Reading locally nee
 
 - CMake 3.24+, a C++20 compiler and system threads.
 - Windows: Visual Studio 2022 C++ tools and Windows SDK.
-- Linux/macOS: POSIX APIs and libcurl development files for HTTP(S); see current platform issues.
+- HTTP(S) on Windows/Linux/macOS requires libcurl development files with a TLS backend.
+  CMake uses `CURL::libcurl`. Set `CURL_ROOT` or `CMAKE_PREFIX_PATH` for a custom installation.
+- Linux/macOS: POSIX APIs; see current platform issues.
 - Optional chat UI: a host [CyUI](https://github.com/MrMybal/CyUI) checkout with DocumentViews.
 
 ```sh
@@ -149,7 +151,7 @@ External engines, models and provider services retain their own terms.
 | [nlohmann/json](https://github.com/nlohmann/json) 3.12.0 | [MIT](third_party/nlohmann/LICENSE.MIT) | SDK JSON types and validation |
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) 0.66.0 | [MIT](third_party/httplib/LICENSE) | Local HTTP server; development fixtures |
 | [PicoSHA2](https://github.com/okdshin/PicoSHA2) | [MIT](third_party/picosha2/LICENSE) | Artifact hashing |
-| [libcurl](https://curl.se/libcurl/) | [curl license and TLS notices](THIRD_PARTY_NOTICES.md) | Host HTTP(S) dependency on Linux/macOS |
+| [libcurl](https://curl.se/libcurl/) | [curl license and TLS notices](THIRD_PARTY_NOTICES.md) | Host HTTP(S) dependency on Windows/Linux/macOS |
 | [CyUI](https://github.com/MrMybal/CyUI), Dear ImGui, MD4C | [MIT notices](THIRD_PARTY_NOTICES.md) | Optional native UI/Markdown modules |
 | Lexilla/Scintilla lexers | [Permissive notices](THIRD_PARTY_NOTICES.md) | Optional CyUI code highlighting |
 | JetBrains Mono | [SIL OFL 1.1 notice](THIRD_PARTY_NOTICES.md) | Optional CyUI embedded font |
