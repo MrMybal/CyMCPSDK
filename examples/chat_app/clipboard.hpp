@@ -1,4 +1,5 @@
 #pragma once
+#ifdef _WIN32
 #include <cymcp/process.hpp>
 #pragma push_macro("pascal")
 #undef pascal
@@ -196,3 +197,43 @@ class ClipboardAttachments {
     }
 };
 } // namespace chat_example
+
+#else
+
+#include <cymcp/process.hpp>
+#include <cyui/modules/DocumentIO.h>
+#include "Platform.h"
+namespace chat_example {
+class ClipboardAttachments {
+    using Paths = std::vector<std::filesystem::path>;
+    std::map<std::filesystem::path, std::unique_ptr<cymcp::PrivateFile>> files_;
+  public:
+    bool paste(SDL_Window*, std::string& text, Paths& paths) {
+        auto content = platform::clipboard();
+        if (!content.files.empty()) {
+            paths = std::move(content.files);
+            return true;
+        }
+        if (!content.image.empty()) {
+            if (content.image.size() > 32 * 1024 * 1024)
+                throw cymcp::Error("ResponseTooLarge", "Clipboard attachment exceeds its size limit");
+            auto file = std::make_unique<cymcp::PrivateFile>(content.imageName,
+                std::string(reinterpret_cast<const char*>(content.image.data()), content.image.size()));
+            auto path = file->path();
+            files_.emplace(path, std::move(file));
+            paths.push_back(std::move(path));
+            return true;
+        }
+        if (content.html.empty())
+            return false;
+        text = cyui::markdownFromHtml(content.html);
+        return !text.empty();
+    }
+    void discard_unused(const Paths& pending) {
+        std::erase_if(files_, [&](const auto& file) {
+            return std::find(pending.begin(), pending.end(), file.first) == pending.end();
+        });
+    }
+};
+} // namespace chat_example
+#endif

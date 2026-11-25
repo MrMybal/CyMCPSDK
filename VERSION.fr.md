@@ -2,6 +2,13 @@
 
 [English](VERSION.md) · [Manuel](Documentation/Documentation.html#/fr/overview)
 
+## 0.7.5 — Chat Lab en fenêtre sous Linux
+
+- Compiler Chat Lab en fenêtre sous Linux avec SDL3 3.4+, en partageant la logique de
+  l’exemple Windows, les réglages fournisseurs, les commandes MCP local et le journal.
+- Ajouter un script Linux de compilation, tests et paquetage. SDL3 reste indépendant
+  du SDK et du module ChatUI réutilisable.
+
 ## 0.7.4 — Transport HTTP commun avec libcurl
 
 - Utiliser libcurl pour les clients HTTP(S) Windows, Linux et macOS.
@@ -121,7 +128,7 @@ Validation de schémas déléguée explicitement au validateur hôte ; authentif
 
 - Le test du cœur compile avec GCC 15.2. Le stockage de conversation reconnaît les alias système
   des dossiers temporaires de macOS. La validation sur une machine macOS reste à effectuer.
-  L'exemple graphique utilise Win32/DX11.
+  L’exemple graphique utilise Win32/DX11 sous Windows et SDL3 sous Linux.
 - La disponibilité d'un fournisseur dépend de la version du CLI/API, du compte et du modèle choisi.
   La présence d'un profil ne garantit pas l'authentification auprès de chaque service.
 

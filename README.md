@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Library license</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.7.4</strong></a><br><strong>IN DEVELOPMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.md"><strong>0.7.5</strong></a><br><strong>IN DEVELOPMENT</strong></p>
       <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Download Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
@@ -23,10 +23,11 @@ A modular C++20 library for application developers who want AI agents to use the
 conversations inside the app, and connections to other applications' tools. It provides
 native SDK/MCP transports and an optional CyUI Markdown chat panel.
 
-> **IN DEVELOPMENT · 0.7.4**
+> **IN DEVELOPMENT · 0.7.5**
 >
-> The Windows chat example is available as a portable ZIP. Linux/macOS distribution and dependency
-> installation work remain in progress. Read the [version notes and known issues](VERSION.md).
+> The Windows chat example is available as a portable ZIP. The Linux windowed example builds
+> locally with SDL3; macOS packaging and dependency installation remain in progress.
+> Read the [version notes and known issues](VERSION.md).
 
 [![Chat Lab provider catalogue and dedicated connection settings](assets/screenshots/providers-en.png)](assets/screenshots/providers-en.png)
 
@@ -119,6 +120,19 @@ For the Windows chat example, place CyUI beside the SDK or pass its real path:
 ./tools/build-chat.ps1 -CyUISource ../CyUI
 ./out/ChatLab-windows-x64/cymcp_chat_app.exe
 ```
+
+The same windowed Chat Lab also builds on Linux with SDL3 3.4+ and libcurl development
+files. Supply CyUI's full checkout (including its portable example host). From a graphical session:
+
+```sh
+# Set CMAKE_PREFIX_PATH if SDL3 is installed in a custom prefix.
+bash tools/build-chat-linux.sh ../CyUI
+./out/ChatLab-linux-x86_64/cymcp_chat_app
+```
+
+The Linux script builds, runs the local tests and prepares a local `.tar.gz` with
+the application, offline manual, configurations and notices. GitHub Releases retain
+the Windows example ZIP. The SDK's ordinary modules do not depend on SDL3.
 
 <details>
 <summary>Link the library and choose optional modules</summary>

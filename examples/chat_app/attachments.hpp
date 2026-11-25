@@ -1,18 +1,26 @@
 #pragma once
-// Windows example adapters only: the SDK and CyUI widgets remain portable.
+// Native image and file adapters for the windowed chat example.
 #include <charconv>
+#include <fstream>
+#ifdef _WIN32
 #include <commdlg.h>
+#endif
 #include <cymcp/chat_ui.hpp>
 #pragma push_macro("pascal")
 #undef pascal
 #include <cyui/modules/DocumentViews.h>
 #pragma pop_macro("pascal")
+#ifdef _WIN32
 #include <d3d11.h>
-#include <fstream>
 #include <wincodec.h>
 #include <wincrypt.h>
 #include <windows.h>
 #include <wrl/client.h>
+#else
+#include "Platform.h"
+#include "Raster.h"
+#include <cymcp/content.hpp>
+#endif
 
 namespace chat_example {
 inline std::vector<unsigned char> attachment_bytes(const cymcp::ChatAttachment& attachment) {
@@ -26,6 +34,7 @@ inline std::vector<unsigned char> attachment_bytes(const cymcp::ChatAttachment& 
         return {text.begin(), text.end()};
     }
     const auto& data = payload.at(resource ? "blob" : "data").get_ref<const std::string&>();
+#ifdef _WIN32
     DWORD count = 0;
     if (!CryptStringToBinaryA(data.data(), static_cast<DWORD>(data.size()), CRYPT_STRING_BASE64,
                               nullptr, &count, nullptr, nullptr))
@@ -36,23 +45,55 @@ inline std::vector<unsigned char> attachment_bytes(const cymcp::ChatAttachment& 
         throw cymcp::Error("InvalidContent", "Invalid attachment bytes");
     bytes.resize(count);
     return bytes;
+#else
+    cymcp::validate_content(cymcp::Json::array({block}));
+    constexpr std::string_view alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::vector<unsigned char> bytes;
+    bytes.reserve(data.size() / 4 * 3);
+    unsigned buffer = 0, bits = 0;
+    for (const auto c : data) {
+        if (c == '=')
+            break;
+        const auto digit = alphabet.find(c);
+        if (digit == alphabet.npos)
+            throw cymcp::Error("InvalidContent", "Invalid attachment bytes");
+        buffer = (buffer << 6) | static_cast<unsigned>(digit);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push_back(static_cast<unsigned char>(buffer >> bits));
+        }
+    }
+    return bytes;
+#endif
 }
 class Attachments {
+#ifdef _WIN32
     template <class T> using ComPtr = Microsoft::WRL::ComPtr<T>;
+    using Texture = ComPtr<ID3D11ShaderResourceView>;
+#else
+    using Texture = std::shared_ptr<SDL_Texture>;
+#endif
     struct Pixels {
-        UINT width = 0, height = 0;
+        unsigned width = 0, height = 0;
         std::vector<unsigned char> bytes;
     };
     struct Image {
         std::future<Pixels> loading;
-        ComPtr<ID3D11ShaderResourceView> texture;
-        UINT width = 0, height = 0;
+        Texture texture;
+        unsigned width = 0, height = 0;
         std::uint64_t used = 0;
     };
+#ifdef _WIN32
     HWND window_;
     ComPtr<ID3D11Device> device_;
+#else
+    SDL_Window* window_;
+    SDL_Renderer* renderer_;
+#endif
     std::map<std::string, Image> images_;
-    std::vector<ComPtr<ID3D11ShaderResourceView>> retired_; // retained through the current Render
+    std::vector<Texture> retired_; // retained through the current Render
     std::future<void> saving_;
     std::optional<cymcp::ChatAttachment> selected_;
     cyui::Document document_;
@@ -75,6 +116,7 @@ class Attachments {
             }
         return nullptr;
     }
+#ifdef _WIN32
     static Pixels decode(std::vector<unsigned char> bytes) {
         const auto initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         struct Apartment {
@@ -99,7 +141,7 @@ class Attachments {
             FAILED(decoder->GetFrame(0, &frame)))
             return {};
         Pixels result;
-        UINT width = 0, height = 0;
+        unsigned width = 0, height = 0;
         if (FAILED(frame->GetSize(&width, &height)) || !width || !height ||
             std::uint64_t(width) * height > 16 * 1024 * 1024)
             return {};
@@ -122,8 +164,34 @@ class Attachments {
         return result;
     }
 
+#else
+    static Pixels decode(std::vector<unsigned char> bytes) {
+        auto image = raster::decode(bytes.data(), bytes.size());
+        if (image.pixels.empty() || std::uint64_t(image.width) * image.height > 16 * 1024 * 1024)
+            return {};
+        const auto ratio = std::min(1., 1024. / std::max(image.width, image.height));
+        Pixels result;
+        result.width = std::max(1U, static_cast<unsigned>(image.width * ratio));
+        result.height = std::max(1U, static_cast<unsigned>(image.height * ratio));
+        result.bytes.resize(std::size_t(result.width) * result.height * 4);
+        for (unsigned y = 0; y < result.height; ++y)
+            for (unsigned x = 0; x < result.width; ++x) {
+                const auto source = std::size_t(y) * image.height / result.height * image.width +
+                                    std::size_t(x) * image.width / result.width;
+                const auto destination = std::size_t(y) * result.width + x;
+                std::copy_n(image.pixels.data() + source * 4, 4,
+                            result.bytes.data() + destination * 4);
+            }
+        return result;
+    }
+#endif
+
   public:
+#ifdef _WIN32
     Attachments(HWND window, ID3D11Device* device) : window_(window), device_(device) {}
+#else
+    Attachments(SDL_Window* window, SDL_Renderer* renderer) : window_(window), renderer_(renderer) {}
+#endif
     bool ready(const std::string& source) const {
         auto found = images_.find(source);
         return found != images_.end() && found->second.texture;
@@ -147,12 +215,12 @@ class Attachments {
                             [attachment] { return decode(attachment_bytes(attachment)); });
     }
     cyui::ImageData preview(const std::filesystem::path& path) {
-        auto suffix = path.extension().wstring();
-        std::transform(suffix.begin(), suffix.end(), suffix.begin(), [](wchar_t c) {
-            return c >= L'A' && c <= L'Z' ? wchar_t(c + L'a' - L'A') : c;
+        auto suffix = cymcp::path_utf8(path.extension());
+        std::transform(suffix.begin(), suffix.end(), suffix.begin(), [](unsigned char c) {
+            return c >= 'A' && c <= 'Z' ? char(c + 'a' - 'A') : char(c);
         });
-        if (suffix != L".png" && suffix != L".jpg" && suffix != L".jpeg" && suffix != L".webp" &&
-            suffix != L".gif")
+        if (suffix != ".png" && suffix != ".jpg" && suffix != ".jpeg" && suffix != ".webp" &&
+            suffix != ".gif")
             return {};
         return cached_image(cymcp::path_utf8(path), [path] {
             std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -199,6 +267,7 @@ class Attachments {
             try {
                 auto pixels = entry.loading.get();
                 if (!pixels.bytes.empty()) {
+#ifdef _WIN32
                     D3D11_TEXTURE2D_DESC desc{};
                     desc.Width = pixels.width;
                     desc.Height = pixels.height;
@@ -215,12 +284,30 @@ class Attachments {
                         entry.width = pixels.width;
                         entry.height = pixels.height;
                     }
+#else
+                    auto* surface = SDL_CreateSurfaceFrom(int(pixels.width), int(pixels.height),
+                        SDL_PIXELFORMAT_RGBA32, pixels.bytes.data(), int(pixels.width * 4));
+                    if (surface) {
+                        entry.texture = Texture(SDL_CreateTextureFromSurface(renderer_, surface),
+                                                SDL_DestroyTexture);
+                        SDL_DestroySurface(surface);
+                    }
+                    if (entry.texture) {
+                        SDL_SetTextureBlendMode(entry.texture.get(), SDL_BLENDMODE_BLEND);
+                        SDL_SetTextureScaleMode(entry.texture.get(), SDL_SCALEMODE_LINEAR);
+                        entry.width = pixels.width;
+                        entry.height = pixels.height;
+                    }
+#endif
                 }
             } catch (...) { /* A preview failure leaves the attachment card and Save usable. */
             }
         }
-        return {reinterpret_cast<ImTextureID>(entry.texture.Get()), int(entry.width),
-                int(entry.height)};
+#ifdef _WIN32
+        return {reinterpret_cast<ImTextureID>(entry.texture.Get()), int(entry.width), int(entry.height)};
+#else
+        return {reinterpret_cast<ImTextureID>(entry.texture.get()), int(entry.width), int(entry.height)};
+#endif
     }
 
   public:
@@ -247,6 +334,7 @@ class Attachments {
         if (save) {
             if (saving_.valid())
                 return;
+#ifdef _WIN32
             wchar_t path[32768]{};
             // Embedded names are labels, never destination paths. The user chooses the file.
             const auto name = std::filesystem::u8path(attachment.name).filename().wstring();
@@ -262,6 +350,14 @@ class Attachments {
             if (!GetSaveFileNameW(&dialog))
                 return;
             save_to(attachment, path);
+#else
+            request_save_file(window_, cymcp::path_utf8(
+                std::filesystem::u8path(attachment.name).filename()),
+                [this, attachment](const auto& paths) {
+                    if (!paths.empty())
+                        save_to(attachment, paths.front());
+                });
+#endif
         } else {
             selected_ = attachment;
             document_state_ = {};

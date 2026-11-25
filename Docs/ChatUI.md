@@ -16,13 +16,13 @@ Leur `content` partagé immuable contient le bloc portable embarqué, lu sur le 
 à la restauration. Il ne contient aucun chemin local. Les noms d’images restaurées sans nom dans
 le format portable utilisent un libellé générique. `open_attachment(attachment, save)` reçoit une
 activation explicite ; `document_services` fournit les textures déjà chargées sans bloquer le rendu.
-L’exemple Windows décode les images en arrière-plan, borne ses vignettes à 8 textures de 1024 pixels,
+Les exemples Windows et Linux décodent les images en arrière-plan, bornent leurs vignettes à 8 textures de 1024 pixels,
 prévisualise les textes et permet de choisir où enregistrer les octets embarqués.
 Un aperçu Markdown peut afficher une image jointe au même message. Par exemple,
 `![Résultat][figure]` peut désigner une définition `[figure]: ./resultat.png` quand une seule
 pièce jointe de ce message porte ce nom. Le décodage utilise les octets embarqués.
-Ctrl+V dans le compositeur accepte les images du presse-papiers Windows et les fichiers copiés
-dans l’Explorateur. Les vignettes des pièces en attente permettent de les vérifier avant l’envoi.
+Ctrl+V dans le compositeur accepte les images du presse-papiers et les fichiers copiés
+dans le gestionnaire de fichiers. Les vignettes des pièces en attente permettent de les vérifier avant l’envoi.
 
 Le transcript et le volet de réflexion utilisent les mêmes services Markdown de l’hôte.
 `ChatPanelOptions::open_link` reçoit les activations de liens. Pour afficher des cartes
@@ -71,7 +71,7 @@ conserve le fichier. **JSONL brut** affiche les enregistrements tels qu’ils so
 **Copier le journal** copie les lignes filtrées au format affiché. La molette permet de remonter
 le journal pendant la réception de nouveaux événements.
 
-## Application Windows de test
+## Applications Windows et Linux de test
 
 Depuis PowerShell, avec Visual Studio 2022 C++ et son composant CMake :
 
@@ -83,6 +83,23 @@ Depuis PowerShell, avec Visual Studio 2022 C++ et son composant CMake :
 Le script prépare l'environnement Visual Studio x64, configure Ninja, compile, exécute les tests, installe le SDK
 et rassemble l'exécutable et ses notices dans `out/ChatLab-windows-x64/`.
 Il ne télécharge ni moteur IA ni dépendance GPU.
+
+Sous Linux, fournir libcurl et SDL3 3.4+ avec leurs fichiers de développement, Ninja,
+un compilateur C++20 et le dépôt CyUI complet avec son hôte SDL3 d’exemple :
+
+```sh
+# CMAKE_PREFIX_PATH peut désigner une installation SDL3 personnalisée.
+bash tools/build-chat-linux.sh ../CyUI
+./out/ChatLab-linux-x86_64/cymcp_chat_app
+```
+
+Exécuter depuis une session graphique X11 ou Wayland. Le script compile, teste et prépare
+un dossier et une archive Linux locale avec l’application, les configurations, le manuel et
+les notices. Pour un pilote de VM limité, utiliser `SDL_RENDER_DRIVER=software`.
+Les dialogues natifs nécessitent un portail de bureau ou `zenity`. La connexion d’un fournisseur
+ouvre `x-terminal-emulator` ou `xterm` ; les liens et le manuel passent par `xdg-open`.
+Les données utilisent `XDG_DATA_HOME`, sinon `~/.local/share`. SDL3 reste une dépendance
+de l’exemple, sans être imposée au module `CyMCP::ChatUI` ni au SDK.
 L'anglais est la langue de démarrage. Choisir Français dans Appearance pour changer
 la langue de l'interface, ou utiliser explicitement `--language fr`. La démonstration
 locale prend aussi la langue choisie à la connexion. **F1** ouvre l’onglet d’aide.
@@ -180,7 +197,7 @@ Avec une installation CMake du SDK compilée avec l'interface :
 
 ```cmake
 # Ajouter d'abord CyUI::DocumentViews, avec l'ImGui utilisé par l'application.
-find_package(CyMCPSDK 0.7.4 CONFIG REQUIRED COMPONENTS ChatUI)
+find_package(CyMCPSDK 0.7.5 CONFIG REQUIRED COMPONENTS ChatUI)
 target_link_libraries(my_app PRIVATE CyMCP::ChatUI)
 ```
 
@@ -240,11 +257,11 @@ quittent la vue. La conversation elle-même n'est jamais coupée ni annulée par
 Une limite provoque une erreur explicite et une annulation, sans
 historique silencieusement tronqué ni nouvelle génération automatique.
 
-L'exemple est Win32/DX11, avec fallback WARP. Le module réutilisable contient
-uniquement des appels CyUI/ImGui portables ; ses builds Linux/macOS restent à
-valider avec les backends d'une application hôte. Android reste reporté.
-Les animations/images et médias nécessitent les services de l'hôte. L'exemple
-affiche les pièces jointes par leur nom ; il ne contient pas de pipeline média.
+L’exemple Windows utilise Win32/DX11 avec fallback WARP ; Linux utilise SDL3 et les backends
+SDL3/SDLRenderer d’ImGui. Le module réutilisable contient uniquement des appels CyUI/ImGui
+portables ; le backend graphique est fourni par l’hôte. macOS et Android restent à valider.
+Les animations et autres médias nécessitent les services de l’hôte. Les exemples affichent
+des vignettes et aperçus d’images statiques ainsi que des aperçus textuels et Markdown.
 
 Les tests couvrent le worker, le streaming avant terminaison, la réconciliation
 du texte final, l'annulation silencieuse, les erreurs, les pièces jointes, la

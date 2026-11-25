@@ -4,7 +4,7 @@ title: Intégrer la bibliothèque C++
 description: Lier uniquement les modules nécessaires et déporter les fournisseurs hors du thread UI.
 section: SDK
 order: 0
-sourceRevision: 3
+sourceRevision: 4
 ---
 
 ## Prérequis de compilation {#build}
@@ -16,6 +16,12 @@ et renseigner `CURL_ROOT` ou `CMAKE_PREFIX_PATH` pour une installation personnal
 Le script de compilation de Chat Lab accepte `-CurlRoot CHEMIN`. Les consommateurs du
 SDK installé ont aussi besoin de `CURL::libcurl`. Les limites de distribution multiplateforme actuelles
 figurent dans les notes de version des sources.
+
+L’exemple Chat Lab en fenêtre sous Linux nécessite les fichiers de développement de SDL3 3.4+
+et le dépôt CyUI complet, avec son hôte d’exemple portable. Depuis une session graphique, lancer
+`bash tools/build-chat-linux.sh ../CyUI`. Renseigner `CMAKE_PREFIX_PATH` pour une installation SDL3
+personnalisée. Le script compile, teste et prépare une archive locale de l’application. SDL3 reste
+limité à l’exemple ; la bibliothèque `CyMCP::ChatUI` conserve le backend de rendu de l’application hôte.
 
 Le transport HTTP peut se compiler sur Android avec libcurl compilée par le NDK pour l’ABI choisie.
 HTTPS nécessite aussi un backend TLS et un ensemble de certificats de confiance configuré pour ce build.

@@ -11,7 +11,7 @@
     </td>
     <td width="300" align="right" valign="top">
       <p><sub>Licence de la bibliothèque</sub><br><a href="LICENSE"><strong>MIT</strong></a></p>
-      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.7.4</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
+      <p><sub>Version</sub><br><a href="VERSION.fr.md"><strong>0.7.5</strong></a><br><strong>EN DÉVELOPPEMENT</strong></p>
       <p><a href="https://github.com/MrMybal/CyMCPSDK/releases/tag/v0.5.6"><sub>Télécharger Chat Lab · Windows x64</sub></a></p>
     </td>
   </tr>
@@ -23,10 +23,11 @@ Une bibliothèque C++20 modulaire pour les développeurs qui veulent permettre a
 d'utiliser leur app, intégrer des conversations et accéder aux outils d'autres applications.
 Elle fournit des transports SDK/MCP natifs et un panneau de tchat Markdown CyUI optionnel.
 
-> **EN DÉVELOPPEMENT · 0.7.4**
+> **EN DÉVELOPPEMENT · 0.7.5**
 >
-> L'exemple de tchat Windows est disponible en ZIP portable. La distribution Linux/macOS et les
-> installations de dépendances restent en cours de réalisation. Consulter les [notes de version et problèmes connus](VERSION.fr.md).
+> L'exemple de tchat Windows est disponible en ZIP portable. L'exemple Linux en fenêtre se compile
+> localement avec SDL3 ; le paquetage macOS et l'installation des dépendances restent en cours.
+> Consulter les [notes de version et problèmes connus](VERSION.fr.md).
 
 [![Catalogue et paramètres des fournisseurs dans Chat Lab](assets/screenshots/providers-fr.png)](assets/screenshots/providers-fr.png)
 
@@ -120,6 +121,20 @@ Pour l'exemple Windows, placer CyUI à côté du SDK ou passer son véritable em
 ./tools/build-chat.ps1 -CyUISource ../CyUI
 ./out/ChatLab-windows-x64/cymcp_chat_app.exe --language fr
 ```
+
+Le même Chat Lab en fenêtre se compile sous Linux avec les fichiers de développement de
+SDL3 3.4+ et de libcurl. Fournir le dépôt CyUI complet, avec son hôte d'exemple portable.
+Depuis une session graphique :
+
+```sh
+# Renseigner CMAKE_PREFIX_PATH si SDL3 est installé dans un dossier personnalisé.
+bash tools/build-chat-linux.sh ../CyUI
+./out/ChatLab-linux-x86_64/cymcp_chat_app --language fr
+```
+
+Le script Linux compile, exécute les tests locaux et prépare une archive `.tar.gz` locale
+avec l'application, le manuel hors ligne, les configurations et les notices. Les Releases
+GitHub conservent le ZIP de l'exemple Windows. Les modules ordinaires du SDK ne dépendent pas de SDL3.
 
 <details>
 <summary>Lier la bibliothèque et choisir les modules optionnels</summary>

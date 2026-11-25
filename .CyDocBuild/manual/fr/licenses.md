@@ -5,7 +5,7 @@ description: Comprendre la licence MIT du SDK et les conditions des composants o
 section: Guides
 parent: overview
 order: 5
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## CyMCPSDK {#sdk}
@@ -23,12 +23,14 @@ Conserver copyright et autorisation dans les copies redistribuées. `LICENSE` et
 | PicoSHA2 | MIT | Vérification des artefacts |
 | libcurl de l'hôte | Licence curl et conditions TLS de l'hôte | HTTP(S) Windows/Linux/macOS |
 | CyUI, Dear ImGui, MD4C | MIT | Rendu du tchat natif optionnel |
+| SDL3 | zlib | Exemple Linux en fenêtre uniquement |
+| stb image/image_write | Option MIT | Décodage des images et captures PNG de l’exemple Linux |
 | Lexers Lexilla/Scintilla | Leurs notices permissives | Coloration du code optionnelle via CyUI |
 | JetBrains Mono | SIL Open Font License 1.1 | Police embarquée par CyUI |
 | Lecteur CyDoc | MIT | Ce lecteur de documentation statique |
 | marked, PrismJS, esbuild | MIT | Outils de génération de documentation uniquement |
 
-Le paquet Windows contient les notices complètes de l'UI optionnelle dans `licenses/`.
+Les paquets de l’application contiennent les notices complètes de l’UI optionnelle dans `licenses/`.
 Ce manuel inclut les textes MIT du SDK et de CyDoc dans `DocData/`.
 Les moteurs d'inférence, modèles et runtimes GPU ne prennent pas la licence MIT du SDK :
 les composants installés séparément et les services fournisseurs gardent leurs propres conditions.

@@ -30,7 +30,7 @@ std::string path_utf8(const std::filesystem::path&);
 // conventional authorization fields, removes control characters and bounds the UTF-8 text.
 std::string redact_error_message(std::string_view message,
                                  const std::vector<std::string>& secrets = {});
-inline constexpr const char* version = "0.7.4";
+inline constexpr const char* version = "0.7.5";
 class Error : public std::runtime_error {
   public:
     std::string code;

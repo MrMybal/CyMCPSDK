@@ -5,7 +5,7 @@ description: Understand the MIT SDK license and separately licensed optional com
 section: Guides
 parent: overview
 order: 5
-revision: 2
+revision: 3
 ---
 
 ## CyMCPSDK {#sdk}
@@ -23,12 +23,14 @@ Keep the copyright and permission notice with redistributed copies. The source r
 | PicoSHA2 | MIT | Artifact verification |
 | Host libcurl | curl license and host TLS terms | HTTP(S) on Windows/Linux/macOS |
 | CyUI, Dear ImGui, MD4C | MIT | Optional native chat rendering |
+| SDL3 | zlib | Linux windowed example only |
+| stb image/image_write | MIT option | Linux example image decoding and PNG capture |
 | Lexilla/Scintilla lexers | Their permissive notices | Optional code highlighting through CyUI |
 | JetBrains Mono | SIL Open Font License 1.1 | CyUI's embedded font |
 | CyDoc reader | MIT | This static documentation reader |
 | marked, PrismJS, esbuild | MIT | Documentation generation tools only |
 
-The Windows package carries the complete optional UI notices in `licenses/`.
+The application packages carry the complete optional UI notices in `licenses/`.
 This manual includes the SDK and CyDoc MIT texts in `DocData/`.
 No inference engine, model or GPU runtime acquires the SDK's MIT license: separately
 installed components and provider services retain their own terms.

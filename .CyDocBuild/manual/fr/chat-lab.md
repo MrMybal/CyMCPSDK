@@ -5,7 +5,7 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 11
+sourceRevision: 12
 ---
 
 ## Se connecter {#connect}
@@ -15,6 +15,12 @@ Le tchat s’ouvre directement. La roue **Paramètres** donne accès aux onglets
 Dans Fournisseurs, rechercher le catalogue, sélectionner une carte et modifier ses propres champs.
 Les réglages des autres fournisseurs restent en mémoire pour cette exécution. **Connecter / Nouveau tchat**
 ouvre la connexion et revient au tchat ; un double-clic sur une carte connecte directement.
+
+Sous Windows, lancer `cymcp_chat_app.exe`. Sous Linux, lancer `./cymcp_chat_app` depuis
+un bureau X11 ou Wayland. Les réglages des fournisseurs, les commandes MCP local et le journal
+sont identiques. Si le pilote graphique d’une machine virtuelle ne permet pas l’affichage, lancer
+`SDL_RENDER_DRIVER=software ./cymcp_chat_app`. Garder les dossiers complets `Documentation/`,
+`configs/` et `licenses/` avec l’exécutable.
 
 ```image
 {"id":"provider-settings","src":"assets/providers-fr.png","alt":"Catalogue filtrable et paramètres de connexion et de modèle pour OpenAI API","controls":"minimal"}
@@ -52,10 +58,14 @@ paramètres, ainsi que l'installation détectée.
 
 **Installation et connexion** contient l'exécutable et le dossier de travail ou les champs API.
 Déplier **Lancement avancé** pour les arguments JSON et les paramètres particuliers.
-Utiliser le vrai `.exe`, ou `node.exe` accompagné des arguments de son script ;
+Utiliser le véritable exécutable natif, ou `node` accompagné des arguments de son script ;
 les wrappers shell ne sont pas lancés. **Paramètres avancés (JSON)** reçoit les réglages du
 fournisseur. **Consigne système**, dans **Conversation et historique**, fournit les instructions de session.
 Consulter les [fournisseurs](doc:providers#configure).
+
+Sous Linux, la connexion du fournisseur ouvre `x-terminal-emulator` ou `xterm`. Les sélecteurs
+de fichiers utilisent un portail de bureau ou `zenity` ; l’ouverture du manuel et des liens
+nécessite un navigateur associé via `xdg-open`.
 
 ## Envoyer et arrêter {#messages}
 
@@ -78,7 +88,7 @@ dans l’app. Cliquer sur un texte pour son aperçu, ou **Enregistrer la pièce 
 destination pour les octets embarqués. Pour inclure une image dans un document Markdown,
 joindre les deux fichiers au même message, puis utiliser le nom unique de l’image, par exemple
 `![Résultat](./graphe.png)`. Les définitions de référence fonctionnent aussi.
-Collez une image du presse-papiers ou les fichiers copiés dans l’Explorateur avec **Ctrl+V**.
+Collez une image du presse-papiers ou les fichiers copiés dans le gestionnaire de fichiers avec **Ctrl+V**.
 Vérifiez la vignette et retirez au besoin la pièce jointe avant l’envoi.
 Les aperçus ne chargent pas les URL d’images arbitraires du Markdown. Un format sans décodeur conserve
 sa carte et son action d’enregistrement.

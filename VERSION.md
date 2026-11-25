@@ -2,6 +2,12 @@
 
 [Français](VERSION.fr.md) · [Manual](Documentation/Documentation.html#/en/overview)
 
+## 0.7.5 — Linux windowed Chat Lab
+
+- Build the windowed Linux Chat Lab with SDL3 3.4+, reusing the Windows example's
+  application logic, provider settings, Local MCP controls and diagnostic journal.
+- Add a Linux build/test/package script. SDL3 stays outside the SDK and reusable ChatUI module.
+
 ## 0.7.4 — Shared libcurl HTTP transport
 
 - Use libcurl for HTTP(S) clients on Windows, Linux and macOS.
@@ -119,7 +125,7 @@ Optional checked host schema validators preserve full application contracts. Nat
 
 - The core test declaration now builds with GCC 15.2. The macOS conversation store recognizes
   the system aliases for temporary directories. Validation on a macOS runner is still pending.
-  The graphical example uses Win32/DX11.
+  The graphical example uses Win32/DX11 on Windows and SDL3 on Linux.
 - Provider availability depends on the installed CLI/API version, account and selected model.
   The included provider profiles do not guarantee authentication with every service.
 

@@ -1,6 +1,6 @@
 # CyMCPSDK agent guide
 
-CyMCPSDK 0.7.4 is a modular MIT C++20 SDK. The human reader is
+CyMCPSDK 0.7.5 is a modular MIT C++20 SDK. The human reader is
 `Documentation.html#/en/overview` (French: `#/fr/overview`). Ship this entire
 directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 
@@ -59,6 +59,10 @@ directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
 Use CMake 3.24+ and a C++20 compiler. `cmake --preset release`,
 `cmake --build --preset release`, then `ctest --preset release` build the SDK.
 The Windows example uses `tools/build-chat.ps1` with a host CyUI checkout.
+The Linux windowed example uses `tools/build-chat-linux.sh` with the full CyUI checkout,
+host libcurl and SDL3 3.4+. Set `CMAKE_PREFIX_PATH` for a custom SDL3 installation.
+Run its graphical tests from an X11/Wayland session; `SDL_RENDER_DRIVER=software`
+supports VMs without accelerated rendering. SDL3 is an example-only dependency.
 Fixtures do not establish authentication or inference compatibility with every CLI.
 Consult the source version notes for confirmed platform limitations.
 

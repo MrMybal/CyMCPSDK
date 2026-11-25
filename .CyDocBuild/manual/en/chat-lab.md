@@ -5,7 +5,7 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 11
+revision: 12
 ---
 
 ## Connect {#connect}
@@ -15,6 +15,12 @@ to the conversation and its draft. **F1** opens Help.
 Open **Providers** to search the catalogue, select a provider and edit its own fields. Selecting
 a provider keeps the other providers' fields in memory for this run. Use **Connect / New chat**
 to open it and return to Chat, or double-click a provider card to connect directly.
+
+On Windows, launch `cymcp_chat_app.exe`. On Linux, launch `./cymcp_chat_app` from an X11
+or Wayland desktop. The same provider settings, Local MCP controls and journal are available.
+If a virtual machine's graphics driver cannot render the window, launch with
+`SDL_RENDER_DRIVER=software ./cymcp_chat_app`. Keep the complete `Documentation/`,
+`configs/` and `licenses/` directories with the executable.
 
 ```image
 {"id":"provider-settings","src":"assets/providers-en.png","alt":"Searchable provider catalogue with the OpenAI API connection and model settings","controls":"minimal"}
@@ -49,7 +55,9 @@ with any detected installation.
 
 **Installation and connection** contains the CLI path and working directory or the API endpoint/key fields.
 Expand **Advanced launch settings** for the JSON argument array and provider-specific settings.
-Use the actual `.exe`, or `node.exe` and its script arguments; shell wrappers are not launched.
+Use the actual native executable, or `node` and its script arguments; shell wrappers are not launched.
+On Linux, provider sign-in opens `x-terminal-emulator` or `xterm`. File dialogs use a desktop
+portal or `zenity`; opening the manual or links requires an associated browser through `xdg-open`.
 **Advanced settings (JSON)** accepts provider-specific settings. **System prompt**, under **Conversation and history**, supplies
 instructions at session creation. See [providers](doc:providers#configure).
 
@@ -72,7 +80,7 @@ Attachments have their own cards. Images decode asynchronously and enlarge insid
 To include an image in a Markdown preview, attach the document and image to the same message
 and use its unique filename, for example `![Result](./plot.png)`. Reference definitions also work.
 Click a text attachment to preview it, or **Save attachment** to choose a destination for its
-embedded bytes. Press **Ctrl+V** to paste a clipboard image or copied Explorer files. Check
+embedded bytes. Press **Ctrl+V** to paste a clipboard image or files copied in the file manager. Check
 the thumbnail and remove an attachment before sending if needed. Preview services never
 fetch arbitrary Markdown image URLs. Formats without a decoder retain their file card and Save action.
 

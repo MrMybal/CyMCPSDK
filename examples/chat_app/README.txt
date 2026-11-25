@@ -1,6 +1,7 @@
-CyMCPSDK Chat Lab 0.7.4 - Windows x64
+CyMCPSDK Chat Lab 0.7.5 - Windows / Linux
 
-Launch cymcp_chat_app.exe. Choose English or French under Appearance.
+Windows: launch cymcp_chat_app.exe. Linux: launch ./cymcp_chat_app.
+Choose English or French under Appearance.
 Chat opens directly. Settings contains Providers, Local MCP, Logs and Help. Close returns to the draft.
 The Settings gear is at the bottom right. The status is next to the provider and model.
 Click the current Codex model in the footer to choose another for the next message.
@@ -25,8 +26,8 @@ Refresh model catalogue queries the connected provider. A selected model applies
 to the next connection. Enter sends a message; Shift+Enter inserts a line. Ctrl+Enter also sends.
 
 Native CLIs use their existing environment/account. For an unusual installation, expand
-Executable and choose the actual .exe (or node.exe with its script as a JSON
-argument). Shell wrappers such as .cmd and .ps1 are not launched by this SDK.
+Executable and choose the actual native executable (or node with its script as a
+JSON argument). Shell wrappers such as .cmd and .ps1 are not launched by this SDK.
 API keys can come from an environment variable or the masked memory-only field.
 Advanced settings accepts the same settings object as the SDK JSON examples.
 When a native provider needs authentication, Sign in opens its own login in a console;
@@ -70,8 +71,16 @@ Reports exclude message text, secrets and exact session IDs. Plans, captures and
 optional histories can contain private messages. See Docs/ChatUI.md in the source.
 Non-secret configuration examples are included in configs/.
 
-Prerequisites: Windows 10/11 x64, Microsoft Visual C++ 2015-2022 x64 runtime,
+Windows prerequisites: Windows 10/11 x64, Microsoft Visual C++ 2015-2022 x64 runtime,
 and a DX11-capable graphics stack. WARP software rendering is used as fallback.
+Linux prerequisites: a graphical X11 or Wayland session, libcurl with TLS and
+the system libraries required by the selected SDL3 build. A build made on
+Ubuntu 24.04 targets Ubuntu 24.04 or a compatible newer system, on the same CPU architecture.
+SDL3 may be linked statically or supplied by the host. Use SDL_RENDER_DRIVER=software
+when the VM's graphics driver cannot provide accelerated rendering.
+Native file dialogs require a desktop portal or zenity; sign-in uses
+x-terminal-emulator or xterm. Opening links and the manual requires xdg-open
+and an associated browser. Histories and logs use XDG_DATA_HOME, or ~/.local/share.
 No Python, browser engine, AI CLI, inference engine, model or CUDA is bundled.
 The panel is reusable through the optional CyMCP::ChatUI CMake target.
 Keep LICENSE, THIRD_PARTY_NOTICES.md and licenses/ with redistributed copies.

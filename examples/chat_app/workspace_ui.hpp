@@ -371,8 +371,7 @@ template <class App> void draw_provider_settings(App& app) {
                     app.action([&] { app.install_cuda(); });
                 ImGui::SameLine();
                 if (cyui::button(cyui::trLabel("NVIDIA license").c_str()))
-                    ShellExecuteW(app.window, L"open", L"https://docs.nvidia.com/cuda/eula/",
-                                  nullptr, nullptr, SW_SHOWNORMAL);
+                    app.action([&] { app.open_link("https://docs.nvidia.com/cuda/eula/"); });
             }
             if (!app.cuda_directory.empty())
                 ImGui::TextWrapped("%s", cymcp::path_utf8(app.cuda_directory).c_str());

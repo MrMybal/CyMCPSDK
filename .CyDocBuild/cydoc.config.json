@@ -1,6 +1,6 @@
 {
   "name": "CyMCPSDK",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "defaultLocale": "en",
   "locales": [{"code": "en", "label": "English"}, {"code": "fr", "label": "Français"}],
   "homePage": "overview",

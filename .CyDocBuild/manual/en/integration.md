@@ -4,7 +4,7 @@ title: Integrate the C++ library
 description: Link only the modules your host needs and keep provider work outside its UI thread.
 section: SDK
 order: 0
-revision: 3
+revision: 4
 ---
 
 ## Build requirements {#build}
@@ -15,6 +15,12 @@ Install libcurl development files with a TLS backend and set `CURL_ROOT` or
 `CMAKE_PREFIX_PATH` for a custom installation. Windows Chat Lab's build script accepts
 `-CurlRoot PATH`. Installed SDK consumers also need `CURL::libcurl`.
 Current cross-platform distribution limits are listed in the source version notes.
+
+The optional Linux windowed Chat Lab needs SDL3 3.4+ development files and the full CyUI
+checkout, including its portable example host. From a graphical session, run
+`bash tools/build-chat-linux.sh ../CyUI`. Set `CMAKE_PREFIX_PATH` for a custom SDL3 installation.
+The script builds, tests and prepares a local application archive. SDL3 is confined to the example;
+the `CyMCP::ChatUI` library continues to use the host application's rendering backend.
 
 Android can build the HTTP transport with an NDK-built libcurl for the selected ABI.
 HTTPS also requires a TLS backend and a trusted CA bundle configured for that build.

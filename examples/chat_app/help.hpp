@@ -1,4 +1,5 @@
 #pragma once
+#ifdef _WIN32
 #include <cymcp/core.hpp>
 #include <shlwapi.h>
 #include <windows.h>
@@ -32,3 +33,34 @@ inline std::wstring help_url(const std::filesystem::path& executable, bool frenc
     return url;
 }
 } // namespace chat_example
+
+#else
+
+#include <cymcp/core.hpp>
+namespace chat_example {
+inline std::string file_url(const std::filesystem::path& path) {
+    const auto bytes = cymcp::path_utf8(std::filesystem::absolute(path));
+    constexpr char hex[] = "0123456789ABCDEF";
+    std::string url = "file://";
+    for (unsigned char c : bytes) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '/' || c == '-' ||
+            c == '_' || c == '.' || c == '~')
+            url += char(c);
+        else {
+            url += '%';
+            url += hex[c >> 4];
+            url += hex[c & 15];
+        }
+    }
+    return url;
+}
+inline std::string help_url(const std::filesystem::path& executable, bool french) {
+    const auto manual = std::filesystem::absolute(executable).parent_path() /
+                        "Documentation" / "Documentation.html";
+    if (!std::filesystem::is_regular_file(manual))
+        throw cymcp::Error("DocumentationMissing", "Keep Documentation beside the application");
+    return file_url(manual) + (french ? "#/fr/chat-lab" : "#/en/chat-lab");
+}
+} // namespace chat_example
+#endif

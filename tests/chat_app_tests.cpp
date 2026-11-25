@@ -3,7 +3,11 @@
 #include <cymcp/mcp.hpp>
 #include <fstream>
 #include <httplib.h>
+#ifdef _WIN32
 #include <sddl.h>
+#else
+#include <sys/stat.h>
+#endif
 
 using namespace cymcp;
 namespace {
@@ -203,6 +207,7 @@ Json read(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     return parse_json(std::string(std::istreambuf_iterator<char>(file), {}));
 }
+#ifdef _WIN32
 std::wstring directory_or_file_acl(const std::filesystem::path& path) {
     DWORD size = 0;
     GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, nullptr, 0, &size);
@@ -218,6 +223,14 @@ std::wstring directory_or_file_acl(const std::filesystem::path& path) {
     LocalFree(text);
     return result;
 }
+#else
+mode_t directory_or_file_acl(const std::filesystem::path& path) {
+    struct stat info{};
+    if (stat(path.c_str(), &info) != 0)
+        throw std::runtime_error("Cannot read fixture permissions");
+    return info.st_mode & 0777;
+}
+#endif
 struct Run {
     std::unique_ptr<Process> process;
     std::filesystem::path report, journal;
@@ -294,13 +307,15 @@ int main(int argc, char** argv) {
             private_directory(folder);
             std::ofstream(folder / "Documentation.html") << "<!doctype html><title>Help</title>";
             const auto executable = folder.parent_path() / "chat.exe";
-            const auto english = chat_example::help_url(executable, false);
-            check(english.find(L"%20") != std::wstring::npos &&
-                      english.find(L"%C3%A9") != std::wstring::npos &&
-                      english.find(L"%23") != std::wstring::npos &&
-                      english.ends_with(L"#/en/chat-lab"),
+            const auto english = path_utf8(
+                std::filesystem::path(chat_example::help_url(executable, false)));
+            check(english.find("%20") != std::string::npos &&
+                      english.find("%C3%A9") != std::string::npos &&
+                      english.find("%23") != std::string::npos &&
+                      english.ends_with("#/en/chat-lab"),
                   "Local help URL encodes spaces, UTF-8 and filename fragments");
-            check(chat_example::help_url(executable, true).ends_with(L"#/fr/chat-lab"),
+            check(path_utf8(std::filesystem::path(chat_example::help_url(executable, true)))
+                      .ends_with("#/fr/chat-lab"),
                   "Local help uses the explicitly selected French locale");
             expect_error("DocumentationMissing", [&] {
                 chat_example::help_url(output / "missing-manual" / "chat.exe", false);
@@ -354,12 +369,17 @@ int main(int argc, char** argv) {
                   "Repeated save keeps the application running and writes the selected content");
             check(directory_or_file_acl(custom) == before,
                   "Choosing an existing log folder leaves its access rules and inheritance intact");
+#ifdef _WIN32
             auto owner_only = directory_or_file_acl(folder);
             owner_only.erase(owner_only.find(L"OICI"), 4);
             auto file_acl = directory_or_file_acl(log);
             check(file_acl.starts_with(L"D:P") && file_acl.substr(file_acl.find(L'(')) ==
                                                       owner_only.substr(owner_only.find(L'(')),
                   "Custom log replaces the previous file with owner-only access");
+#else
+            check(directory_or_file_acl(log) == 0600,
+                  "Custom log replaces the previous file with owner-only access");
+#endif
         }
         for (const std::string theme :
              {"mid-grey", "light-grey", "amber-night", "violet", "navy"}) {
