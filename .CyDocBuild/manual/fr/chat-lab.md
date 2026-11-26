@@ -5,10 +5,15 @@ description: Connecter un fournisseur, envoyer des messages et exposer les comma
 section: Guides
 parent: overview
 order: 2
-sourceRevision: 12
+sourceRevision: 13
 ---
 
 ## Se connecter {#connect}
+
+Le serveur MCP local activé publie son nom, sa version et l’exigence de jeton dans
+`/.well-known/cymcp` pour les hubs locaux, y compris dans les profils protégés. Le hub trouve
+toujours le port d’écoute ; l’annonce ne contient ni jeton ni catalogue d’outils.
+Consulter la [découverte MCP locale](doc:operations#discovery).
 
 Le tchat s’ouvre directement. La roue **Paramètres** donne accès aux onglets **Fournisseurs**,
 **MCP local**, **Journal** et **Aide**. **Fermer** revient à la conversation et à son brouillon. **F1** ouvre l’aide.

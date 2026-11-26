@@ -8,6 +8,28 @@
 #include <optional>
 #include <ostream>
 namespace cymcp {
+#ifdef CYMCP_HAS_HTTP
+enum class LocalMcpStatus { unverified, active, authentication_required };
+struct LocalMcpDiscovery {
+    LocalMcpStatus status = LocalMcpStatus::unverified;
+    std::string name, version, protocol, summary;
+    bool advertised = false;
+};
+struct LocalMcpListener {
+    std::string url;
+    unsigned long pid = 0;
+};
+// Enumerate Windows 127.0.0.1/::1 and wildcard TCP listeners reachable locally.
+// On other platforms returns an empty list with available=false; URL probes are portable.
+std::vector<LocalMcpListener> windows_mcp_listeners(bool& available);
+// Probe one loopback URL without listing/calling tools. Modern discovery falls
+// back to legacy initialize; temporary sessions are closed when time permits.
+// timeout is a positive TOTAL budget, up to 24h (default 800ms). Caller cancellation
+// propagates; an unreachable/invalid/non-MCP endpoint returns unverified.
+// A 401/403 without verified public identity remains an unnamed authentication candidate.
+LocalMcpDiscovery probe_local_mcp(const std::string& url, const Cancellation& = {},
+                                  std::chrono::milliseconds timeout = std::chrono::milliseconds(800));
+#endif
 struct McpServerOptions {
     std::size_t page_size = 64;
     std::chrono::milliseconds cache_ttl{30000};

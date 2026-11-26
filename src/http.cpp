@@ -3,6 +3,7 @@
 #include <cymcp/http.hpp>
 #include <curl/curl.h>
 #include <limits>
+#include "http_stream.hpp"
 namespace cymcp {
 Url parse_url(const std::string& input) {
     if (input.size() > 8192 ||
@@ -271,8 +272,14 @@ HttpResponse HttpClient::perform(const HttpRequest& request, const Cancellation&
                 throw Error("NetworkError", "Cannot poll HTTP transfer");
         }
     } while (running);
-    if (state.error)
-        std::rethrow_exception(state.error);
+    if (state.error) {
+        try {
+            std::rethrow_exception(state.error);
+        } catch (const detail::HttpStreamComplete&) {
+            cancel.check();
+            return result;
+        }
+    }
     cancel.check();
     int queued = 0;
     const auto* message = curl_multi_info_read(transfer.multi, &queued);

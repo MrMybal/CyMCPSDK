@@ -52,6 +52,7 @@ struct LocalHttpServer::Impl {
     TokenAuthenticator authenticate;
     std::size_t max_request_bytes;
     JsonEndpoint endpoint;
+    LocalMcpEndpoint mcp;
     Cancellation shutdown;
     struct LegacySession {
         std::string protocol;
@@ -104,10 +105,15 @@ struct LocalHttpServer::Impl {
         }
         return session;
     }
-    Impl(TokenAuthenticator auth, JsonEndpoint fn, std::size_t workers, std::size_t bytes)
-        : authenticate(std::move(auth)), max_request_bytes(bytes), endpoint(std::move(fn)) {
+    Impl(TokenAuthenticator auth, JsonEndpoint fn, std::size_t workers, std::size_t bytes,
+         LocalMcpEndpoint mcp_endpoint = {})
+        : authenticate(std::move(auth)), max_request_bytes(bytes), endpoint(std::move(fn)),
+          mcp(std::move(mcp_endpoint)) {
         if (!endpoint || workers < 1 || workers > 64 || !bytes || bytes > provider_message_limit)
             throw Error("InvalidOptions", "Server requires an endpoint and valid limits");
+        if (mcp.name.empty() != mcp.version.empty() || mcp.name.size() > 256 ||
+            mcp.version.size() > 256)
+            throw Error("InvalidOptions", "MCP advertisement requires a name and version (256 bytes each)");
         server.new_task_queue = [workers] {
             return new httplib::ThreadPool(workers, workers, 128, 30);
         };
@@ -120,15 +126,45 @@ struct LocalHttpServer::Impl {
                 res.status = 403;
                 return;
             }
-            auto host = req.get_header_value("Host");
-            if (host != "127.0.0.1" && host.rfind("127.0.0.1:", 0) != 0 && host != "localhost" &&
-                host.rfind("localhost:", 0) != 0) {
+            bool valid_host = false;
+            if (req.get_header_value_count("Host") == 1) {
+                try {
+                    const auto host = parse_url("http://" + req.get_header_value("Host"));
+                    valid_host = host.loopback && host.target == "/";
+                } catch (const Error&) {}
+            }
+            if (!valid_host) {
                 res.status = 403;
                 return;
             }
+            const bool separate_mcp = req.path == "/mcp" && mcp.handler;
+            const bool mcp_request = req.path == "/mcp" || req.path == "/.well-known/cymcp";
+            bool token_required = static_cast<bool>(authenticate);
+            try {
+                if (mcp_request && mcp.enabled && !mcp.enabled()) {
+                    res.status = 404;
+                    return;
+                }
+                if (mcp_request && mcp.requires_token)
+                    token_required = mcp.requires_token();
+            } catch (...) {
+                res.status = 500;
+                res.set_content("{\"error\":{\"code\":\"InternalError\"}}", "application/json");
+                return;
+            }
+            if (req.path == "/.well-known/cymcp") {
+                res.set_header("Cache-Control", "no-store");
+                res.set_content(Json{{"protocol", "mcp"}, {"path", "/mcp"}, {"name", mcp.name},
+                                     {"version", mcp.version}, {"requiresToken", token_required}}.dump(),
+                                "application/json");
+                return;
+            }
+            const auto& dispatch = separate_mcp ? mcp.handler : endpoint;
             std::string principal = "unauthenticated-local";
-            if (authenticate) {
+            if (token_required) {
                 try {
+                    if (!authenticate)
+                        throw Error("AuthenticationRequired", "No MCP authenticator configured");
                     const auto header = req.get_header_value("Authorization");
                     if (req.get_header_value_count("Authorization") != 1 ||
                         header.rfind("Bearer ", 0) != 0 || header.size() <= 7)
@@ -160,6 +196,10 @@ struct LocalHttpServer::Impl {
             }
             try {
                 auto value = parse_json(req.body, max_request_bytes);
+                if (separate_mcp && (!value.is_object() || value.value("jsonrpc", Json()) != "2.0")) {
+                    res.status = 400;
+                    return;
+                }
                 if (req.path == "/mcp" && !valid_mcp_headers(req, value)) {
                     res.status = 400;
                     Json error = {
@@ -212,7 +252,7 @@ struct LocalHttpServer::Impl {
                     // The SSE provider runs while its request/socket remain alive. Its cancellation
                     // is tied to server shutdown and heartbeat write failures.
                     res.set_chunked_content_provider(
-                        "text/event-stream", [fn = endpoint, value, context](
+                        "text/event-stream", [fn = dispatch, value, context](
                                                  std::size_t, httplib::DataSink& sink) mutable {
                             context.notifications = [&](const Json& message) {
                                 auto bytes = message.is_null() ? std::string(": keepalive\n\n")
@@ -231,7 +271,7 @@ struct LocalHttpServer::Impl {
                         });
                     return;
                 }
-                auto reply = endpoint(value, context);
+                auto reply = dispatch(value, context);
                 if (reply.is_null()) {
                     res.status = 202;
                     return;
@@ -262,6 +302,8 @@ struct LocalHttpServer::Impl {
         server.Post("/mcp", handler);
         server.Get("/mcp", handler);
         server.Delete("/mcp", handler);
+        if (!mcp.name.empty())
+            server.Get("/.well-known/cymcp", handler);
         server.Post("/v1", handler);
         server.Get("/health", [](const auto&, auto& res) {
             res.set_content("{\"status\":\"ready\"}", "application/json");
@@ -269,7 +311,7 @@ struct LocalHttpServer::Impl {
     }
 };
 LocalHttpServer::LocalHttpServer(std::string token, JsonEndpoint endpoint, std::size_t workers,
-                                 std::size_t bytes) {
+                                 std::size_t bytes, LocalMcpEndpoint mcp_endpoint) {
     if (token.size() < 32)
         throw Error("InvalidOptions", "Server requires a strong token");
     auto auth = [token = std::move(token)](std::string_view supplied) {
@@ -277,17 +319,20 @@ LocalHttpServer::LocalHttpServer(std::string token, JsonEndpoint endpoint, std::
             throw Error("AuthenticationRequired", "Invalid credential");
         return std::string("authenticated-local");
     };
-    impl_ = std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes);
+    impl_ = std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes,
+                                   std::move(mcp_endpoint));
 }
 LocalHttpServer::LocalHttpServer(TokenAuthenticator auth, JsonEndpoint endpoint,
-                                 std::size_t workers, std::size_t bytes) {
+                                 std::size_t workers, std::size_t bytes, LocalMcpEndpoint mcp_endpoint) {
     if (!auth)
         throw Error("InvalidOptions", "Server requires an authentication callback");
-    impl_ = std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes);
+    impl_ = std::make_unique<Impl>(std::move(auth), std::move(endpoint), workers, bytes,
+                                std::move(mcp_endpoint));
 }
 LocalHttpServer::LocalHttpServer(UnauthenticatedLoopback, JsonEndpoint endpoint,
-                                 std::size_t workers, std::size_t bytes)
-    : impl_(std::make_unique<Impl>(TokenAuthenticator{}, std::move(endpoint), workers, bytes)) {}
+                                 std::size_t workers, std::size_t bytes, LocalMcpEndpoint mcp_endpoint)
+    : impl_(std::make_unique<Impl>(TokenAuthenticator{}, std::move(endpoint), workers, bytes,
+                                 std::move(mcp_endpoint))) {}
 LocalHttpServer::~LocalHttpServer() {
     stop();
 }

@@ -747,6 +747,19 @@ int main(int argc, char** argv) {
             check(run.process->next(line, timeout) && !line.stderr_stream,
                   "App exposes MCP handshake over private parent pipe");
             auto ready = parse_json(line.text);
+            const auto endpoint = ready.at("endpoint").get<std::string>();
+            HttpRequest advertisement;
+            advertisement.url = endpoint.substr(0, endpoint.size() - 4) + "/.well-known/cymcp";
+            const auto advertised = HttpClient().perform(advertisement, timeout);
+            const auto metadata = parse_json(advertised.body);
+            check(advertised.status == 200 && metadata.at("name") == "CyMCPSDK Chat Lab" &&
+                      metadata.at("version") == version && metadata.at("requiresToken") == !tokenless,
+                  "Real Chat Lab advertises its name, version and access profile without a token");
+            const auto discovered = probe_local_mcp(endpoint, timeout, std::chrono::seconds(2));
+            check(discovered.name == "CyMCPSDK Chat Lab" &&
+                      (tokenless ? discovered.status == LocalMcpStatus::active
+                                 : discovered.status == LocalMcpStatus::authentication_required && discovered.advertised),
+                  "A hub can identify both free and protected real Chat Lab instances");
             HttpRequest request;
             request.method = "POST";
             request.url = ready.at("endpoint");

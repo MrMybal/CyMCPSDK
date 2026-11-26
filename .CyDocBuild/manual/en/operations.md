@@ -5,7 +5,7 @@ description: Share one typed registry between native calls, SDK JSON, MCP and su
 section: SDK
 parent: integration
 order: 1
-revision: 2
+revision: 3
 ---
 
 ## Define a registry {#registry}
@@ -46,7 +46,7 @@ UI-bound mutations onto the host's event loop and keep captured state alive.
 
 The example CLI supports `describe`, `invoke`, and application JSONL on stdin. Application JSONL
 and MCP JSON-RPC are separate protocols. In Chat Lab, the same requests go to `/v1` on its enabled
-local server, with `Content-Type: application/json` and the Bearer token.
+local server, with `Content-Type: application/json` and a Bearer token when its access profile requires one.
 
 ## MCP server and client {#mcp}
 
@@ -61,6 +61,45 @@ Inspect an MCP result's `isError` before treating its `structuredContent` as suc
 To let an AI in app A use app B, connect a client to B, register explicit forwarding operations
 in A and attach that registry to a supported provider. Preserve B's schema and enforce A's policy
 before forwarding. Do not let model output register arbitrary new operations.
+
+## Local MCP discovery {#discovery}
+
+An HTTP host can publish its identity for a local hub with `LocalMcpEndpoint`:
+
+```cpp
+cymcp::McpServer mcp(commands, "My application");
+cymcp::LocalMcpEndpoint identity;
+identity.name = "My application";
+identity.version = cymcp::version;
+cymcp::LocalHttpServer server(cymcp::LocalHttpServer::UnauthenticatedLoopback{},
+    [&](const auto& message, const auto& context) { return mcp.handle(message, context); },
+    4, cymcp::provider_message_limit, identity);
+const int port = server.start();
+```
+
+This example explicitly opens MCP to local callers. The token and authenticator constructors
+accept the same final argument. Existing constructors keep their behavior without this argument.
+`GET /.well-known/cymcp` publishes only the configured name, version, `/mcp` path and
+`requiresToken` flag, without a token. Origin and loopback Host checks still apply.
+Chat Lab and the headless HTTP example publish this identity in all access profiles.
+
+The advertisement is a CyMCPSDK extension, read by a hub that probes local listeners. It does
+not broadcast over the LAN or register with a central service. `windows_mcp_listeners(available)`
+lists actual Windows loopback/wildcard listeners and their process IDs. On other platforms it
+returns an empty list and `available=false`; the hub supplies its own listener inventory.
+
+`probe_local_mcp(url, cancellation, timeout)` works on Windows and Linux. It checks a loopback
+URL using modern discovery, falling back to legacy initialization when needed. It handles JSON
+and SSE, closes temporary legacy sessions when time permits, and never lists or calls tools.
+The positive timeout is one total budget, 800 ms by default; responses are limited to 64 KiB.
+Caller cancellation propagates. A generic 401/403 remains an unnamed authentication candidate;
+a protected MCP is identified only when it publishes valid public identity metadata.
+
+For a separate MCP handler, set `identity.handler`. `identity.requires_token` can open `/mcp`
+while `/v1` retains its original authentication. Requiring a token without an authenticator rejects
+MCP calls. `identity.enabled` can hide both `/mcp` and its advertisement without disabling `/v1`.
+These callbacks execute on HTTP workers; synchronize mutable host state. Registry permissions
+still apply independently of transport authentication.
 
 ## Attach tools to a conversation {#tools}
 

@@ -5,7 +5,7 @@ description: Partager un registre typé entre appels natifs, SDK JSON, MCP et ou
 section: SDK
 parent: integration
 order: 1
-sourceRevision: 2
+sourceRevision: 3
 ---
 
 ## Définir un registre {#registry}
@@ -46,7 +46,7 @@ transférer les mutations liées à l'UI vers la boucle d'événements et garder
 
 Le CLI d'exemple propose `describe`, `invoke` et le JSONL applicatif sur stdin. JSONL applicatif et
 JSON-RPC MCP sont deux protocoles distincts. Dans Chat Lab, ces mêmes requêtes vont vers `/v1`
-sur le serveur local activé, avec `Content-Type: application/json` et le jeton Bearer.
+sur le serveur local activé, avec `Content-Type: application/json` et un jeton Bearer lorsque le profil l’exige.
 
 ## Serveur et client MCP {#mcp}
 
@@ -62,6 +62,48 @@ Pour qu'une IA dans l'app A utilise l'app B, connecter un client à B, enregistr
 de transfert explicites dans A et attacher ce registre à un fournisseur compatible. Conserver le
 schéma de B et appliquer la politique de A avant le transfert. Une réponse de modèle ne doit pas
 pouvoir enregistrer librement de nouvelles opérations.
+
+## Découverte MCP locale {#discovery}
+
+Un hôte HTTP peut publier son identité pour un hub local avec `LocalMcpEndpoint` :
+
+```cpp
+cymcp::McpServer mcp(commands, "Mon application");
+cymcp::LocalMcpEndpoint identity;
+identity.name = "Mon application";
+identity.version = cymcp::version;
+cymcp::LocalHttpServer server(cymcp::LocalHttpServer::UnauthenticatedLoopback{},
+    [&](const auto& message, const auto& context) { return mcp.handle(message, context); },
+    4, cymcp::provider_message_limit, identity);
+const int port = server.start();
+```
+
+Cet exemple ouvre explicitement MCP aux appelants locaux. Les constructeurs avec jeton ou
+authentificateur acceptent le même dernier argument. Sans cet argument, les constructeurs
+existants conservent leur comportement. `GET /.well-known/cymcp` publie uniquement le nom,
+la version, le chemin `/mcp` et l’indicateur `requiresToken`, sans demander de jeton.
+Les contrôles d’Origin et de Host local restent appliqués. Chat Lab et l’exemple HTTP sans
+interface publient cette identité dans tous les profils d’accès.
+
+Cette annonce est une extension CyMCPSDK, lue par un hub qui sonde les écouteurs locaux.
+Elle ne diffuse rien sur le réseau local et ne s’inscrit pas à un service central.
+`windows_mcp_listeners(available)` énumère les véritables écouteurs Windows locaux ou sur toutes
+les interfaces, avec leur PID. Sur les autres plateformes, la liste est vide et `available=false` ;
+le hub fournit alors son propre inventaire des écouteurs.
+
+`probe_local_mcp(url, cancellation, timeout)` fonctionne sous Windows et Linux. Il vérifie une
+URL locale avec la découverte moderne, puis l’initialisation historique si nécessaire. Il gère JSON
+et SSE, ferme les sessions historiques temporaires lorsque le délai le permet et n’énumère ni
+n’appelle les outils. Le délai positif est un budget total, de 800 ms par défaut ; les réponses
+sont limitées à 64 Kio. L’annulation de l’appelant est propagée. Une réponse 401/403 générique
+reste un candidat anonyme à authentifier ; un MCP protégé est identifié uniquement s’il publie
+des métadonnées d’identité publique valides.
+
+Pour un handler MCP distinct, renseigner `identity.handler`. `identity.requires_token` peut ouvrir
+`/mcp` tout en conservant l’authentification d’origine sur `/v1`. Exiger un jeton sans authentificateur
+refuse les appels MCP. `identity.enabled` peut masquer `/mcp` et son annonce sans désactiver `/v1`.
+Ces callbacks s’exécutent sur les workers HTTP ; synchroniser l’état mutable de l’hôte.
+Les droits du registre restent indépendants de l’authentification du transport.
 
 ## Attacher les outils à une conversation {#tools}
 

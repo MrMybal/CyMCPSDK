@@ -5,10 +5,15 @@ description: Connect a provider, send messages and expose the demonstration app 
 section: Guides
 parent: overview
 order: 2
-revision: 12
+revision: 13
 ---
 
 ## Connect {#connect}
+
+The enabled local MCP server publishes its name, version and token requirement at
+`/.well-known/cymcp` for local hubs, including in protected profiles. The hub still finds
+the listening port; the advertisement contains no token or tool catalogue.
+See [local MCP discovery](doc:operations#discovery).
 
 Chat opens directly. **Settings** contains **Providers**, **Local MCP**, **Logs** and **Help**. **Close** returns
 to the conversation and its draft. **F1** opens Help.

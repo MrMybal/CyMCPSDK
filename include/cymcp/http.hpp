@@ -35,6 +35,19 @@ Url parse_url(const std::string&);
 using TokenAuthenticator = std::function<std::string(std::string_view)>;
 using JsonEndpoint = std::function<Json(const Json&, const CallContext&)>;
 
+// Optional MCP endpoint. A name and version publish public identity metadata at
+// /.well-known/cymcp. No tools, arguments or credentials are published there.
+struct LocalMcpEndpoint {
+    std::string name, version;
+    // Absent: inherit the server's authentication. False: tokenless /mcp only.
+    // True without a server authenticator rejects calls. Callbacks run on workers.
+    std::function<bool()> requires_token;
+    // Absent: use the ordinary endpoint. /v1 always retains its original policy.
+    JsonEndpoint handler;
+    // False hides /mcp and its advertisement. Absent: enabled.
+    std::function<bool()> enabled;
+};
+
 // Presets for hosts that expose their operations over loopback HTTP. The host applies
 // control_operations when it constructs its Registry policy. The transport only authenticates.
 enum class LocalAccessProfile { free, local_controlled, token_only, protected_access };
@@ -66,11 +79,11 @@ class LocalHttpServer {
     struct UnauthenticatedLoopback {};
 
     LocalHttpServer(std::string token, JsonEndpoint endpoint, std::size_t workers = 4,
-                    std::size_t max_request_bytes = provider_message_limit);
+                    std::size_t max_request_bytes = provider_message_limit, LocalMcpEndpoint = {});
     LocalHttpServer(TokenAuthenticator, JsonEndpoint endpoint, std::size_t workers = 4,
-                    std::size_t max_request_bytes = provider_message_limit);
+                    std::size_t max_request_bytes = provider_message_limit, LocalMcpEndpoint = {});
     LocalHttpServer(UnauthenticatedLoopback, JsonEndpoint endpoint, std::size_t workers = 4,
-                    std::size_t max_request_bytes = provider_message_limit);
+                    std::size_t max_request_bytes = provider_message_limit, LocalMcpEndpoint = {});
     ~LocalHttpServer();
     LocalHttpServer(const LocalHttpServer&) = delete;
     LocalHttpServer& operator=(const LocalHttpServer&) = delete;

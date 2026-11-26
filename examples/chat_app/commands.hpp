@@ -213,10 +213,15 @@ class Commands {
             return mcp->handle(request, context);
         };
         auto token = require_token_ ? cymcp::random_token() : std::string{};
+        cymcp::LocalMcpEndpoint advertisement;
+        advertisement.name = "CyMCPSDK Chat Lab";
+        advertisement.version = cymcp::version;
         auto server = require_token_
-                          ? std::make_unique<cymcp::LocalHttpServer>(token, endpoint)
+                          ? std::make_unique<cymcp::LocalHttpServer>(
+                                token, endpoint, 4, cymcp::provider_message_limit, advertisement)
                           : std::make_unique<cymcp::LocalHttpServer>(
-                                cymcp::LocalHttpServer::UnauthenticatedLoopback{}, endpoint);
+                                cymcp::LocalHttpServer::UnauthenticatedLoopback{}, endpoint, 4,
+                                cymcp::provider_message_limit, advertisement);
         auto port = server->start(port_);
         endpoint_ = "http://127.0.0.1:" + std::to_string(port) + "/mcp";
         token_ = std::move(token);

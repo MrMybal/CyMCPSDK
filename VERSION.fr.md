@@ -4,6 +4,10 @@
 
 ## 0.7.5 — Chat Lab en fenêtre sous Linux
 
+- Ajouter des annonces d’identité MCP locales optionnelles et des sondes bornées modernes/historiques,
+  avec profils protégés, réponses JSON/SSE et inventaire des écouteurs Windows.
+- Chat Lab et l’exemple HTTP sans interface publient leur nom et leur version pour les hubs locaux.
+
 - Compiler Chat Lab en fenêtre sous Linux avec SDL3 3.4+, en partageant la logique de
   l’exemple Windows, les réglages fournisseurs, les commandes MCP local et le journal.
 - Ajouter un script Linux de compilation, tests et paquetage. SDL3 reste indépendant

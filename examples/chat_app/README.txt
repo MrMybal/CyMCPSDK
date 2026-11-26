@@ -53,6 +53,9 @@ In JSON set app_commands.access_profile to free, local_controlled, token_only or
 protected. An app_commands section without a profile keeps its legacy settings. Set app_commands.mcp_port
 to a fixed port to reuse the address. The default 0 selects a free port.
 The demonstration commands only access the counter, with no file or system access.
+While enabled, the server publishes its name, version and token requirement at
+/.well-known/cymcp for local hubs. The advertisement excludes tokens and tools.
+It is available in Free and protected profiles; the hub still finds the listening port.
 
 Optional arguments:
   --config PATH.json             Load an SDK chat configuration (manual by default).

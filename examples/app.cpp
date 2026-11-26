@@ -83,15 +83,20 @@ int main(int argc, char** argv) {
                 return dispatch_app(operations, request, context);
             };
             std::unique_ptr<LocalHttpServer> server;
+            LocalMcpEndpoint advertisement;
+            advertisement.name = "CyMCPSDK example";
+            advertisement.version = version;
             if (tokenless) {
                 server = std::make_unique<LocalHttpServer>(
-                    LocalHttpServer::UnauthenticatedLoopback{}, endpoint);
+                    LocalHttpServer::UnauthenticatedLoopback{}, endpoint, 4,
+                    provider_message_limit, advertisement);
             } else {
                 const char* key = std::getenv("CYMCP_TOKEN");
                 if (!key)
                     throw Error("AuthenticationRequired",
                                 "Set CYMCP_TOKEN to a strong random token (32+ characters)");
-                server = std::make_unique<LocalHttpServer>(std::string(key), endpoint);
+                server = std::make_unique<LocalHttpServer>(std::string(key), endpoint, 4,
+                                                          provider_message_limit, advertisement);
             }
             port = server->start(port);
             std::signal(SIGINT, stop);

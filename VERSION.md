@@ -4,6 +4,10 @@
 
 ## 0.7.5 — Linux windowed Chat Lab
 
+- Add optional local MCP identity advertisements and bounded modern/legacy probes,
+  including protected profiles, JSON/SSE replies and Windows listener enumeration.
+- Chat Lab and the headless HTTP example publish their name and version for local hubs.
+
 - Build the windowed Linux Chat Lab with SDL3 3.4+, reusing the Windows example's
   application logic, provider settings, Local MCP controls and diagnostic journal.
 - Add a Linux build/test/package script. SDL3 stays outside the SDK and reusable ChatUI module.
