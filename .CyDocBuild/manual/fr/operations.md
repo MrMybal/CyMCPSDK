@@ -2,10 +2,12 @@
 id: operations
 title: Exposer les opérations de l'app
 description: Partager un registre typé entre appels natifs, SDK JSON, MCP et outils IA compatibles.
-section: SDK
+section: Développer avec le SDK
+order: 21
+sourceRevision: 4
 parent: integration
-order: 1
-sourceRevision: 3
+previous: integration#build
+next: permissions#policy
 ---
 
 ## Définir un registre {#registry}
@@ -114,3 +116,18 @@ sous forme de tableau au format ACP. Consulter les [droits](doc:permissions) ava
 
 Voir [les outils à la demande, ressources et grep](doc:optimization) pour réduire les échanges
 tout en conservant toutes les commandes et leur politique d'accès.
+
+## Suivre une requête {#request-flow}
+
+Cette séquence décrit une invocation par le registre. Un refus de droits ou une entrée invalide
+arrête la requête avant le gestionnaire. L'authentification du transport est vérifiée séparément,
+avant l'invocation.
+
+```diagram
+{"type":"sequence","title":"Une opération, un contrôle des droits à l’invocation","description":"Le registre valide la requête et applique la politique de l’hôte avant d’appeler le gestionnaire. Il vérifie la sortie déclarée avant de renvoyer un résultat réussi.","actors":[{"id":"caller","label":"Appelant SDK / MCP / IA"},{"id":"registry","label":"Registre + droits"},{"id":"handler","label":"Gestionnaire hôte"}],"messages":[{"from":"caller","to":"registry","label":"Nom + arguments"},{"from":"registry","to":"handler","label":"Appel validé et autorisé"},{"from":"handler","to":"registry","label":"Résultat de l’opération","reply":true},{"from":"registry","to":"caller","label":"Résultat conforme au schéma","reply":true}]}
+```
+
+Pour un premier exercice complet, enregistrer l'opération de lecture `get_counter` ci-dessus,
+l'exposer par `McpServer`, puis l'appeler depuis `McpClient`. **Résultat attendu :** le client reçoit
+`{"value":42}` sans `isError`. Modifier la politique hôte pour refuser l'opération puis répéter la lecture :
+l'appel doit être rejeté avant l'exécution du gestionnaire. Voir les [droits](doc:permissions#policy).

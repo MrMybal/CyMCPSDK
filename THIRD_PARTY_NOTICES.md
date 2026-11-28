@@ -30,8 +30,9 @@ The base SDK does not acquire any GUI dependency.
 External providers, engines and downloaded packages retain
 their own terms; their licenses are not changed by this project.
 
-The optional static manual uses CyDoc 0.1.0 (MIT). Its reader, styles and image
-module are distributed under Documentation/DocData, with CyDoc-MIT.txt.
+The optional static manual uses CyDoc 0.2.0 (MIT), built from upstream commit
+9837f815cdaa67e3206f68e15d04f4700f040dbf. Its reader, styles, image and graph
+modules are distributed under Documentation/DocData, with CyDoc-MIT.txt.
 The documentation toolchain uses marked 17.0.6, PrismJS 1.30.0 and esbuild 0.25.12
 (MIT); their notices are in Documentation/DocData/notices. These generation tools
 and Node.js do not run inside the native SDK or the exported reader.

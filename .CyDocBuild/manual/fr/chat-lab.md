@@ -2,18 +2,14 @@
 id: chat-lab
 title: Commandes de Chat Lab
 description: Connecter un fournisseur, envoyer des messages et exposer les commandes de démonstration.
-section: Guides
-parent: overview
-order: 2
-sourceRevision: 13
+section: Utiliser Chat Lab
+order: 10
+sourceRevision: 14
+previous: quickstart#demo
+next: providers#configure
 ---
 
 ## Se connecter {#connect}
-
-Le serveur MCP local activé publie son nom, sa version et l’exigence de jeton dans
-`/.well-known/cymcp` pour les hubs locaux, y compris dans les profils protégés. Le hub trouve
-toujours le port d’écoute ; l’annonce ne contient ni jeton ni catalogue d’outils.
-Consulter la [découverte MCP locale](doc:operations#discovery).
 
 Le tchat s’ouvre directement. La roue **Paramètres** donne accès aux onglets **Fournisseurs**,
 **MCP local**, **Journal** et **Aide**. **Fermer** revient à la conversation et à son brouillon. **F1** ouvre l’aide.
@@ -140,6 +136,11 @@ L'attachement direct prend en charge Codex, Responses, Messages, Chat Completion
 Les autres CLI utilisent leur configuration MCP native et renvoient `Unsupported` pour cette option.
 
 ## Connecter une autre application {#external}
+
+Le serveur MCP local activé publie son nom, sa version et l’exigence de jeton dans
+`/.well-known/cymcp` pour les hubs locaux, y compris dans les profils protégés. Le hub trouve
+toujours le port d’écoute ; l’annonce ne contient ni jeton ni catalogue d’outils.
+Consulter la [découverte MCP locale](doc:operations#discovery).
 
 Dans **Paramètres → MCP local**, choisir le **Profil d’accès MCP**, puis **Activer le MCP local**.
 En l’absence de configuration `app_commands`, Chat Lab sélectionne **Free** au démarrage.

@@ -2,10 +2,12 @@
 id: providers
 title: Choose a provider
 description: Select a CLI, native API or local endpoint and supply its real model and credentials.
-section: Guides
+section: Use Chat Lab
+order: 11
+revision: 6
 parent: chat-lab
-order: 1
-revision: 5
+previous: chat-lab#connect
+next: conversations#attachments
 ---
 
 ## Built-in profiles {#profiles}

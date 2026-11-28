@@ -1,3 +1,3 @@
-CyMCPSDK documentation uses the CyDoc reader (MIT).
+CyMCPSDK documentation uses the CyDoc 0.2.0 reader (MIT).
 CyMCPSDK: Copyright (c) 2026 Cyberalien.
 See CyMCPSDK-MIT.txt and CyDoc-MIT.txt in this directory.

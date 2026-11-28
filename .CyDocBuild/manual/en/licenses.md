@@ -2,10 +2,11 @@
 id: licenses
 title: Licenses and components
 description: Understand the MIT SDK license and separately licensed optional components.
-section: Guides
-parent: overview
-order: 5
-revision: 3
+section: Help
+order: 31
+revision: 4
+previous: troubleshooting#help
+next:
 ---
 
 ## CyMCPSDK {#sdk}
@@ -27,7 +28,7 @@ Keep the copyright and permission notice with redistributed copies. The source r
 | stb image/image_write | MIT option | Linux example image decoding and PNG capture |
 | Lexilla/Scintilla lexers | Their permissive notices | Optional code highlighting through CyUI |
 | JetBrains Mono | SIL Open Font License 1.1 | CyUI's embedded font |
-| CyDoc reader | MIT | This static documentation reader |
+| CyDoc 0.2.0 reader | MIT | This static documentation reader, including image and graph modules |
 | marked, PrismJS, esbuild | MIT | Documentation generation tools only |
 
 The application packages carry the complete optional UI notices in `licenses/`.

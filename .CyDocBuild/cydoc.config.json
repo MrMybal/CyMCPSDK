@@ -7,5 +7,5 @@
   "content": "manual",
   "assets": "assets",
   "out": "../Documentation",
-  "modules": ["image"]
+  "modules": ["image", "graph"]
 }

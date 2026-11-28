@@ -2,10 +2,12 @@
 id: runtime-options
 title: Optimisations d'exécution optionnelles
 description: Configurer les gros volumes sur disque, les mesures, les notifications et le contexte API.
-section: SDK
+section: Développer avec le SDK
+order: 25
+sourceRevision: 2
 parent: optimization
-order: 0
-sourceRevision: 1
+previous: optimization#resources
+next:
 ---
 
 ## Options indépendantes {#options}

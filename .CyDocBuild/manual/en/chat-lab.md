@@ -2,18 +2,14 @@
 id: chat-lab
 title: Chat Lab controls
 description: Connect a provider, send messages and expose the demonstration app commands.
-section: Guides
-parent: overview
-order: 2
-revision: 13
+section: Use Chat Lab
+order: 10
+revision: 14
+previous: quickstart#demo
+next: providers#configure
 ---
 
 ## Connect {#connect}
-
-The enabled local MCP server publishes its name, version and token requirement at
-`/.well-known/cymcp` for local hubs, including in protected profiles. The hub still finds
-the listening port; the advertisement contains no token or tool catalogue.
-See [local MCP discovery](doc:operations#discovery).
 
 Chat opens directly. **Settings** contains **Providers**, **Local MCP**, **Logs** and **Help**. **Close** returns
 to the conversation and its draft. **F1** opens Help.
@@ -129,6 +125,11 @@ Direct attachment supports Codex, Responses, Messages, Chat Completions/OpenRout
 Other CLIs use their native MCP configuration and return `Unsupported` for this direct-attachment option.
 
 ## Connect another application {#external}
+
+The enabled local MCP server publishes its name, version and token requirement at
+`/.well-known/cymcp` for local hubs, including in protected profiles. The hub still finds
+the listening port; the advertisement contains no token or tool catalogue.
+See [local MCP discovery](doc:operations#discovery).
 
 Open **Settings → Local MCP**. Choose an **MCP access profile**, then enable
 **Expose local MCP**. Chat Lab starts with **Free** selected when there is no `app_commands`

@@ -2,47 +2,58 @@
 id: troubleshooting
 title: Résoudre un problème de connexion
 description: Comprendre les erreurs fournisseur, les interruptions et l'absence du manuel local.
-section: Guides
-parent: overview
-order: 4
-sourceRevision: 3
+section: Aide
+order: 30
+sourceRevision: 4
+previous: conversations#resume
+next:
 ---
 
 ## Erreurs de connexion {#connection}
 
-Ouvrir **Journal** pour identifier l'étape : détection, protocole, compte, catalogue ou session.
-Utiliser **Copier le journal** ou **Ouvrir le fichier journal** pour les diagnostics.
-Consulter les [commandes du journal](doc:chat-lab#logs).
+Partir de l'action en échec : détecter une installation, ouvrir une session, charger les modèles
+ou envoyer un message. Ouvrir **Paramètres → Journal**, activer **Erreurs uniquement**, puis lire
+l'explication du fournisseur et le code d'erreur. **Copier le journal** ou **Ouvrir le fichier journal**
+permet de récupérer les diagnostics ; voir les [commandes du journal](doc:chat-lab#logs).
+Une session connectée ne prouve pas à elle seule que le compte peut générer une réponse.
 
-| Erreur ou symptôme | Action |
-| --- | --- |
-| `ExecutableMissing` | Sélectionner le CLI natif et vérifier son exécution dans le compte/environnement voulu. |
-| `AuthenticationRequired` | Pour un fournisseur natif, utiliser **Se connecter**, terminer la connexion native puis reconnecter ici. Pour une API, fournir l'identifiant par variable/champ en mémoire. |
-| `ProviderError` après connexion | Vérifier l'ID exact du modèle, les droits du compte et l'erreur native hors de l'app. |
-| Catalogue `Unsupported` | Saisir un vrai ID de modèle ; certains transports n'exposent pas la découverte. |
-| Adresse locale injoignable | Démarrer le service et vérifier URL de base, port et format API. |
-| `UnsupportedContent` | Choisir un modèle/transport compatible avec cette pièce jointe, ou la retirer. |
+| Symptôme | Vérification et correction | Reconnaître la réussite |
+| --- | --- | --- |
+| `ExecutableMissing` ou CLI non détecté | Vérifier que l'exécutable natif fonctionne dans le compte voulu. Dans **Fournisseurs**, choisir **Relancer la détection**, ou renseigner son chemin réel. | Le fournisseur est détecté et **Connecter / Nouveau tchat** ouvre une session. |
+| `AuthenticationRequired` | Pour un CLI natif, choisir **Se connecter**, terminer sa connexion puis reconnecter ici. Pour une API, fournir la clé par variable d'environnement ou champ masqué en mémoire. | L'initialisation du compte réussit ; un message court reçoit une réponse. |
+| `ProviderError` après connexion | Lire le code natif dans le tour en échec ou le Journal. Vérifier l'ID du modèle et les droits du compte, choisir un modèle disponible puis reconnecter. | Un nouveau message court, envoyé volontairement, se termine sans cette erreur. |
+| Catalogue `Unsupported` | Saisir dans les réglages manuels un ID exact fourni par le fournisseur. Certains transports n'ont pas de catalogue de modèles. | Le modèle choisi accepte un message. |
+| Adresse locale injoignable | Démarrer le service, vérifier son port et choisir le bon format API. Ollama utilise son URL native ; les API compatibles finissent souvent par `/v1`. | Le catalogue contient les modèles installés et le modèle choisi répond. |
+| `UnsupportedContent` | Retirer la pièce jointe refusée ou choisir un modèle/transport acceptant son type. | Un message au contenu compatible se termine. |
 
 Le compte CLI d'un processus lancé peut différer de l'environnement d'un autre terminal.
-Utiliser `process.environment` si l'hôte a besoin de valeurs propres à l'enfant. Une connexion
-réussie ne garantit pas que le compte peut effectuer une génération.
+Pour les variables d'environnement propres à l'enfant, voir la [configuration des fournisseurs](doc:providers#configure).
+Un changement de connexion ne renvoie jamais automatiquement un message en échec.
 
 ## Conversations interrompues {#interrupted}
 
-`Cancelled` indique une interruption, pas une réponse finale réussie. Un flux tronqué peut produire
-`UnexpectedEOF`. Conserver le texte partiel, reconnecter explicitement, puis choisir le message suivant.
-`SessionInvalid` indique que la session exacte n'a pas pu être reprise ; garder son historique enregistré.
+| Symptôme | Correction | Reconnaître la réussite |
+| --- | --- | --- |
+| `Cancelled` après **Arrêter** | Conserver la réponse partielle. Décider d'envoyer ou non un nouveau message. | La conversation est au repos et son brouillon reste modifiable. |
+| `UnexpectedEOF` ou flux tronqué | Conserver le texte partiel, utiliser **Reconnecter**, puis choisir le message suivant. | La connexion est prête ; reconnecter ne renvoie pas le message interrompu. |
+| `SessionInvalid` | Garder l'historique enregistré. Vérifier que le fournisseur choisi peut charger la session native exacte ; créer explicitement une nouvelle conversation si nécessaire. | La session voulue reprend, ou le nouveau tchat créé volontairement est identifié comme tel. |
+| `ContextTooLarge` | Réduire les pièces jointes ou commencer une nouvelle conversation. L'erreur peut venir de la garde mémoire de 256 Mio par message ou de la fenêtre de contexte du modèle. | Une nouvelle demande plus courte se termine. |
 
-`ContextTooLarge` indique désormais une garde mémoire (256 Mio par message) ou la fenêtre de
-contexte du modèle : démarrer une nouvelle conversation ou réduire les pièces jointes. Une
-interface lente ou réduite ne fait plus échouer un tour ; un très long historique fait seulement
-sortir ses plus anciens messages de la vue.
-Sauvegarder puis créer une conversation, ou réduire les pièces jointes. ChatUI borne ses événements
-et son texte affiché ; il ne supprime pas silencieusement une conversation pour respecter son budget.
+Un long historique peut faire sortir ses plus anciens messages de la vue ; une interface lente
+ou réduite ne fait pas à elle seule échouer un tour. Pour enregistrer et restaurer sans rejouer,
+consulter les [conversations et l'historique](doc:conversations#history).
 
 ## Manuel absent {#help}
 
-Conserver `Documentation/Documentation.html` et le dossier complet `Documentation/DocData` à côté
-de Chat Lab. F1 ouvre cette copie installée, sans repli en ligne. Si le dossier manque, le restaurer
-depuis le paquet applicatif ou reconstruire le paquet. Ouvrir directement le HTML pour vérifier ses
-scripts et images locaux. Le lecteur ne demande ni Node.js ni serveur web.
+**F1 ouvre le panneau Aide.** Choisir **Ouvrir le manuel complet** pour afficher le lecteur installé.
+Si `DocumentationMissing` apparaît, restaurer le dossier `Documentation/` entier à côté de
+`cymcp_chat_app.exe` (ou de l'exécutable Linux), depuis le même paquet applicatif.
+
+Ouvrir directement `Documentation/Documentation.html`. Garder `DocData/`, ses scripts et ses
+ressources à leurs emplacements relatifs d'origine. L'affichage du code HTML sur GitHub n'est
+pas le lecteur ; télécharger d'abord le dossier complet. La lecture ne demande ni Node.js ni serveur web.
+
+**Vérifier la correction :** la présentation s'ouvre, le changement de langue conserve la page
+et la [capture de démonstration](doc:quickstart#demo) s'affiche. Si les signets ou notes disparaissent,
+vérifier la politique de stockage des fichiers locaux du navigateur et exporter les données via
+**Mon espace** avant de changer de profil de navigateur ou d'effacer son stockage.

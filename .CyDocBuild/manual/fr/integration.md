@@ -2,12 +2,17 @@
 id: integration
 title: Intégrer la bibliothèque C++
 description: Lier uniquement les modules nécessaires et déporter les fournisseurs hors du thread UI.
-section: SDK
-order: 0
-sourceRevision: 4
+section: Développer avec le SDK
+order: 20
+sourceRevision: 5
+previous:
+next: operations#registry
 ---
 
 ## Prérequis de compilation {#build}
+
+**Objectif :** lier le SDK, enregistrer une opération autorisée, puis connecter un fournisseur
+sur un worker. Poursuivre avec les [opérations](doc:operations#registry) et les [droits](doc:permissions#policy).
 
 Utiliser CMake 3.24+, C++20 et les threads système. Windows utilise Visual Studio 2022 C++,
 Windows SDK et BCrypt. Linux/macOS utilisent les API POSIX. HTTP(S) utilise libcurl
@@ -33,6 +38,11 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel 4
 cmake --install build --config Release --prefix install
 ```
+
+**Résultat attendu :** `install/include/cymcp/` contient les en-têtes publics et l'arbre installé
+contient le paquet CMake exporté. Faire pointer `CMAKE_PREFIX_PATH` de l'hôte vers ce préfixe.
+Si la configuration ne trouve pas `CURL::libcurl`, installer les fichiers de développement libcurl
+avec TLS et renseigner `CURL_ROOT` avant de relancer la configuration.
 
 Un hôte qui consomme l'installation utilise les cibles exportées :
 
@@ -61,6 +71,12 @@ Construire `Conversation(provider, model_id)` avec l'ID réel d'un modèle insta
 `send_async(executor, content, context)` retourne un futur ; garder executor et fournisseur en vie.
 `CallContext.events` reçoit les deltas et l'activité. Les transférer par `EventQueue` vers
 l'interface. `cancel()` demande l'annulation ; `reconnect()` reste explicite.
+
+**Résultat attendu :** les événements de connexion arrivent sur le worker ; un message envoyé
+volontairement produit des deltas de texte et un événement de fin. Vérifier d'abord le catalogue
+de modèles et l'authentification du fournisseur. L'exemple crée uniquement le fournisseur ;
+une conversation demande un service Ollama démarré et un modèle installé pour répondre.
+Voir le [dépannage de connexion](doc:troubleshooting#connection).
 
 ## Intégrer le panneau CyUI {#chat-ui}
 

@@ -2,10 +2,12 @@
 id: operations
 title: Expose application operations
 description: Share one typed registry between native calls, SDK JSON, MCP and supported AI tools.
-section: SDK
+section: Develop with the SDK
+order: 21
+revision: 4
 parent: integration
-order: 1
-revision: 3
+previous: integration#build
+next: permissions#policy
 ---
 
 ## Define a registry {#registry}
@@ -110,3 +112,17 @@ See [permissions](doc:permissions) before exposing mutations.
 
 For large registries, see [on-demand tools, resources and grep](doc:optimization). These features
 preserve the original commands and policy while reducing what is loaded into an AI's context.
+
+## Follow one request {#request-flow}
+
+This sequence applies to an invocation through the registry. A denied policy or invalid input
+stops before the handler. Transport authentication is checked separately, before invocation.
+
+```diagram
+{"type":"sequence","title":"One operation, one permission check at invocation","description":"The registry validates the request and applies the host policy before calling the handler. It checks the declared output before returning a successful result.","actors":[{"id":"caller","label":"SDK / MCP / AI caller"},{"id":"registry","label":"Registry + policy"},{"id":"handler","label":"Host handler"}],"messages":[{"from":"caller","to":"registry","label":"Name + arguments"},{"from":"registry","to":"handler","label":"Validated, permitted call"},{"from":"handler","to":"registry","label":"Operation result","reply":true},{"from":"registry","to":"caller","label":"Schema-checked result","reply":true}]}
+```
+
+For a first end-to-end exercise, register the read-only `get_counter` operation above, expose it
+through `McpServer`, then call it from `McpClient`. **Expected result:** the client receives
+`{"value":42}` without `isError`. Change the host policy to deny the operation and repeat the read:
+the call must be rejected before the handler runs. See [permissions](doc:permissions#policy).

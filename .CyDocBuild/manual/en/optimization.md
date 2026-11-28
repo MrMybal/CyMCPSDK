@@ -2,10 +2,12 @@
 id: optimization
 title: On-demand tools, resources and grep
 description: Keep every app command accessible while reducing catalogue and result traffic.
-section: SDK
+section: Develop with the SDK
+order: 24
+revision: 3
 parent: integration
-order: 2
-revision: 2
+previous: local-engines#service
+next: runtime-options#options
 ---
 
 ## Discover without losing capabilities {#tools}
@@ -158,3 +160,20 @@ The implementation follows MCP [tools](https://modelcontextprotocol.io/specifica
 [caching](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching) and
 [pagination](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination).
 Chunk manifests and targeted lookup are optional CyMCPSDK conventions, not mandatory MCP methods.
+
+## Follow tool discovery {#tool-map}
+
+Read this graph from search to schema to invocation. The call retains the original command's
+permissions. A large result may become a private resource handle; read its chunks or search
+registered text snapshots without rerunning the operation. For ordinary small results, use the
+returned JSON directly.
+
+```graph
+{"id":"tool-discovery","controls":"minimal","nodes":[{"id":"search","title":"cy_tools_search","description":"Find an operation by name or description, without executing it.","x":20,"y":20,"outputs":[{"id":"tool","label":"Tool name","type":"string"}],"href":"doc:optimization#tools"},{"id":"describe","title":"cy_tools_describe","description":"Load the full input and output schema of the selected operation.","x":320,"y":20,"inputs":[{"id":"tool","label":"Tool name","type":"string"}],"outputs":[{"id":"schema","label":"Schema","type":"object"}],"href":"doc:optimization#tools"},{"id":"call","title":"cy_tools_call","description":"Invoke the original operation. The registry validates arguments and applies the host policy before its handler runs.","x":620,"y":20,"inputs":[{"id":"schema","label":"Valid arguments","type":"object"}],"outputs":[{"id":"result","label":"Result / handle","type":"object"}],"href":"doc:operations#request-flow"},{"id":"read","title":"cy_resources_read","description":"Read a large result through its private resource URI. Follow firstUri and nextUri until eof; an expired handle never repeats a mutation.","x":620,"y":250,"inputs":[{"id":"resource","label":"Resource URI","type":"string"}],"href":"doc:optimization#resources"},{"id":"grep","title":"cy_resources_grep","description":"Search registered text snapshots. This native search does not traverse workspace files.","x":320,"y":250,"inputs":[{"id":"resource","label":"Text snapshot","type":"string"}],"href":"doc:optimization#grep"}],"links":[{"from":["search","tool"],"to":["describe","tool"]},{"from":["describe","schema"],"to":["call","schema"]},{"from":["call","result"],"to":["read","resource"]},{"from":["call","result"],"to":["grep","resource"]}]}
+```
+
+The graph starts in reading mode, so the mouse wheel scrolls the manual. **Explore graph**
+enables panning and zooming; **Escape** leaves exploration. **Text view: nodes and connections**
+offers the same explanations and documentation links as a searchable list. Enlarge inside the
+reader when labels are too small. The [resource guide](doc:optimization#resources) remains the
+reference for private handles and chunk ownership.

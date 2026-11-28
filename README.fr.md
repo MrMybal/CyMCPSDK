@@ -46,7 +46,7 @@ Chat Lab propose les messages progressifs, Markdown/code/tableaux, pièces joint
 reconnexion exacte et historique optionnel. Son compteur de démonstration est utilisable par
 une IA ou un autre client MCP/SDK. L'anglais est le défaut ; le français et cinq thèmes CyUI
 sont disponibles. Le tchat s’ouvre directement. **Paramètres** donne accès aux **Fournisseurs**,
-au **Journal** en tableau ou en JSONL brut et à l’**Aide**. **F1** ouvre l’aide et **Fermer**
+à **MCP local**, au **Journal** en tableau ou en JSONL brut et à l’**Aide**. **F1** ouvre l’aide et **Fermer**
 ramène à la conversation.
 Voir le [journal d’un refus de modèle simulé](assets/screenshots/logs-fr.png) et la [capture historique d’une connexion automatique à Codex](assets/screenshots/chat-auto-fr.png).
 Les fournisseurs natifs proposent **Se connecter** lorsqu'une authentification est nécessaire.
@@ -80,21 +80,28 @@ natif et ripgrep optionnel sont décrits dans le [guide optimisation](Documentat
 
 Télécharger [Chat Lab 0.5.6 pour Windows x64](https://github.com/MrMybal/CyMCPSDK/releases/download/v0.5.6/CyMCPSDK-ChatLab-0.5.6-windows-x64.zip).
 La release contient l'exemple de tchat. Compiler le SDK C++ depuis les sources pour l'intégrer dans votre app.
+L'exemple publié 0.5.6 précède les sources actuelles 0.7.5 ; certaines commandes du manuel demandent une compilation des sources.
 Pour Chat Lab : Windows 10/11 x64, runtime Microsoft Visual C++ 2015–2022 x64 et DX11
 (repli WARP disponible). Garder `Documentation/`, `licenses/` et les notices à côté de l'exécutable.
 
 1. Extraire le ZIP complet dans un dossier, ou compiler l'exemple avec les commandes ci-dessous.
 2. Lancer `cymcp_chat_app.exe` depuis ce dossier (`out/ChatLab-windows-x64/` après compilation).
-3. Garder **Automatic connection** activé. Les CLI installés, services locaux démarrés et clés API
+3. Garder **Connexion automatique** activée. Les CLI installés, services locaux démarrés et clés API
    d'environnement sont détectés ; la première connexion disponible est préparée sans envoyer de message.
 4. Cliquer sur une autre connexion si nécessaire, puis envoyer avec **Entrée** (ou **Ctrl+Entrée**). Les vrais modèles sont proposés dans une liste.
 
 Les paramètres manuels restent accessibles dans **Fournisseurs**. Pour essayer sans
-compte IA, choisir **Demo / Markdown (no AI)** dans cet onglet puis **Connect / New chat**.
+compte IA, choisir la démonstration **Demo / Markdown (no AI)** dans cet onglet puis **Connecter / Nouveau tchat**.
 
 Ouvrir [Documentation/Documentation.html](Documentation/Documentation.html#/fr/quickstart)
 depuis les fichiers locaux ou le paquet. Télécharger le dossier complet ; la vue HTML de GitHub
 affiche les sources et n'est pas le lecteur du manuel. La lecture locale ne demande ni serveur ni Node.js.
+Le lecteur CyDoc 0.2.0 propose des arbres thématiques anglais/français, la recherche par rubrique et
+des parcours de lecture distincts pour Chat Lab et le SDK. Commencer par la
+[démonstration locale](Documentation/Documentation.html#/fr/quickstart/demo),
+l'[intégration C++](Documentation/Documentation.html#/fr/integration/build) ou le
+[dépannage de connexion](Documentation/Documentation.html#/fr/troubleshooting/connection).
+**F1** ouvre le panneau Aide de l'application ; **Ouvrir le manuel complet** affiche le lecteur installé dans la langue choisie.
 
 ## Sources, compilation et bibliothèques nécessaires
 
@@ -171,7 +178,7 @@ Les moteurs externes, modèles et services fournisseurs gardent leurs conditions
 | [CyUI](https://github.com/MrMybal/CyUI), Dear ImGui, MD4C | [Notices MIT](THIRD_PARTY_NOTICES.md) | Modules UI/Markdown natifs optionnels |
 | Lexers Lexilla/Scintilla | [Notices permissives](THIRD_PARTY_NOTICES.md) | Coloration du code CyUI optionnelle |
 | JetBrains Mono | [Notice SIL OFL 1.1](THIRD_PARTY_NOTICES.md) | Police CyUI embarquée optionnelle |
-| [CyDoc](https://github.com/MrMybal/CyDoc) 0.1.0 | [MIT](Documentation/DocData/CyDoc-MIT.txt) | Lecteur statique du manuel ; aucune dépendance du SDK natif |
+| [CyDoc](https://github.com/MrMybal/CyDoc) 0.2.0 | [MIT](Documentation/DocData/CyDoc-MIT.txt) | Lecteur statique avec images et graphes ; aucune dépendance du SDK natif |
 | marked, PrismJS, esbuild | [Notices MIT](THIRD_PARTY_NOTICES.md) | Génération de documentation uniquement |
 
 Conserver les [notices tierces complètes](THIRD_PARTY_NOTICES.md) et le dossier `licenses/`
@@ -187,8 +194,8 @@ fourni avec les distributions de l'application. Ce tableau est un index de leurs
 <details>
 <summary><strong>AI Usage</strong></summary>
 
-- [Prompt d’intégration](Docs/IntegrationPrompt.fr.md) et [prompt de mise à jour](Docs/UpdatePrompt.fr.md).
 - [Guide IA principal](Documentation/DocAI.md) — architecture, compilation et contrats d'intégration.
+- [Prompt d’intégration](Docs/IntegrationPrompt.fr.md) et [prompt de mise à jour](Docs/UpdatePrompt.fr.md).
 - [Intégration détaillée](Docs/Integration.md) — référence développeur française existante.
 - [Profils fournisseurs](Docs/Providers.md) — référence française existante des transports.
 

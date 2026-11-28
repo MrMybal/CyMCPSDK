@@ -2,10 +2,12 @@
 id: conversations
 title: Conversations and history
 description: Attach files, cancel a turn and restore an exact conversation without replaying it.
-section: Guides
+section: Use Chat Lab
+order: 12
+revision: 3
 parent: chat-lab
-order: 2
-revision: 2
+previous: providers#configure
+next: troubleshooting#connection
 ---
 
 ## Attachments {#attachments}

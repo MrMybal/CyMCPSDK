@@ -45,7 +45,7 @@ from the configured provider. Credentials and model weights are supplied separat
 Chat Lab demonstrates streamed messages, Markdown/code/tables, attachments, cancellation,
 exact session reconnection and optional history. Its demonstration counter can be used by an
 AI or another MCP/SDK client. English is the default; French and five CyUI themes are available.
-Chat opens directly. **Settings** contains **Providers**, **Logs** and **Help**. Search the catalogue,
+Chat opens directly. **Settings** contains **Providers**, **Local MCP**, **Logs** and **Help**. Search the catalogue,
 read the session log as a table or raw JSONL, or open the offline manual. **F1** opens Help and
 **Close** returns to the conversation.
 See the [journal of a simulated model refusal](assets/screenshots/logs-en.png) and the [earlier capture of a real streamed Codex reply](assets/screenshots/chat-auto-en.png).
@@ -79,6 +79,7 @@ grep and optional workspace ripgrep are described in the [optimization guide](Do
 
 Download [Chat Lab 0.5.6 for Windows x64](https://github.com/MrMybal/CyMCPSDK/releases/download/v0.5.6/CyMCPSDK-ChatLab-0.5.6-windows-x64.zip).
 The release contains the chat example. Build the C++ SDK from source for integration into your own app.
+The published 0.5.6 example predates the current 0.7.5 sources; some manual controls require a source build.
 For Chat Lab, use Windows 10/11 x64, the Microsoft Visual C++ 2015–2022 x64 runtime and DX11
 (WARP fallback available). Keep `Documentation/`, `licenses/` and notices beside the executable.
 
@@ -94,6 +95,11 @@ select **Demo / Markdown (no AI)** there and choose **Connect / New chat**.
 Open [Documentation/Documentation.html](Documentation/Documentation.html#/en/quickstart)
 from a local checkout or package. Download the complete documentation folder; GitHub's HTML
 file viewer displays source, so it is not the manual reader. Reading locally needs no server or Node.js.
+The CyDoc 0.2.0 reader has English/French topic trees, section search and separate Chat Lab/SDK
+reading paths. Start with the [local demonstration](Documentation/Documentation.html#/en/quickstart/demo),
+the [C++ integration](Documentation/Documentation.html#/en/integration/build), or
+[connection troubleshooting](Documentation/Documentation.html#/en/troubleshooting/connection).
+**F1** opens the in-app Help panel; **Open full manual** opens the installed reader in the selected language.
 
 ## Source, build and required libraries
 
@@ -169,7 +175,7 @@ External engines, models and provider services retain their own terms.
 | [CyUI](https://github.com/MrMybal/CyUI), Dear ImGui, MD4C | [MIT notices](THIRD_PARTY_NOTICES.md) | Optional native UI/Markdown modules |
 | Lexilla/Scintilla lexers | [Permissive notices](THIRD_PARTY_NOTICES.md) | Optional CyUI code highlighting |
 | JetBrains Mono | [SIL OFL 1.1 notice](THIRD_PARTY_NOTICES.md) | Optional CyUI embedded font |
-| [CyDoc](https://github.com/MrMybal/CyDoc) 0.1.0 | [MIT](Documentation/DocData/CyDoc-MIT.txt) | Static documentation reader; not a native SDK dependency |
+| [CyDoc](https://github.com/MrMybal/CyDoc) 0.2.0 | [MIT](Documentation/DocData/CyDoc-MIT.txt) | Static documentation reader with images and graphs; not a native SDK dependency |
 | marked, PrismJS, esbuild | [MIT notices](THIRD_PARTY_NOTICES.md) | Documentation generation only |
 
 Retain the complete [third-party notices](THIRD_PARTY_NOTICES.md) and the `licenses/`
@@ -185,8 +191,8 @@ folder supplied with redistributed application builds. This table indexes their 
 <details>
 <summary><strong>AI Usage</strong></summary>
 
-- [Application integration prompt](Docs/IntegrationPrompt.fr.md) and [upgrade prompt](Docs/UpdatePrompt.fr.md) (French).
 - [Primary agent guide](Documentation/DocAI.md) — architecture, build and integration contracts.
+- [Application integration prompt](Docs/IntegrationPrompt.fr.md) and [upgrade prompt](Docs/UpdatePrompt.fr.md) (French).
 - [Detailed integration](Docs/Integration.md) — existing French developer reference.
 - [Provider profiles](Docs/Providers.md) — existing French transport reference.
 

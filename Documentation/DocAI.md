@@ -36,7 +36,9 @@ directory with `DocData/`. The reader needs no Node.js, Python or HTTP server.
   app operation policies are distinct; unrestricted behavior is explicit.
 - Keep UI work nonblocking. Providers run on the controller worker; CyUI rendering
   stays on the host UI thread. English is the default, with complete French labels.
-- Chat Lab has Chat/Providers/Logs tabs. Per-provider fields stay in host memory.
+- Chat Lab opens Chat directly; Settings contains Providers, Local MCP, Logs and Help.
+  F1 opens that Help panel; Open full manual opens the local CyDoc reader in the selected language.
+  Per-provider fields stay in host memory.
   ChatPanel uses native messageComposer and virtual TranscriptSource. Enter/Ctrl+Enter submit,
   Shift+Enter inserts a line. Structured ChatAttachment contents are worker-loaded immutable
   portable blocks with opaque source IDs. Native texture services must remain nonblocking.
@@ -74,9 +76,23 @@ together after reviewing the translation. Do not edit generated bundles.
 
 From `.CyDocBuild`, install the pinned toolchain with `npm ci`, then run
 `npm run build` and `npm run check`. Both commands write the export. Node.js 22+
-is a generation dependency only. The bundled CyDoc generation-only archive comes from
-upstream commit `93f64486d61dae27a94ae1e5a05a20f6edd99914`, version 0.1.0. Its reader code
-is unchanged; unused examples/guides and development scripts are omitted.
+is a generation dependency only. The official bundled `vendor/cydoc-0.2.0.tgz` comes from
+upstream commit `9837f815cdaa67e3206f68e15d04f4700f040dbf`, version 0.2.0, built with
+`npm ci` and `npm pack`. Reader/generator code and package metadata are unchanged.
+Read its installed `ai/README.md`, `UPDATE.md`, `INTEGRATION.md`, `AUTHORING.md` and
+`dist/*.d.ts` before changing the integration. See `.CyDocBuild/TOOLCHAIN.md` in the source checkout.
+
+The 13 public pages retain their IDs and explicit anchors. Parent IDs organize the topic tree;
+`previous`/`next` define separate Chat Lab and SDK reading paths without changing routes.
+Enable only `image` and `graph`; static diagrams need no module, and Three.js is unused.
+Preserve screenshot/media IDs and graph node/port IDs across both languages. Use `href` on
+graph nodes for their documentation links. Check the compiler and reader implementation
+when an upstream example differs from the installed contract.
+
+Help URLs already encode local paths and point to `#/en/chat-lab` or `#/fr/chat-lab`.
+Ship all of `Documentation/`; exclude `.CyDocBuild/` from the application package.
+Verify the export through `file://`, both locales, search, anchors, learning paths and enabled
+media at wide/narrow sizes without network access. Report native F1 checks separately.
 
 Keep audit/test reports and documentation maintenance notes outside the human
 content tree. Publish public API explanations and useful examples, not complete

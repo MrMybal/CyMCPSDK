@@ -2,10 +2,12 @@
 id: permissions
 title: Configure permissions
 description: Choose host operation policies and native agent approval behavior independently.
-section: SDK
+section: Develop with the SDK
+order: 22
+revision: 3
 parent: integration
-order: 2
-revision: 2
+previous: operations#tools
+next: local-engines#service
 ---
 
 ## Choose the host policy {#policy}

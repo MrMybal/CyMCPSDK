@@ -2,12 +2,17 @@
 id: integration
 title: Integrate the C++ library
 description: Link only the modules your host needs and keep provider work outside its UI thread.
-section: SDK
-order: 0
-revision: 4
+section: Develop with the SDK
+order: 20
+revision: 5
+previous:
+next: operations#registry
 ---
 
 ## Build requirements {#build}
+
+**Goal:** link the SDK, register a permitted operation, then connect a provider on a worker.
+Follow the next pages for [operations](doc:operations#registry) and [permissions](doc:permissions#policy).
 
 Use CMake 3.24+, C++20 and system threads. Windows uses Visual Studio 2022 C++, Windows SDK,
 and BCrypt. Linux/macOS use POSIX APIs. HTTP(S) uses libcurl on all three platforms.
@@ -32,6 +37,11 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel 4
 cmake --install build --config Release --prefix install
 ```
+
+**Expected result:** `install/include/cymcp/` contains the public headers and the install tree
+contains the exported CMake package. Point your host's `CMAKE_PREFIX_PATH` to that prefix.
+If configuration cannot find `CURL::libcurl`, install libcurl development files with TLS and
+set `CURL_ROOT` before configuring again.
 
 An installed host uses the exported targets:
 
@@ -60,6 +70,11 @@ Construct `Conversation(provider, model_id)` with a real installed model ID, the
 `send_async(executor, content, context)` returns a future; keep the executor/provider alive.
 `CallContext.events` receives deltas and activity. Transfer them through an `EventQueue`
 to the UI. `cancel()` requests cancellation; `reconnect()` is explicit.
+
+**Expected result:** connection events arrive on the worker; a deliberately sent prompt produces
+text deltas and a completion event. First verify the provider's model catalogue and authentication.
+The sample creates a provider only; it needs a running Ollama service and an installed model
+before a conversation can respond. See [connection troubleshooting](doc:troubleshooting#connection).
 
 ## Embed the CyUI panel {#chat-ui}
 

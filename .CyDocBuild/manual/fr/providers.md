@@ -2,10 +2,12 @@
 id: providers
 title: Choisir un fournisseur
 description: Sélectionner CLI, API native ou service local avec ses vrais modèles et identifiants.
-section: Guides
+section: Utiliser Chat Lab
+order: 11
+sourceRevision: 6
 parent: chat-lab
-order: 1
-sourceRevision: 5
+previous: chat-lab#connect
+next: conversations#attachments
 ---
 
 ## Profils intégrés {#profiles}

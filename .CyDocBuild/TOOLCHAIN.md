@@ -7,21 +7,40 @@ directory. Both generation commands write `../Documentation`. Author pages under
 `manual/en` and `manual/fr`, with matching IDs, explicit anchors and current revision metadata.
 The complete generated reader is distributed; `node_modules` and this workspace are not.
 
-CyDoc 0.1.0 is supplied as a generation-only package from the official repository at
-commit `93f64486d61dae27a94ae1e5a05a20f6edd99914`. It retains `dist` entry points/modules,
-`tools`, `web`, `src/viewer.css` and `LICENSE`; example manuals, screenshots and authoring
-guides are omitted. Reader/generator code is unchanged. Package metadata lists only
-these files and omits unused upstream development scripts. The local archive avoids
-confusing it with an unrelated npm package. `package-lock.json` records all resolved
-versions and integrity values.
+CyDoc 0.2.0 is supplied as the official local package built from
+[`9837f815cdaa67e3206f68e15d04f4700f040dbf`](https://github.com/MrMybal/CyDoc/commit/9837f815cdaa67e3206f68e15d04f4700f040dbf).
+The archive `vendor/cydoc-0.2.0.tgz` was produced with `npm ci` and `npm pack`
+(which runs the upstream build through `prepack`) in a clean copy of that commit.
+Its upstream reader, generator and package metadata are unchanged. It includes the
+`ai/` guides and public declarations for future maintenance. Install this archive,
+not the unrelated npm registry package. `package-lock.json` records versions and integrity.
+
+Before another migration, read the installed `node_modules/cydoc/ai/README.md`,
+`UPDATE.md`, `INTEGRATION.md`, `AUTHORING.md` and the `dist/*.d.ts` contracts.
+The public manual contains product usage and SDK integration tasks. Keep assistant
+instructions in the separately copied `DocAI.md` and maintenance records in `internal/`.
+Page IDs, explicit anchors, media/node/port IDs and existing routes are public addresses.
+`parent` controls the tree; `previous` and `next` independently define reading paths.
+Review both translations before advancing `revision` / `sourceRevision` together.
 
 | Component | Terms | Scope |
 | --- | --- | --- |
-| [CyDoc](https://github.com/MrMybal/CyDoc) 0.1.0 | [MIT](vendor/CyDoc-MIT.txt) | Generation and exported reader |
+| [CyDoc](https://github.com/MrMybal/CyDoc) 0.2.0 | [MIT](vendor/CyDoc-MIT.txt) | Generation and exported reader |
 | [marked](https://github.com/markedjs/marked) | [MIT](licenses/marked-MIT.txt) | Build-time Markdown compilation |
 | [PrismJS](https://github.com/PrismJS/prism) | [MIT](licenses/PrismJS-MIT.txt) | Build-time syntax highlighting |
 | [esbuild](https://github.com/evanw/esbuild) | [MIT](licenses/esbuild-MIT.txt) | Bundling the static reader |
 
-No optional mesh, video or other media modules are enabled. The image module handles
-the actual Chat Lab screenshots. There are no remote fonts or CDN scripts in the reader.
+Only `image` and `graph` are enabled: real Chat Lab screenshots and the tool-discovery
+graph. Static architecture and sequence diagrams compile to accessible SVG and need
+no optional reader. No Three.js, remote fonts or CDN scripts enter the export.
+There is no application logo in the project, so the reader keeps its default book icon.
+The help button already builds an encoded local URL to `#/en/chat-lab` or `#/fr/chat-lab`;
+F1 opens the in-app Help panel, whose full-manual button opens that URL.
+Packaging already copies the complete generated `Documentation/` directory.
+
+After generation, check the complete export through `file://` in a headless browser:
+both languages, old routes/anchors, tree and reading paths, search, screenshot and
+diagram enlargement, and graph text/exploration controls. Check wide and narrow layouts,
+block network access, and inspect the actual output files and notices. Native F1 and
+target-device rendering are separate checks; a headless reader check does not prove them.
 Keep test/inspection notes under the ignored `internal/` directory or the ignored build directory.

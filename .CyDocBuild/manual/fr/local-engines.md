@@ -2,10 +2,12 @@
 id: local-engines
 title: Moteurs locaux et dépendances
 description: Connecter un service existant ou superviser un moteur compatible llama.cpp installé.
-section: SDK
+section: Développer avec le SDK
+order: 23
+sourceRevision: 3
 parent: integration
-order: 3
-sourceRevision: 2
+previous: permissions#policy
+next: optimization#tools
 ---
 
 ## Utiliser un service existant {#service}
@@ -14,8 +16,9 @@ Choisir `ollama` pour l'API native Ollama, `lmstudio` pour son serveur compatibl
 pour une adresse compatible déjà active. Renseigner l'URL réelle du service et un modèle qu'il propose.
 Choisir un profil fournisseur n'installe ni ne lance ce produit.
 
-Chat Lab se connecte aux services locaux. Il ne propose pas encore d'installateur de modèles ou de
-paquets GPU. L'application qui intègre le SDK peut fournir son propre parcours d'installation.
+Chat Lab se connecte aux services locaux installés. Installer séparément le service et le modèle.
+Sous Windows x64, il propose aussi le [téléchargement optionnel du runtime CUDA](doc:local-engines#dependencies) ;
+ce téléchargement ne fournit ni modèle ni pilote GPU.
 
 ## Superviser un moteur natif {#supervise}
 

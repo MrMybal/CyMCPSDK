@@ -2,9 +2,11 @@
 id: overview
 title: CyMCPSDK
 description: Ajouter conversations IA et outils applicatifs à une application C++ native.
-section: Guides
+section: Commencer
 order: 0
-sourceRevision: 3
+sourceRevision: 4
+previous:
+next: quickstart
 ---
 
 ## Choisir un parcours {#workflows}
@@ -23,6 +25,13 @@ optionnel affiche les conversations.
 | Charger les outils à la demande et rechercher du texte | [Optimisation et grep](doc:optimization) |
 | Choisir les règles d'accès | [Droits](doc:permissions) |
 | Utiliser un moteur local installé | [Moteurs locaux](doc:local-engines) |
+
+```diagram
+{"type":"architecture","title":"De l’application hôte vers l’IA et les outils externes","description":"L’hôte possède ses opérations et leurs droits. Le registre les expose aux clients SDK et MCP ; un fournisseur exécute les conversations et peut appeler les outils autorisés.","nodes":[{"id":"host","label":"Application hôte","x":20,"y":20,"width":190},{"id":"registry","label":"Registre + droits","x":20,"y":165,"width":190},{"id":"mcp","label":"Clients SDK / MCP","x":310,"y":165,"width":190},{"id":"provider","label":"Fournisseur IA + outils","x":310,"y":20,"width":190}],"edges":[{"from":"host","to":"registry"},{"from":"mcp","to":"registry"},{"from":"host","to":"provider"},{"from":"provider","to":"registry"}]}
+```
+
+Le tableau suivant associe ces rôles aux cibles CMake. Pour une première intégration,
+suivre le parcours [compilation → opérations → droits](doc:integration#build).
 
 ## Modules {#modules}
 
@@ -44,11 +53,21 @@ Installer et configurer le fournisseur choisi. Ses comptes natifs et conditions 
 applicables. Consulter les [fournisseurs](doc:providers) et les [licences](doc:licenses).
 
 L'exemple Windows utilise Win32/DX11. ChatUI utilise le backend CyUI/ImGui de l'application
-hôte. La distribution Linux/macOS reste en cours de réalisation ; Android est reporté.
+hôte. Linux dispose aussi d’un exemple fenêtré à compiler avec SDL3. Le paquetage macOS
+reste en cours. Sous Android, le transport HTTP demande libcurl compilé avec le NDK et une
+configuration TLS ; l’intégration applicative complète reste reportée. Voir les [prérequis](doc:integration#build).
 
 ## Lire ce manuel {#navigation}
 
 Utiliser l'arbre des pages ou le champ de recherche ; **Ctrl+K** ouvre la recherche.
-Basculer entre anglais et français dans le lecteur. Le dossier `Documentation` complet
-s'ouvre directement depuis le disque. Dans Chat Lab, **F1** ouvre l’aide. **Ouvrir le manuel complet**
-affiche le guide local dans la langue sélectionnée.
+Les résultats mènent directement aux rubriques correspondantes. L'arbre regroupe **Commencer**,
+**Utiliser Chat Lab**, **Développer avec le SDK** et **Aide**. Le fil d'Ariane situe la page ;
+**Précédent/Suivant** suit son parcours d'apprentissage.
+
+Basculer entre anglais et français conserve la page et la rubrique. **Mon espace** contient
+les signets et notes de ce navigateur ; leur conservation dépend de son stockage local.
+Les captures et schémas s'agrandissent dans le lecteur ; **Échap** ferme la vue agrandie.
+Le [graphe](doc:optimization#tool-map) de découverte des outils propose aussi une vue textuelle filtrable.
+
+Ouvrir l'export complet `Documentation/Documentation.html` directement depuis le disque.
+Dans Chat Lab, **F1** ouvre l'aide ; **Ouvrir le manuel complet** affiche le guide dans la langue sélectionnée.

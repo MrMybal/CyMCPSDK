@@ -2,10 +2,12 @@
 id: runtime-options
 title: Optional runtime optimizations
 description: Configure disk-backed volumes, metadata-only performance logs, change subscriptions and API context windows.
-section: SDK
+section: Develop with the SDK
+order: 25
+revision: 2
 parent: optimization
-order: 0
-revision: 1
+previous: optimization#resources
+next:
 ---
 
 ## Independent options {#options}

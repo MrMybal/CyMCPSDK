@@ -2,10 +2,12 @@
 id: permissions
 title: Configurer les droits
 description: Choisir séparément la politique des opérations hôtes et les autorisations de l'agent natif.
-section: SDK
+section: Développer avec le SDK
+order: 22
+sourceRevision: 3
 parent: integration
-order: 2
-sourceRevision: 2
+previous: operations#tools
+next: local-engines#service
 ---
 
 ## Choisir la politique hôte {#policy}

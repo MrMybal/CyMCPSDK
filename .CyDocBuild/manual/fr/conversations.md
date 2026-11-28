@@ -2,10 +2,12 @@
 id: conversations
 title: Conversations et historique
 description: Joindre des fichiers, annuler un tour et reprendre exactement une conversation sans la rejouer.
-section: Guides
+section: Utiliser Chat Lab
+order: 12
+sourceRevision: 3
 parent: chat-lab
-order: 2
-sourceRevision: 2
+previous: providers#configure
+next: troubleshooting#connection
 ---
 
 ## Pièces jointes {#attachments}

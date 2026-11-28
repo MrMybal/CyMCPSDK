@@ -2,10 +2,12 @@
 id: optimization
 title: Outils à la demande, ressources et grep
 description: Garder toutes les commandes accessibles en réduisant les catalogues et les résultats transmis.
-section: SDK
+section: Développer avec le SDK
+order: 24
+sourceRevision: 3
 parent: integration
-order: 2
-sourceRevision: 2
+previous: local-engines#service
+next: runtime-options#options
 ---
 
 ## Découvrir sans perdre de fonctions {#tools}
@@ -161,3 +163,20 @@ L'implémentation suit les sections MCP [outils](https://modelcontextprotocol.io
 [pagination](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination).
 Les manifestes et la description ciblée sont des conventions CyMCPSDK facultatives, pas des
 méthodes MCP imposées.
+
+## Suivre la découverte des outils {#tool-map}
+
+Lire ce graphe de la recherche au schéma, puis à l'invocation. L'appel conserve les droits de
+la commande d'origine. Un gros résultat peut devenir une référence de ressource privée ; lire
+ses blocs ou rechercher les instantanés textuels enregistrés sans rejouer l'opération.
+Pour les petits résultats ordinaires, utiliser directement le JSON retourné.
+
+```graph
+{"id":"tool-discovery","controls":"minimal","nodes":[{"id":"search","title":"cy_tools_search","description":"Trouver une opération par son nom ou sa description, sans l’exécuter.","x":20,"y":20,"outputs":[{"id":"tool","label":"Nom de l’outil","type":"string"}],"href":"doc:optimization#tools"},{"id":"describe","title":"cy_tools_describe","description":"Charger le schéma complet d’entrée et de sortie de l’opération choisie.","x":320,"y":20,"inputs":[{"id":"tool","label":"Nom de l’outil","type":"string"}],"outputs":[{"id":"schema","label":"Schéma","type":"object"}],"href":"doc:optimization#tools"},{"id":"call","title":"cy_tools_call","description":"Invoquer l’opération d’origine. Le registre valide les arguments et applique les droits de l’hôte avant d’exécuter son gestionnaire.","x":620,"y":20,"inputs":[{"id":"schema","label":"Arguments valides","type":"object"}],"outputs":[{"id":"result","label":"Résultat / référence","type":"object"}],"href":"doc:operations#request-flow"},{"id":"read","title":"cy_resources_read","description":"Lire un gros résultat via son URI de ressource privée. Suivre firstUri et nextUri jusqu’à eof ; une référence expirée ne rejoue jamais une mutation.","x":620,"y":250,"inputs":[{"id":"resource","label":"URI de ressource","type":"string"}],"href":"doc:optimization#resources"},{"id":"grep","title":"cy_resources_grep","description":"Rechercher les instantanés textuels enregistrés. Cette recherche native ne parcourt pas les fichiers de l’espace de travail.","x":320,"y":250,"inputs":[{"id":"resource","label":"Instantané texte","type":"string"}],"href":"doc:optimization#grep"}],"links":[{"from":["search","tool"],"to":["describe","tool"]},{"from":["describe","schema"],"to":["call","schema"]},{"from":["call","result"],"to":["read","resource"]},{"from":["call","result"],"to":["grep","resource"]}]}
+```
+
+Le graphe démarre en mode lecture : la molette fait défiler le manuel. **Explorer le graphe**
+active le déplacement et le zoom ; **Échap** quitte l'exploration. **Vue textuelle : nœuds et connexions**
+propose les mêmes explications et liens documentaires dans une liste filtrable. Agrandir dans le
+lecteur si les libellés sont trop petits. Le [guide des ressources](doc:optimization#resources)
+reste la référence pour les références privées et l'appartenance des blocs.
